@@ -51,7 +51,8 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  let fileMap = new Map(), digitization = null, panelLayout = null, originalHash = null, seriesById = new Map(), csvByPanel = new Map(), changes = [];
+  let fileMap = new Map(), digitization = null, panelLayout = null, originalHash = null,
+      seriesById = new Map(), currentPanelRows = [], activeSelectionToken = 0, changes = [];
   const parseCSV = text => {
     const lines = text.replace(/\r/g,"").split("\n").filter(Boolean);
     if (!lines.length) return [];
@@ -69,7 +70,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("");
   };
   const load = async files => {
-    fileMap.clear(); csvByPanel.clear(); seriesById.clear(); changes=[];
+    fileMap.clear(); seriesById.clear(); currentPanelRows=[]; changes=[];
     for(const f of files){const rel=f.webkitRelativePath.split("/").slice(1).join("/");fileMap.set(rel,f);}
     const entries=[...fileMap.entries()];
     const item=entries.find(([p])=>p.endsWith("digitization.json"));
@@ -80,9 +81,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     const bytes=await digitizationFile.arrayBuffer();
     originalHash=await sha256(bytes);
     digitization=JSON.parse(new TextDecoder().decode(bytes));
-    for(const [p,f] of entries.filter(([p])=>p.endsWith("panel_series.csv"))){
-      csvByPanel.set(p,parseCSV(await f.text()));
-    }
+    // Keep File handles only. Read a single Panel CSV lazily when the user selects a Series.
     for(const s of digitization.series||[]) seriesById.set(s.series_id,s);
     $("seriesSelect").replaceChildren();
     for(const s of seriesById.values()){const option=document.createElement("option");option.value=s.series_id;option.textContent=s.series_id+" — "+(s.label||"unlabelled");$("seriesSelect").append(option);}
@@ -91,17 +90,19 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     if(seriesById.size) selectSeries($("seriesSelect").value);
   };
   function currentSeries(){return seriesById.get($("seriesSelect").value);}
-  function panelRows(series){
+  async function loadPanelRows(series){
     const suffix="series/"+series.figure_id+"__"+series.panel_id+"/panel_series.csv";
-    const pair=[...csvByPanel.entries()].find(([path])=>path.endsWith(suffix));
-    return pair?pair[1].filter(row=>row.series_id===series.series_id):[];
+    const pair=[...fileMap.entries()].find(([path])=>path.endsWith(suffix));
+    if(!pair)return [];
+    // Only one panel's table is materialized at a time.
+    return parseCSV(await pair[1].text()).filter(row=>row.series_id===series.series_id);
   }
-  function draw(series){
+  function draw(series, rows){
     const canvas=$("plot"),ctx=canvas.getContext("2d");
     const expected=series.figure_id+"_"+series.panel_id+".png";
     const imageEntry=[...fileMap.entries()].find(([p])=>p.endsWith(expected));
     const drawPoints=(scale)=>{
-      const points=panelRows(series).filter(p=>p.pixel_x!==""&&p.pixel_y!=="");
+      const points=rows.filter(p=>p.pixel_x!==""&&p.pixel_y!=="");
       if(points.length<2)return;
       ctx.strokeStyle="#d22";ctx.lineWidth=2;ctx.beginPath();
       points.forEach((p,i)=>{const x=Number(p.pixel_x)*scale,y=Number(p.pixel_y)*scale;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
@@ -122,8 +123,12 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
       ctx.fillStyle="#333";ctx.fillText("Source panel crop not found in selected folder",20,30);drawPoints(1);
     }
   }
-  function selectSeries(id){
+  async function selectSeries(id){
     const series=seriesById.get(id);if(!series)return;
+    const selectionToken=++activeSelectionToken;
+    const rows=await loadPanelRows(series);
+    if(selectionToken!==activeSelectionToken||$("seriesSelect").value!==id)return;
+    currentPanelRows=rows;
     $("label").value=series.label||"";$("axisSide").value=series.y_axis_side||"UNASSIGNED";
     $("technique").value=series.technique||"";$("domain").value=series.domain||"";
     $("seriesInfo").textContent=series.paper_id+" / "+series.figure_id+" / "+series.panel_id+" · "+series.extraction_status+" · "+series.qc_status;
@@ -131,7 +136,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     $("panelInfo").textContent="Panel bbox: "+JSON.stringify(panel.normalized_bbox||panel.bbox||null)+" · shared legend refs: "+JSON.stringify(panel.shared_legend_refs||[]);
     $("calibrationInfo").textContent="X calibration: "+JSON.stringify(series.metadata?.x_calibration?.anchors||[])+"\nY calibration: "+JSON.stringify(series.metadata?.y_calibration?.anchors||[]);
     $("qcInfo").textContent="QC components: "+JSON.stringify(series.metadata?.qc_components||{})+"\nExtraction metadata: "+JSON.stringify(series.metadata||{});
-    $("pointsJson").value=JSON.stringify(panelRows(series).map(p=>({
+    $("pointsJson").value=JSON.stringify(currentPanelRows.map(p=>({
       point_index:Number(p.point_index),
       x:p.x_label? p.x_label:(p.x_value===""?null:Number(p.x_value)),
       y:p.y_value===""?null:Number(p.y_value),
@@ -141,7 +146,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
       y_err_high:p.y_err_high===""?null:Number(p.y_err_high),
       err_type:p.err_type||"UNKNOWN"
     })),null,2);
-    draw(series);
+    draw(series,currentPanelRows);
   }
   $("folder").addEventListener("change",async e=>{
     try{await load([...e.target.files]);}catch(err){$("loadStatus").textContent=String(err);$("editor").hidden=true;}
