@@ -1446,9 +1446,9 @@ def test_cli_resume_reprocesses_a_corrupted_bundle_artifact(tmp_path: Path, caps
     ]) == 0
     capsys.readouterr()
 
-    point_file = output_root / "papers" / "paper-corrupt" / "series" / "Figure1__a" / "panel_series.csv"
-    point_file.parent.mkdir(parents=True, exist_ok=True)
-    point_file.write_text("tampered\n", encoding="utf-8")
+    canonical_file = output_root / "papers" / "paper-corrupt" / "figure_inventory.json"
+    original_canonical = canonical_file.read_text(encoding="utf-8")
+    canonical_file.write_text(original_canonical + "\n", encoding="utf-8")
     assert main([
         "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
     ]) == 0
