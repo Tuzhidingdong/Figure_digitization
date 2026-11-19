@@ -122,6 +122,19 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 ## Engineering log
 
+### 2026-11-19 — M1 corpus/P0 verification increment
+
+- Added conservative PDFium vector trace selection using path type, paint mode, stroke color/width, segment order, plot geometry and page-to-panel coordinate transforms.
+- Added native PDF text numeric tick extraction first, optional OCR margin-based tick extraction second, with monotonic anchor validation.
+- Added chart-family preclassification and a conservative raster path for simple charts: provisional rectangular plot-frame detection, unique chromatic-family detection and monotonic trace reconstruction.
+- Added Hybrid routing: native vector is preferred; if multiple native candidates remain and one raster color family is independently unique, raster fallback is allowed and the ambiguity is retained in metadata. Multi-color or multiple same-color bands are not auto-selected.
+- CV/EIS continue to preserve explicit ordered paths; they are not routed through the monotonic color tracer.
+- Added source/paper identity consistency, root-vs-nested paper discovery, and resume based on input SHA256, algorithm source fingerprint, profile/QC configuration, extraction options and bundle integrity.
+- A reviewed result with a broken/mismatched bundle is BLOCKED by default; explicit force recompute is required and creates a prior-version backup.
+- Added review-helper X/Y anchor editing. Applying a patch recalibrates panel CSV values from pixel coordinates, refreshes Series metadata, synchronizes affected SQLite point rows in bounded batches and refreshes bundle hashes.
+- Current test suite: 54 tests. Windows CI #146 passed the full suite on Python 3.11, 3.12 and 3.13, including compileall and Ruff.
+- Real-paper accuracy, backend choice and calibrated QC remain unverified and are not claimed.
+
 ### 2026-11-19 — M0/M1 implementation
 
 - Verified the frozen Task Plan and retained it unchanged.
@@ -138,16 +151,25 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
 - Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
 
+## Latest verification — 2026-11-19
+
+- Latest source contains 54 regression tests.
+- Windows CI run #146 passed on Windows Python 3.11, 3.12 and 3.13. Each runner passed package installation, compileall, Ruff (imports/undefined names), and the full pytest suite (54 tests).
+- The four failures from runs #142/#143 were fixed:
+  1. OCR tick extraction now accepts an explicit absolute pixel Plot Box even when the caller supplies OCR rows without a source image; normalized boxes still require image dimensions.
+  2. Review-axis test expectations now match the source pixels and pixel-to-value slopes; untouched Series values are asserted unchanged.
+  3. A generic "wavenumber" label alone no longer forces FTIR classification.
+  4. Hybrid raster fallback provenance is retained in final Series metadata.
+- Run #146 validates software behavior using synthetic fixtures. It does not validate numerical accuracy on real scientific figures.
+- Frozen TASK_PLAN_v1.4.1.md remains unchanged. No release or publication has been authorized.
+
 ## Current blockers / next engineering actions
 
-1. Re-run the current source on Windows CI after the run-49 PDFium test fix and optional backend-probe expansion.
-2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
-3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
-4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
-5. Improve P0 chart family/axis evidence extraction and vector/raster hybrid routing without extending unsupported automation claims.
-6. Run the PDF backend technical spike on 3–5 user-approved real PDFs using PDFium, PDFMiner, and pikepdf/QPDF, then record per-page time, Peak RSS, object/path coverage, and licensing decisions.
-7. Validate the P0 extraction path against user-approved annotated Battery, AOP, and PFAS papers; generate calibrated QC thresholds only from those annotations.
-8. Keep P1/P2 deferred until the P0 evidence chain and benchmark results are acceptable.
+1. Run the PDF backend technical spike on 3–5 user-approved real PDFs. Compare PDFium, PDFMiner and pikepdf/QPDF for text, vector paths, embedded images, clipping, rotation, Form XObjects, path fragmentation and text-as-path; record per-page time, Peak RSS and licensing.
+2. Validate P0 extraction against user-approved, human-annotated Battery, AOP and PFAS figures. Measure axis calibration residuals and curve point errors before setting QC thresholds or claiming scientific accuracy.
+3. Add fault-injection tests for BrokenProcessPool/worker crashes, retry exhaustion, memory/disk pressure, review rollback across CSV/JSON/SQLite, and source immutability.
+4. Manually validate the offline review helper in a Windows browser, including local folder selection, source overlay, axis/point edits, patch export and CLI apply/readback.
+5. Keep P1/P2 deferred until P0 has real-paper accuracy and operational acceptance.
 
 ## Non-negotiable constraints
 
