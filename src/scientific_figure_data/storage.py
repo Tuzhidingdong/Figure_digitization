@@ -124,6 +124,7 @@ def write_paper_artifacts(
     digitization = {
         "schema_version": "1.0", "algorithm_version": "0.1.0",
         "paper_id": snapshot.paper_id, "input_fingerprint": snapshot.input_fingerprint,
+        "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
         "generated_at": utc_now(), "status": status,
         "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
@@ -143,6 +144,7 @@ def write_paper_artifacts(
     bundle = {
         "schema_version": "1.0", "bundle_version": "1.0", "paper_id": snapshot.paper_id,
         "generated_at": utc_now(), "input_fingerprint": snapshot.input_fingerprint,
+        "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
         "algorithm_versions": {"core": "0.1.0"}, "profile_versions": {},
         "status": status, "canonical_artifacts": canonical_paths, "content_hashes": hashes,
