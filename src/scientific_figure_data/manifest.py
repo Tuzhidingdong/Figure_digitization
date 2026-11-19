@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Iterable
@@ -8,6 +9,7 @@ from .hashing import sha256_file, sha256_json
 from .models import InputArtifact, PaperSnapshot, utc_now
 
 ADAPTER_VERSION = "0.1.0"
+
 
 def iter_files(root: Path) -> Iterable[Path]:
     """Yield files lazily in stable order without materializing the complete file list."""
@@ -21,6 +23,8 @@ def detect_role(relative_posix: str) -> str:
     lowered = relative_posix.lower()
     name = lowered.rsplit("/", 1)[-1]
     if lowered.endswith(".pdf"):
+        if any(token in lowered for token in ("/si/", "supplement", "supporting", "_si", "-si")):
+            return "si_pdf"
         return "main_pdf"
     if name in {"main_analysis.md", "main_analysis.txt", "main_text.md"}:
         return "main_text"
@@ -37,10 +41,31 @@ def detect_role(relative_posix: str) -> str:
     return "other"
 
 
+def _detect_upstream_version(paper_dir: Path, artifacts: list[InputArtifact]) -> str | None:
+    for artifact in artifacts:
+        if artifact.role != "evidence_index":
+            continue
+        relative = Path(artifact.path)
+        # artifact path is corpus-root relative; locate matching file by basename in this paper.
+        candidates = list(paper_dir.rglob(relative.name))
+        for candidate in candidates[:3]:
+            try:
+                with candidate.open("r", encoding="utf-8-sig") as handle:
+                    payload = json.load(handle)
+                if isinstance(payload, dict):
+                    for key in ("chem_literature_version", "upstream_version", "version", "schema_version"):
+                        value = payload.get(key)
+                        if isinstance(value, (str, int, float)):
+                            return str(value)
+            except (OSError, ValueError):
+                continue
+    return None
+
+
 def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = None) -> PaperSnapshot:
     paper_dir = paper_dir.resolve()
     corpus_root = corpus_root.resolve()
-    paper_id = paper_id or paper_dir.name
+    paper_id = paper_id or paper_dir.relative_to(corpus_root).as_posix()
     artifacts: list[InputArtifact] = []
     for path in iter_files(paper_dir):
         try:
@@ -56,21 +81,19 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
             ))
     present = {item.role for item in artifacts}
     missing = [role for role in ("main_pdf", "figure_inventory") if role not in present]
+    upstream_version = _detect_upstream_version(paper_dir, artifacts)
     payload = {
-        "paper_id": paper_id,
-        "source_dir": paper_dir.relative_to(corpus_root).as_posix(),
+        "paper_id": paper_id, "source_dir": paper_dir.relative_to(corpus_root).as_posix(),
         "adapter_version": ADAPTER_VERSION,
         "artifacts": [{"path": a.path, "role": a.role, "size_bytes": a.size_bytes,
                        "mtime_ns": a.mtime_ns, "sha256": a.sha256} for a in artifacts],
     }
     return PaperSnapshot(
-        paper_id=paper_id,
+        paper_id=paper_id.replace("/", "__").replace("\\\\", "__"),
         source_dir=paper_dir.relative_to(corpus_root).as_posix(),
-        detected_upstream_version=None,
-        adapter_version=ADAPTER_VERSION,
-        created_at=utc_now(),
-        artifacts=artifacts,
-        missing_roles=missing,
-        warnings=["Upstream version marker not detected; adapter used artifact discovery."],
+        detected_upstream_version=upstream_version,
+        adapter_version=ADAPTER_VERSION, created_at=utc_now(),
+        artifacts=artifacts, missing_roles=missing,
+        warnings=[] if upstream_version else ["Upstream version marker not detected; artifact discovery adapter used."],
         input_fingerprint=sha256_json(payload),
     )
