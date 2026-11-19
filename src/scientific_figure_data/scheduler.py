@@ -107,6 +107,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     input_root = input_root.resolve()
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
+    if dry_run:
+        count = sum(1 for _ in paper_paths)
+        return {"planned_papers": count, "dry_run": True, "workers": workers}
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
     catalog = Catalog(output_root / "catalog.sqlite")
     results = {"completed": 0, "completed_with_review": 0, "blocked_review_locked": 0,
@@ -149,6 +152,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
 
             done, _ = wait(tuple(running), timeout=3, return_when=FIRST_COMPLETED)
             for future in tuple(done):
+                if future not in running:
+                    continue
                 paper, paper_id = running.pop(future)
                 try:
                     result = future.result()
