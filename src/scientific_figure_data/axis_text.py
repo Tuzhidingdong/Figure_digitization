@@ -85,7 +85,7 @@ def extract_numeric_axis_anchors(
             "text": text, "value": value, "pixel_x": cx, "pixel_y": cy,
             "confidence": confidence, "polygon": row.get("polygon"),
         }
-        if x0 - margin_x <= cx <= x1 + margin_x and y1 <= cy <= y1 + margin_y:
+        if x0 <= cx <= x1 and y1 < cy <= y1 + margin_y:
             x_candidates.append({"pixel": cx, "value": value, "evidence": item})
         elif x0 - margin_x <= cx <= x0 and y0 - margin_y <= cy <= y1 + margin_y:
             y_left_candidates.append({"pixel": cy, "value": value, "evidence": item})
