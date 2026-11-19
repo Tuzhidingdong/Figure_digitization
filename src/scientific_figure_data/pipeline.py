@@ -28,6 +28,92 @@ from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 ALGORITHM_VERSION = "0.1.0"
 
 
+_ALGORITHM_SOURCE_FILES = (
+    "pipeline.py", "pdf_backend.py", "vector_paths.py", "plot_region.py",
+    "chart_classifier.py", "axis_text.py", "raster.py", "calibration.py",
+    "semantics.py", "entities.py", "context_index.py", "storage.py",
+    "manifest.py", "profiles.py", "qc.py", "hashing.py",
+)
+_ALGORITHM_FINGERPRINT_CACHE: str | None = None
+
+
+def algorithm_implementation_fingerprint() -> str:
+    """Content fingerprint for all modules that can affect persisted scientific results."""
+    global _ALGORITHM_FINGERPRINT_CACHE
+    if _ALGORITHM_FINGERPRINT_CACHE is None:
+        package_root = Path(__file__).resolve().parent
+        files = []
+        for name in _ALGORITHM_SOURCE_FILES:
+            path = package_root / name
+            if path.is_file():
+                files.append((name, sha256_file(path)))
+        _ALGORITHM_FINGERPRINT_CACHE = sha256_json(files)
+    return _ALGORITHM_FINGERPRINT_CACHE
+
+
+def processing_stage_state(
+    snapshot: PaperSnapshot, paper_dir: Path, output_root: Path, options: dict | None = None,
+) -> dict:
+    options = options or {}
+    overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
+    threshold_path = Path(options["qc_thresholds"]) if options.get("qc_thresholds") else None
+    thresholds = load_thresholds(threshold_path)
+    algorithm_fingerprint = algorithm_implementation_fingerprint()
+    profile_fingerprint = profile_registry_fingerprint()
+    relevant_options = {
+        "render_scale": float(options.get("render_scale", 1.5)),
+        "max_render_pixels": int(options.get("max_render_pixels", 12_000_000)),
+        "temp_disk_limit_mb": int(options.get("temp_disk_limit_mb", 2048)),
+        "context_memory_budget": int(options.get("context_memory_budget", 500_000)),
+        "ocr": bool(options.get("ocr", False)),
+    }
+    payload = {
+        "input_fingerprint": snapshot.input_fingerprint,
+        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_implementation_fingerprint": algorithm_fingerprint,
+        "profile_config_fingerprint": profile_fingerprint,
+        "qc_thresholds": thresholds,
+        "overrides": overrides,
+        "options": relevant_options,
+    }
+    return {
+        "stage_fingerprint": sha256_json(payload),
+        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_implementation_fingerprint": algorithm_fingerprint,
+        "profile_config_fingerprint": profile_fingerprint,
+        "qc_thresholds": thresholds,
+        "overrides": overrides,
+        "options": relevant_options,
+    }
+
+
+def bundle_is_intact(paper_root: Path) -> bool:
+    bundle_path = paper_root / "paper_bundle.json"
+    if not bundle_path.is_file():
+        return False
+    try:
+        bundle = _json_file(bundle_path)
+        hashes = bundle.get("content_hashes", {})
+        required = {
+            "paper_manifest.json", "figure_inventory.json", "panel_layout.json",
+            "digitization.json",
+        }
+        if not required.issubset(hashes):
+            return False
+        for relative, expected_hash in hashes.items():
+            artifact = (paper_root / relative).resolve()
+            try:
+                artifact.relative_to(paper_root.resolve())
+            except ValueError:
+                return False
+            if not artifact.is_file() or sha256_file(artifact) != expected_hash:
+                return False
+        return True
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
+
 def _json_file(path: Path) -> Any:
     with path.open("r", encoding="utf-8-sig") as handle:
         return json.load(handle)
@@ -624,16 +710,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     paper_output = output_root / "papers" / snapshot.paper_id
     existing = paper_output / "digitization.json"
     force_reviewed = bool(options.get("force_recompute_reviewed", False))
-    overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
-    threshold_path = Path(options["qc_thresholds"]) if options.get("qc_thresholds") else None
-    thresholds = load_thresholds(threshold_path)
-    stage_fingerprint = sha256_json({
-        "input_fingerprint": snapshot.input_fingerprint,
-        "algorithm_version": ALGORITHM_VERSION,
-        "overrides": overrides,
-        "profile_config_fingerprint": profile_registry_fingerprint(),
-        "qc_thresholds": thresholds,
-    })
+    stage_state = processing_stage_state(snapshot, paper_dir, output_root, options)
+    overrides = stage_state["overrides"]
+    thresholds = stage_state["qc_thresholds"]
+    stage_fingerprint = stage_state["stage_fingerprint"]
     if existing.is_file():
         old = _json_file(existing)
         accepted = any(s.get("review_state") == "REVIEWED_ACCEPTED" for s in old.get("series", []))
@@ -884,6 +964,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "evidence_bytes": _directory_size(paper_output / "evidence"),
                "qc_threshold_status": thresholds["status"],
                "qc_thresholds": thresholds,
+               "algorithm_implementation_fingerprint": stage_state["algorithm_implementation_fingerprint"],
+               "profile_config_fingerprint": stage_state["profile_config_fingerprint"],
                "llm_tokens": 0},
     )
     return {
