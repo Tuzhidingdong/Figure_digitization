@@ -10,9 +10,10 @@ from .hashing import atomic_write_json
 from .storage import Catalog
 
 FIELDS = [
-    "paper_id", "series_id", "measurement_id", "figure_id", "panel_id",
+    "paper_id", "input_fingerprint", "series_id", "measurement_id", "figure_id", "panel_id",
     "technique", "domain", "series_label", "x_value", "x_label", "y_value",
-    "x_unit", "y_unit", "y_axis_side", "qc_status", "review_state",
+    "x_unit", "y_unit", "y_axis_side", "subject_links_json", "conditions_json",
+    "series_metadata_json", "qc_status", "review_state",
     "source_manifest", "source_digitization",
 ]
 
@@ -24,9 +25,10 @@ def _point_rows(points_path: Path, series_id: str):
                 yield point
 
 
-def _make_row(record: dict, point: dict) -> dict[str, Any]:
+def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
     return {
         "paper_id": record["paper_id"],
+        "input_fingerprint": record.get("input_fingerprint"),
         "series_id": record["series_id"],
         "measurement_id": record.get("measurement_id"),
         "figure_id": record["figure_id"],
@@ -40,6 +42,9 @@ def _make_row(record: dict, point: dict) -> dict[str, Any]:
         "x_unit": record["x_unit"],
         "y_unit": record["y_unit"],
         "y_axis_side": record["y_axis_side"],
+        "subject_links_json": json.dumps(associations.get("subject_links", []), ensure_ascii=False),
+        "conditions_json": json.dumps(associations.get("conditions", []), ensure_ascii=False),
+        "series_metadata_json": record.get("metadata_json") or "{}",
         "qc_status": record["qc_status"],
         "review_state": record["review_state"],
         "source_manifest": f"papers/{record['paper_id']}/paper_manifest.json",
@@ -94,6 +99,17 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                     add_warning(record["series_id"], "QC_PROVISIONAL_UNCALIBRATED")
                 if record["review_state"] != "REVIEWED_ACCEPTED":
                     add_warning(record["series_id"], "NOT_REVIEWED_ACCEPTED")
+                associations = catalog.series_associations(record["series_id"])
+                if not associations["subject_links"] or all(
+                    link.get("link_status") != "ASSIGNED_WITH_EVIDENCE"
+                    for link in associations["subject_links"]
+                ):
+                    add_warning(record["series_id"], "SUBJECT_LINK_UNASSIGNED")
+                if not associations["conditions"]:
+                    add_warning(record["series_id"], "CONDITIONS_NOT_LINKED")
+                metadata = json.loads(record.get("metadata_json") or "{}")
+                if "REFERENCE_CONVERSION_UNRESOLVED" in json.dumps(metadata):
+                    add_warning(record["series_id"], "REFERENCE_CONVERSION_UNRESOLVED")
                 points_path = (
                     output_root / "papers" / record["paper_id"] / "series" /
                     f"{record['figure_id']}__{record['panel_id']}" / "panel_series.csv"
@@ -102,7 +118,7 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                     add_warning(record["series_id"], "CANONICAL_POINTS_FILE_MISSING")
                     continue
                 for point in _point_rows(points_path, record["series_id"]):
-                    row = _make_row(record, point)
+                    row = _make_row(record, point, associations)
                     if csv_writer:
                         csv_writer.writerow(row)
                     else:
