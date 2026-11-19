@@ -406,6 +406,14 @@ def _extract_panel(
             except OptionalDependencyError:
                 plot_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
         plot_box_pixels = _plot_box_pixels(image_path, plot_box)
+        if (plot_box_pixels is None and image_path is None
+                and isinstance(plot_box, (list, tuple)) and len(plot_box) == 4):
+            try:
+                numeric_plot_box = tuple(float(value) for value in plot_box)
+                if max(abs(value) for value in numeric_plot_box) > 1.01:
+                    plot_box_pixels = tuple(int(round(value)) for value in numeric_plot_box)
+            except (TypeError, ValueError, OverflowError):
+                plot_box_pixels = None
         if plot_box and image_path and plot_box_pixels is None:
             plot_detection = {"status": "NEEDS_REVIEW", "reason": "INVALID_MANUAL_PLOT_BOX"}
 
@@ -651,6 +659,11 @@ def _extract_panel(
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
                                "vector_selection": vector_selection,
+                               "vector_fallback": (
+                                   "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
+                                   if vector_selection and vector_selection.get("status") == "NEEDS_REVIEW"
+                                   and color_rgb else None
+                               ),
                                "plot_detection": plot_detection, "color_detection": color_detection,
                                "chart_family_classification": classification,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
