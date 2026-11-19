@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .models import JobState, utc_now
+from .manifest import storage_paper_id
 from .storage import connect_catalog, Catalog
 from .hashing import atomic_write_json
 
@@ -142,13 +143,15 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             while len(running) < workers:
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
+                    paper_relative = paper.relative_to(input_root).as_posix()
                 elif not source_exhausted:
                     try:
                         paper = next(source)
                     except StopIteration:
                         source_exhausted = True
                         break
-                    paper_id = paper.relative_to(input_root).as_posix()
+                    paper_relative = paper.relative_to(input_root).as_posix()
+                    paper_id = storage_paper_id(paper_relative)
                     if not ledger.prepare(paper_id):
                         results["active_jobs_skipped"] += 1
                         continue
@@ -156,7 +159,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 else:
                     break
                 ledger.start(paper_id)
-                future = executor.submit(_process_paper_task, str(input_root), paper_id,
+                future = executor.submit(_process_paper_task, str(input_root), paper_relative,
                                          str(output_root), options)
                 running[future] = (paper, paper_id)
             if not running:
