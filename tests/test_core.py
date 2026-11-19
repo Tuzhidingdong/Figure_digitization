@@ -1075,3 +1075,35 @@ def test_review_anchor_patch_rejects_duplicate_and_nonfinite_pixels():
     base["changes"][0]["set"]["x_axis_anchors"][1]["pixel"] = float("inf")
     with pytest.raises(ValueError, match="finite"):
         _validate_patch(base)
+
+
+def test_adapter_does_not_mistake_corpus_root_pdf_for_one_paper(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+
+    root = tmp_path / "corpus"
+    root.mkdir()
+    (root / "loose-root.pdf").write_bytes(b"%PDF-root")
+    paper_one = root / "paper-001"
+    paper_one.mkdir()
+    (paper_one / "main.pdf").write_bytes(b"%PDF-one")
+    (paper_one / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    assets = paper_one / "assets"
+    assets.mkdir()
+    (assets / "embedded.pdf").write_bytes(b"%PDF-embedded")
+    paper_two = root / "paper-002"
+    paper_two.mkdir()
+    (paper_two / "main_analysis.md").write_text("Extracted text", encoding="utf-8")
+
+    assert list(discover_papers(root)) == [paper_one, paper_two]
+
+
+def test_adapter_allows_a_single_pdf_paper_at_the_root(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers, snapshot_paper
+
+    root = tmp_path / "one-paper"
+    root.mkdir()
+    (root / "article.pdf").write_bytes(b"%PDF-root-only")
+    discovered = list(discover_papers(root))
+    assert discovered == [root]
+    snapshot = snapshot_paper(root, root)
+    assert snapshot.paper_id == "root-paper"
