@@ -1236,8 +1236,8 @@ def test_pipeline_auto_detects_simple_single_color_time_series_without_override(
     assert record.metadata["plot_detection"]["status"] == "PROVISIONAL_PLOT_BOX"
     assert record.metadata["color_detection"]["status"] == "UNIQUE_CHROMATIC_FAMILY"
     assert record.metadata["chart_family_classification"]["chart_family"] == "TIME_SERIES"
-    assert record.points[0].x == pytest.approx(0)
-    assert record.points[-1].x == pytest.approx(100)
+    assert record.points[0].x == pytest.approx((45 - 40) * 100 / 220)
+    assert record.points[-1].x == pytest.approx((255 - 40) * 100 / 220)
 
 
 def test_pipeline_routes_multicolor_raster_curves_to_review_without_guessing(tmp_path: Path):
