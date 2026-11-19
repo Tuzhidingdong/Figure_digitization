@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import math
+import re
 import shutil
 import sqlite3
 import uuid
@@ -27,11 +29,23 @@ def _validate_patch(patch: dict) -> None:
         raise ValueError(f"Review patch missing required fields: {', '.join(missing)}")
     if patch["target_artifact"] != "digitization.json":
         raise ValueError("Only digitization.json is a supported patch target")
+    patch_id = str(patch["patch_id"])
+    if len(patch_id) > 80 or not re.fullmatch(r"[A-Za-z0-9_.-]+", patch_id):
+        raise ValueError("patch_id must contain only letters, digits, dot, underscore or hyphen (max 80)")
+    if not isinstance(patch["paper_id"], str) or not patch["paper_id"] or len(patch["paper_id"]) > 240:
+        raise ValueError("paper_id must be a non-empty string of at most 240 characters")
+    reviewer = patch.get("reviewer", "")
+    if not isinstance(reviewer, str) or len(reviewer) > 200:
+        raise ValueError("reviewer must be a string of at most 200 characters")
     if not isinstance(patch["changes"], list) or not patch["changes"]:
         raise ValueError("changes must be a non-empty list")
+    seen_series = set()
     for change in patch["changes"]:
         if not isinstance(change, dict) or not change.get("series_id"):
             raise ValueError("Every change must contain series_id")
+        if change["series_id"] in seen_series:
+            raise ValueError(f"Duplicate series_id in patch: {change['series_id']}")
+        seen_series.add(change["series_id"])
         unknown = set(change) - {"series_id", "set"}
         if unknown:
             raise ValueError(f"Unsupported change keys: {sorted(unknown)}")
@@ -47,9 +61,31 @@ def _validate_patch(patch: dict) -> None:
             points = values["points"]
             if not isinstance(points, list):
                 raise ValueError("points must be a list")
+            if len(points) > 250000:
+                raise ValueError("A review patch cannot contain more than 250000 points per series")
+            allowed_point_keys = {
+                "point_index", "x", "y", "pixel_x", "pixel_y",
+                "y_err_low", "y_err_high", "err_type",
+            }
+            indexes = set()
             for point in points:
                 if not isinstance(point, dict) or "point_index" not in point:
                     raise ValueError("Each point requires point_index")
+                if set(point) - allowed_point_keys:
+                    raise ValueError("Review point contains unsupported fields")
+                index = point["point_index"]
+                if not isinstance(index, int) or index < 0 or index in indexes:
+                    raise ValueError("point_index values must be unique non-negative integers")
+                indexes.add(index)
+                for key in ("y", "pixel_x", "pixel_y", "y_err_low", "y_err_high"):
+                    value = point.get(key)
+                    if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value)):
+                        raise ValueError(f"{key} must be finite numeric data or null")
+                x = point.get("x")
+                if x is not None and not isinstance(x, (str, int, float)):
+                    raise ValueError("x must be a string, number, or null")
+                if isinstance(x, float) and not math.isfinite(x):
+                    raise ValueError("x must be finite")
 
 
 def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = False) -> dict:
