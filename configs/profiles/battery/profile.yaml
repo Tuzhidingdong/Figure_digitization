@@ -1,0 +1,5 @@
+name: battery
+version: '1.0'
+inherits: [common_chemistry, materials_characterization]
+domain: battery
+description: Battery and energy-storage research profile.
