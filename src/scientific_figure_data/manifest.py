@@ -90,7 +90,7 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
                        "mtime_ns": a.mtime_ns, "sha256": a.sha256} for a in artifacts],
     }
     storage_id = paper_id.replace("/", "__").replace("\\\\", "__")
-    storage_id = re.sub(r'[<>:"|?*\\x00-\\x1f]', "_", storage_id).rstrip(" .")
+    storage_id = re.sub(r'[<>:"|?*\x00-\x1f]', "_", storage_id).rstrip(" .")
     if not storage_id or storage_id.upper() in {"CON", "PRN", "AUX", "NUL",
                                                 *(f"COM{i}" for i in range(1, 10)),
                                                 *(f"LPT{i}" for i in range(1, 10))}:
