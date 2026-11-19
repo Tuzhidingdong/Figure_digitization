@@ -269,7 +269,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         accepted = any(s.get("review_state") == "REVIEWED_ACCEPTED" for s in old.get("series", []))
         unchanged = (old.get("input_fingerprint") == snapshot.input_fingerprint
                      and old.get("algorithm_version") == ALGORITHM_VERSION)
-        if unchanged:
+        if unchanged and not force_reviewed:
             cached = _cached_result(paper_output, snapshot)
             if cached:
                 cached["artifact_paths"] = {
