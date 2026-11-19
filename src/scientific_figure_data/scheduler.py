@@ -107,6 +107,11 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         raise ValueError("workers must be between 1 and 4; default is 1 for low-memory systems")
     if max_attempts < 1:
         raise ValueError("max_attempts must be at least 1")
+    requested_workers = workers
+    max_open_pdfs = int((options or {}).get("max_open_pdfs", workers))
+    if max_open_pdfs < 1:
+        raise ValueError("max_open_pdfs must be at least 1")
+    workers = min(workers, max_open_pdfs)
     input_root = input_root.resolve()
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
@@ -245,6 +250,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         **results,
         "papers_seen": total_seen + results["active_jobs_skipped"],
         "workers": workers,
+        "requested_workers": requested_workers,
+        "max_open_pdfs": max_open_pdfs,
         "elapsed_seconds": round(elapsed, 3),
         "throughput_papers_per_minute": round((total_seen / elapsed) * 60, 3) if elapsed else 0.0,
         "peak_parent_and_worker_rss_bytes": peak_rss_bytes or None,
