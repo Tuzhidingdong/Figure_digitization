@@ -8,13 +8,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .adapter import snapshot_paper
-from .calibration import calibration_to_dict, fit_linear_axis
+from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
 from .axis_text import extract_numeric_axis_anchors
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
-from .models import AxisCalibration, JobState, PaperSnapshot, SeriesRecord, safe_id
+from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
@@ -280,9 +280,16 @@ def _extract_panel(
                 elif len(right_anchors) >= 2 and len(left_anchors) < 2:
                     y_axis_anchors = right_anchors
                     record.y_axis_side = "RIGHT"
+        x_cal = None
+        y_cal = None
+        calibration_errors = {}
         try:
             x_cal = fit_linear_axis("x", x_axis_anchors, definition.get("x_unit"))
-            if relative_signal:
+        except (ValueError, TypeError) as exc:
+            calibration_errors["x"] = f"{type(exc).__name__}: {exc}"
+
+        if relative_signal:
+            try:
                 if not plot_box or not image_path:
                     raise ValueError("Relative signal requires an explicit plot_box and panel image")
                 from PIL import Image
@@ -298,11 +305,13 @@ def _extract_panel(
                     "y", None, -1.0 / (by1 - by0), by1 / (by1 - by0), [], 0.0,
                     status="SERIES_RELATIVE_SIGNAL",
                 )
-            else:
+            except (ValueError, TypeError, ImportError) as exc:
+                calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
+        else:
+            try:
                 y_cal = fit_linear_axis("y", y_axis_anchors, definition.get("y_unit"))
-        except (ValueError, TypeError, ImportError):
-            results.append(record)
-            continue
+            except (ValueError, TypeError) as exc:
+                calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
 
         pixel_points = definition.get("pixel_points")
         family = str(definition.get("data_family", "")).upper()
@@ -324,9 +333,20 @@ def _extract_panel(
                         crop_top_pdf=float(crop_mapping["crop_top_pdf"]),
                         render_scale=float(crop_mapping["render_scale"]),
                     )
-                    record.points = map_explicit_polyline(clean_points, x_cal, y_cal)
+                    record.points = [
+                        SeriesPoint(
+                            point_index=point_index,
+                            x=map_pixel(x_cal, point[0]) if x_cal else None,
+                            y=map_pixel(y_cal, point[1]) if y_cal else None,
+                            pixel_x=float(point[0]), pixel_y=float(point[1]),
+                        )
+                        for point_index, point in enumerate(clean_points)
+                    ]
                     record.extraction_method = "PDFIUM_NATIVE_VECTOR_POLYLINE"
-                    record.extraction_status = "EXTRACTED_PROVISIONAL" if len(record.points) >= 2 else "NEEDS_REVIEW"
+                    record.extraction_status = (
+                        "EXTRACTED_PROVISIONAL" if x_cal and y_cal and len(record.points) >= 2
+                        else "GEOMETRY_ONLY_NEEDS_REVIEW"
+                    )
                     record.metadata = {
                         "path_order": "PRESERVED",
                         "data_family": family,
@@ -338,7 +358,8 @@ def _extract_panel(
                         "axis_text_evidence": axis_text_evidence,
                         "crop_mapping": crop_mapping,
                         "x_calibration": calibration_to_dict(x_cal),
-                        "y_calibration": calibration_to_dict(y_cal),
+                        "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                        "calibration_errors": calibration_errors,
                     }
                 else:
                     record.metadata = {
@@ -368,19 +389,32 @@ def _extract_panel(
                 "note": "Vector extraction requires an unrotated PDF page, explicit plot_bbox_pdf, crop geometry, and PDFium native path evidence.",
                 "vector_object_indices": vector_indices,
                 "plot_bbox_pdf": plot_bbox_pdf,
+                "calibration_errors": calibration_errors,
             }
             results.append(record)
             continue
         if isinstance(pixel_points, list) and len(pixel_points) >= 2:
             clean_points = [(float(p[0]), float(p[1])) for p in pixel_points
                             if isinstance(p, (list, tuple)) and len(p) == 2]
-            record.points = map_explicit_polyline(clean_points, x_cal, y_cal)
+            record.points = [
+                SeriesPoint(
+                    point_index=point_index,
+                    x=map_pixel(x_cal, point[0]) if x_cal else None,
+                    y=map_pixel(y_cal, point[1]) if y_cal else None,
+                    pixel_x=float(point[0]), pixel_y=float(point[1]),
+                )
+                for point_index, point in enumerate(clean_points)
+            ]
             record.extraction_method = "EXPLICIT_ORDERED_PIXEL_POLYLINE"
-            record.extraction_status = "EXTRACTED_PROVISIONAL" if len(record.points) >= 2 else "NEEDS_REVIEW"
+            record.extraction_status = (
+                "EXTRACTED_PROVISIONAL" if x_cal and y_cal and len(record.points) >= 2
+                else "GEOMETRY_ONLY_NEEDS_REVIEW"
+            )
             record.metadata = {"path_order": "PRESERVED", "data_family": family,
                                "axis_text_evidence": axis_text_evidence,
-                               "x_calibration": calibration_to_dict(x_cal),
-                               "y_calibration": calibration_to_dict(y_cal)}
+                               "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
+                               "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                               "calibration_errors": calibration_errors}
         elif image_path and definition.get("color_rgb") and family not in {"CV", "EIS", "NON_MONOTONIC"}:
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in definition["color_rgb"]),
@@ -388,10 +422,14 @@ def _extract_panel(
                 plot_box=tuple(plot_box) if relative_signal and plot_box else None,
             )
             record.extraction_method = qc.get("method", "RASTER_COLOR")
-            record.extraction_status = "EXTRACTED_PROVISIONAL" if record.points else "NEEDS_REVIEW"
-            record.metadata = {"x_calibration": calibration_to_dict(x_cal),
-                               "y_calibration": calibration_to_dict(y_cal), "raster_qc": qc,
-                               "axis_text_evidence": axis_text_evidence,
+            record.extraction_status = (
+                "EXTRACTED_PROVISIONAL" if record.points and x_cal and y_cal
+                else "GEOMETRY_ONLY_NEEDS_REVIEW" if record.points else "NEEDS_REVIEW"
+            )
+            record.metadata = {"x_calibration": calibration_to_dict(x_cal) if x_cal else None,
+                               "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                               "calibration_errors": calibration_errors,
+                               "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
         else:
             record.metadata = {
