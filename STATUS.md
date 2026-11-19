@@ -112,7 +112,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 - Test source files have been committed.
 - The Windows CI workflow has been committed.
-- **No successful CI run is recorded in this STATUS update.**
+- **A draft verification PR is being opened from the current code state to trigger the Windows CI matrix. No successful CI result is claimed until its jobs are inspected.**
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, will not count as real-paper scientific acceptance.
 
