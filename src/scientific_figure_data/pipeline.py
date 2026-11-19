@@ -250,6 +250,23 @@ def _extract_panel(
     return results
 
 
+def _directory_size(path: Path) -> int:
+    total = 0
+    if not path.exists():
+        return 0
+    for directory, _, filenames in __import__("os").walk(path):
+        for name in filenames:
+            try:
+                total += (Path(directory) / name).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def _within_evidence_budget(paper_output: Path, budget_mb: int) -> bool:
+    return budget_mb <= 0 or _directory_size(paper_output / "evidence") < budget_mb * 1024 * 1024
+
+
 def _crop_local_image(source_path: Path, bbox: Any, output_path: Path) -> Path | None:
     try:
         from PIL import Image
@@ -327,6 +344,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     memory_limit_mb = int(options.get("memory_limit_mb", 2048))
     render_scale = float(options.get("render_scale", 1.5))
     max_render_pixels = int(options.get("max_render_pixels", 12_000_000))
+    temp_disk_limit_mb = int(options.get("temp_disk_limit_mb", 2048))
     _check_memory_budget(memory_limit_mb)
     context = PaperContextIndex.build(
         paper_dir, paper_output / "context",
@@ -374,10 +392,17 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                 max_segments_per_path=1500,
                             )
                     native_path = paper_output / "evidence" / f"page_{page_number_int:04d}_native.json"
-                    atomic_write_json(native_path, native_payload)
+                    if _within_evidence_budget(paper_output, temp_disk_limit_mb):
+                        atomic_write_json(native_path, native_payload)
+                        native_artifact = native_path.relative_to(paper_output).as_posix()
+                        native_hash = sha256_file(native_path)
+                    else:
+                        native_artifact = None
+                        native_hash = None
                     native_evidence_by_page[page_number_int] = {
-                        "artifact": native_path.relative_to(paper_output).as_posix(),
-                        "sha256": sha256_file(native_path),
+                        "artifact": native_artifact,
+                        "sha256": native_hash,
+                        "status": "STORED" if native_artifact else "EVIDENCE_DISK_BUDGET_EXCEEDED",
                         "object_inventory_status": native_payload.get("object_inventory_status"),
                         "object_count": native_payload.get("object_count"),
                         "object_type_counts": native_payload.get("object_type_counts", {}),
@@ -398,11 +423,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
             if panel_path and not panel_specific_image and bbox:
-                saved_crop = _crop_local_image(
-                    panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
+                if _within_evidence_budget(paper_output, temp_disk_limit_mb):
+                    saved_crop = _crop_local_image(
+                        panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
                 saved_crop = panel_path
-            if saved_crop is None and pdf_path and figure["page"]:
+            if saved_crop is None and pdf_path and figure["page"] and _within_evidence_budget(
+                paper_output, temp_disk_limit_mb):
                 if backend is None:
                     backend = PdfiumBackend()
                 with backend.open(pdf_path) as doc:
@@ -458,6 +485,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "native_page_evidence": native_evidence_by_page,
                "stage_fingerprint": stage_fingerprint,
                "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
+               "temp_disk_limit_mb": temp_disk_limit_mb,
+               "evidence_bytes": _directory_size(paper_output / "evidence"),
                "llm_tokens": 0},
     )
     # Snapshot is also persisted outside the per-paper bundle for corpus-level auditing.
