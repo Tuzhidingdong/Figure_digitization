@@ -16,6 +16,7 @@ from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import JobState, PaperSnapshot, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
+from .profiles import profile_registry_fingerprint
 from .storage import write_paper_artifacts, append_panel_series_csv
 
 
@@ -285,7 +286,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         "input_fingerprint": snapshot.input_fingerprint,
         "algorithm_version": ALGORITHM_VERSION,
         "overrides": overrides,
-        "profile_config_version": "profile-config-v1",
+        "profile_config_fingerprint": profile_registry_fingerprint(),
     })
     if existing.is_file():
         old = _json_file(existing)
