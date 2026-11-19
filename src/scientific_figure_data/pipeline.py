@@ -67,7 +67,10 @@ def _safe_local_file(paper_dir: Path, value: str | None) -> Path | None:
 def _normalize_bbox(bbox: Any, width: int, height: int) -> tuple[int, int, int, int] | None:
     if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
         return None
-    x0, y0, x1, y1 = [float(v) for v in bbox]
+    try:
+        x0, y0, x1, y1 = [float(v) for v in bbox]
+    except (TypeError, ValueError, OverflowError):
+        return None
     if max(abs(x0), abs(y0), abs(x1), abs(y1)) <= 1.01:
         x0, x1 = x0 * width, x1 * width
         y0, y1 = y0 * height, y1 * height
