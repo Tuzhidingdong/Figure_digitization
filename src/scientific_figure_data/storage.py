@@ -172,7 +172,7 @@ class Catalog:
 
     def index_paper(self, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
                     series: list[SeriesRecord], status: str, artifact_paths: dict | None = None,
-                    paper_root: Path | None = None):
+                    paper_root: Path | None = None, batch_size: int = 1000):
         with self.con:
             self.register_paper(snapshot, status, artifact_paths)
             old_ids = [r[0] for r in self.con.execute("SELECT series_id FROM series WHERE paper_id=?",
@@ -197,9 +197,9 @@ class Catalog:
             for item in series:
                 self._insert_series(item)
             if paper_root:
-                self._index_panel_csv_points(paper_root, series)
+                self._index_panel_csv_points(paper_root, series, batch_size)
 
-    def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord]):
+    def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord], batch_size: int = 1000):
         known = {item.series_id for item in series}
         for csv_path in (paper_root / "series").glob("**/panel_series.csv"):
             batch = []
@@ -219,7 +219,7 @@ class Catalog:
                         float(row["y_err_high"]) if row.get("y_err_high") else None,
                         row.get("err_type") or "UNKNOWN",
                     ))
-                    if len(batch) >= 1000:
+                    if len(batch) >= max(1, batch_size):
                         self.con.executemany("INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)", batch)
                         batch.clear()
             if batch:
@@ -235,7 +235,7 @@ class Catalog:
              item.extraction_status, item.qc_status, item.review_state,
              json.dumps(item.metadata, ensure_ascii=False)),
         )
-        measurement_id = f"measurement:{item.series_id}"
+        measurement_id = str(item.metadata.get("measurement_id") or f"measurement:{item.series_id}")
         self.con.execute(
             "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
             (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
@@ -264,6 +264,14 @@ class Catalog:
                 (item.series_id, entity_id, link.get("role_in_series", "unknown"),
                  json.dumps(link.get("evidence", {}), ensure_ascii=False),
                  link.get("status", "UNASSIGNED")),
+            )
+        for relationship in item.metadata.get("entity_relationships", []):
+            if not all(relationship.get(key) for key in ("parent_entity_id", "child_entity_id", "relationship")):
+                continue
+            self.con.execute(
+                "INSERT OR REPLACE INTO entity_relationships VALUES(?,?,?,?)",
+                (relationship["parent_entity_id"], relationship["child_entity_id"],
+                 relationship["relationship"], json.dumps(relationship.get("evidence", {}), ensure_ascii=False)),
             )
         for index, condition in enumerate(item.conditions):
             condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
@@ -294,6 +302,13 @@ class Catalog:
             sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l JOIN entities e ON e.entity_id=l.entity_id
                       WHERE l.series_id=s.series_id AND (lower(e.canonical_name)=lower(?) OR lower(e.aliases_json) LIKE ?))"""
             args.extend([entity_name, f"%{entity_name.casefold()}%"])
+        analyte = filters.get("analyte")
+        if analyte:
+            sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l JOIN entities e ON e.entity_id=l.entity_id
+                      WHERE l.series_id=s.series_id AND
+                      (lower(e.entity_type)='analyte' OR lower(l.role_in_series)='target_analyte')
+                      AND (lower(e.canonical_name)=lower(?) OR lower(e.aliases_json) LIKE ?))"""
+            args.extend([analyte, f"%{analyte.casefold()}%"])
         role = filters.get("series_role")
         if role:
             sql += " AND EXISTS (SELECT 1 FROM series_subject_links l WHERE l.series_id=s.series_id AND l.role_in_series=?)"
