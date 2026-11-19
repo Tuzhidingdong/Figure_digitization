@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import ctypes
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from .errors import OptionalDependencyError
 
@@ -54,6 +54,10 @@ class PdfDocumentView:
 
 
 class PdfPageView:
+    TYPE_NAMES = {
+        1: "TEXT", 2: "PATH", 3: "IMAGE", 4: "SHADING", 5: "FORM"
+    }
+
     def __init__(self, page, pdfium):
         self._page = page
         self._pdfium = pdfium
@@ -67,7 +71,8 @@ class PdfPageView:
             raise ValueError("render scale must be greater than 0 and no more than 8")
         bitmap = self._page.render(scale=scale)
         try:
-            return bitmap.to_pil()
+            # Copy the pixels before closing PDFium's bitmap; some PIL modes share its buffer.
+            return bitmap.to_pil().copy()
         finally:
             close = getattr(bitmap, "close", None)
             if callable(close):
@@ -81,3 +86,102 @@ class PdfPageView:
             close = getattr(textpage, "close", None)
             if callable(close):
                 close()
+
+    def inspect_native_objects(
+        self, *, max_objects: int = 20000, max_total_path_segments: int = 30000,
+        max_segments_per_path: int = 2000,
+    ) -> dict:
+        """Inventory page text, image, form, and vector-path objects.
+
+        Paths are recorded as geometry evidence only. This routine does not assume that
+        every PDFium path is a scientific data curve or that text-as-path is not glyph art.
+        """
+        raw = getattr(self._pdfium, "raw", None)
+        summary = {
+            "backend": self.name,
+            "object_inventory_status": "UNAVAILABLE",
+            "object_count": 0,
+            "object_type_counts": {},
+            "objects": [],
+            "native_text": self.text_page(),
+            "path_geometry_complete": False,
+            "truncation": None,
+        }
+        if raw is None or not hasattr(self._page, "get_objects"):
+            return summary
+
+        total_segments = 0
+        objects = []
+        try:
+            iterator = self._page.get_objects(max_depth=20)
+            for object_index, obj in enumerate(iterator):
+                if object_index >= max_objects:
+                    summary["truncation"] = "MAX_OBJECTS"
+                    break
+                obj_type = int(getattr(obj, "type", -1))
+                type_name = self.TYPE_NAMES.get(obj_type, f"UNKNOWN_{obj_type}")
+                counts = summary["object_type_counts"]
+                counts[type_name] = counts.get(type_name, 0) + 1
+                row = {
+                    "object_index": object_index,
+                    "object_type": type_name,
+                    "form_level": int(getattr(obj, "level", 0) or 0),
+                    "bounds_pdf": None,
+                }
+                try:
+                    row["bounds_pdf"] = [float(v) for v in obj.get_bounds()]
+                except Exception:
+                    pass
+                if type_name == "TEXT":
+                    try:
+                        row["text"] = obj.extract()
+                    except Exception:
+                        row["text"] = None
+                elif type_name == "IMAGE":
+                    try:
+                        row["pixel_size"] = list(obj.get_px_size())
+                    except Exception:
+                        row["pixel_size"] = None
+                elif type_name == "PATH":
+                    row["segments"] = []
+                    try:
+                        count = int(raw.FPDFPath_CountSegments(obj))
+                        row["segment_count"] = count
+                        matrix = obj.get_matrix()
+                        take = min(max(0, count), max_segments_per_path,
+                                   max(0, max_total_path_segments - total_segments))
+                        for segment_index in range(take):
+                            segment = raw.FPDFPath_GetPathSegment(obj, segment_index)
+                            if not segment:
+                                continue
+                            x = ctypes.c_float()
+                            y = ctypes.c_float()
+                            ok = raw.FPDFPathSegment_GetPoint(segment, ctypes.byref(x), ctypes.byref(y))
+                            segment_type = int(raw.FPDFPathSegment_GetType(segment))
+                            if ok:
+                                # Apply each object's transformation matrix before storing page-space points.
+                                page_x, page_y = matrix.on_point(float(x.value), float(y.value))
+                                point = [float(page_x), float(page_y)]
+                            else:
+                                point = None
+                            close_path = bool(raw.FPDFPathSegment_GetClose(segment))
+                            row["segments"].append({
+                                "index": segment_index, "type": segment_type,
+                                "point_pdf": point, "closes_subpath": close_path,
+                            })
+                            total_segments += 1
+                        if take < count:
+                            row["segments_truncated"] = True
+                    except Exception as exc:
+                        row["path_extract_error"] = f"{type(exc).__name__}: {exc}"
+                objects.append(row)
+        except Exception as exc:
+            summary["object_inventory_status"] = "PARTIAL_ERROR"
+            summary["object_inventory_error"] = f"{type(exc).__name__}: {exc}"
+        else:
+            summary["object_inventory_status"] = "OK"
+        summary["objects"] = objects
+        summary["object_count"] = len(objects)
+        summary["path_segment_count"] = total_segments
+        summary["path_geometry_complete"] = summary["object_inventory_status"] == "OK" and not summary["truncation"]
+        return summary
