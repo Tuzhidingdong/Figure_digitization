@@ -23,7 +23,7 @@ from scientific_figure_data.semantics import (
     pfas_metric_warning, resolve_reference_scale,
 )
 from scientific_figure_data.storage import (
-    Catalog, append_panel_series_csv, write_paper_artifacts,
+    Catalog, append_panel_series_csv, connect_catalog, write_paper_artifacts,
 )
 
 
