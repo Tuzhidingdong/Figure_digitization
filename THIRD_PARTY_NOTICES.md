@@ -11,13 +11,12 @@ This project keeps the core runtime dependency-light. Optional packages are not 
 | PDFium | Native PDF engine used by pypdfium2 | Upstream component license notices apply | Raw API availability varies by build; symbol presence is not proof of full path extraction |
 | Pillow | Optional image loading/cropping | HPND | Include package notice if redistributed |
 | NumPy | Optional raster array processing | BSD-3-Clause | Include package notice if redistributed |
-| opencv-python-headless | Optional computer vision | Apache-2.0 | Native wheels have separate bundled components/notices; verify pinned wheel |
-| rapidocr-onnxruntime | Optional OCR | Verify exact release metadata | OCR model weights and ONNX Runtime notices must be inventoried separately |
-| psutil | Optional process RSS monitoring | BSD-3-Clause | Include package notice if redistributed |
+| rapidocr | Optional OCR | Verify exact pinned RapidOCR distribution license | OCR model weights and preprocessing dependencies must be inventoried separately |
+| onnxruntime | Optional CPU OCR inference | MIT | CPU runtime only; configure one intra-op and one inter-op thread |
 | pdfminer.six | Backend spike candidate; not a core dependency | MIT | Include notice if adopted/distributed |
 | pikepdf / QPDF | Backend spike candidate; not a core dependency | MPL-2.0 for pikepdf; QPDF component notices also apply | Review the exact wheel's bundled dependencies |
 | PyMuPDF | Not selected by default | AGPL-3.0 or commercial licensing | Do not add without a separate license decision |
 
-This table is a preliminary engineering inventory, not legal advice or a substitute for scanning the exact resolved dependency tree and binary wheels used for a release.
+OpenCV is not currently an active dependency. This table is a preliminary engineering inventory, not legal advice or a substitute for scanning the exact resolved dependency tree and binary wheels used for a release.
 
 Before distribution, generate a machine-readable SBOM and preserve all notices from the exact locked package versions. No OCR weights are bundled by this repository.
