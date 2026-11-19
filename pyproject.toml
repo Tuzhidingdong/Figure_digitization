@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "See THIRD_PARTY_NOTICES.md and repository license policy" }
 authors = [{ name = "Figure_digitization contributors" }]
-dependencies = []
+dependencies = ["psutil>=5.9", "PyYAML>=6.0"]
 
 [project.optional-dependencies]
 pdf = ["pypdfium2>=4.30"]
