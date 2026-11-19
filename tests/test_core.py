@@ -1124,3 +1124,152 @@ def test_canonical_paper_id_is_stable_and_windows_safe():
     assert storage_paper_id("nested\\paper-001") == "nested__paper-001"
     assert storage_paper_id("NUL") == "_NUL"
     assert storage_paper_id("a" * 140).startswith("a" * 100 + "_")
+
+
+def test_chart_classifier_uses_explicit_technique_and_axis_semantics():
+    from scientific_figure_data.chart_classifier import classify_chart_family
+
+    raman = classify_chart_family("Raman")
+    assert raman["technique"] == "Raman"
+    assert raman["chart_family"] == "SPECTRUM"
+    assert raman["y_signal_mode"] == "SERIES_RELATIVE_SIGNAL"
+
+    cv = classify_chart_family(None, "Potential (V)", "Current density", "Cyclic voltammetry")
+    assert cv["technique"] == "CV"
+    assert cv["chart_family"] == "NON_MONOTONIC_CURVE"
+
+    kinetics = classify_chart_family(None, "Time (min)", "C/C0")
+    assert kinetics["chart_family"] == "TIME_SERIES"
+
+    ambiguous = classify_chart_family(None, "Wavenumber (cm-1)", "Absorbance")
+    assert ambiguous["chart_family"] == "UNCLASSIFIED"
+    assert ambiguous["status"] == "NEEDS_REVIEW"
+
+
+def test_plot_region_detector_finds_unique_rectangular_frame_and_rejects_borderless_image(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box
+
+    image = Image.new("RGB", (300, 200), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((40, 30, 260, 170), outline=(20, 20, 20), width=2)
+    image_path = tmp_path / "plot-frame.png"
+    image.save(image_path)
+    result = detect_plot_box(image_path)
+    assert result["status"] == "PROVISIONAL_PLOT_BOX"
+    assert result["pixel_bbox"] == [40, 30, 260, 170]
+
+    blank_path = tmp_path / "no-frame.png"
+    Image.new("RGB", (300, 200), "white").save(blank_path)
+    blank = detect_plot_box(blank_path)
+    assert blank["status"] == "NEEDS_REVIEW"
+
+
+def test_single_trace_color_detection_rejects_multicolor_plot(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_single_trace_color
+
+    single = Image.new("RGB", (200, 120), "white")
+    draw = ImageDraw.Draw(single)
+    draw.line((10, 60, 190, 30), fill=(220, 20, 30), width=2)
+    one_path = tmp_path / "one-color.png"
+    single.save(one_path)
+    detected = detect_single_trace_color(one_path, (0, 0, 200, 120))
+    assert detected["status"] == "UNIQUE_CHROMATIC_FAMILY"
+    assert detected["color_rgb"][0] > 150
+
+    multi = Image.new("RGB", (200, 120), "white")
+    draw = ImageDraw.Draw(multi)
+    draw.line((10, 35, 190, 25), fill=(220, 20, 30), width=2)
+    draw.line((10, 90, 190, 100), fill=(20, 60, 220), width=2)
+    multi_path = tmp_path / "two-colors.png"
+    multi.save(multi_path)
+    rejected = detect_single_trace_color(multi_path, (0, 0, 200, 120))
+    assert rejected["status"] == "NEEDS_REVIEW"
+    assert rejected["reason"] == "MULTIPLE_CHROMATIC_FAMILIES"
+
+
+def test_pipeline_auto_detects_simple_single_color_time_series_without_override(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image = Image.new("RGB", (300, 200), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((40, 30, 260, 170), outline=(20, 20, 20), width=2)
+    draw.line((45, 135, 85, 120, 125, 105, 165, 90, 205, 75, 255, 50),
+              fill=(220, 20, 30), width=2)
+    image_path = tmp_path / "panel.png"
+    image.save(image_path)
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "auto-gcd",
+        "technique": "GCD",
+        "domain": "battery",
+        "x_label": "Time (min)",
+        "y_label": "Voltage (V)",
+        "x_axis_anchors": [
+            {"pixel": 40, "value": 0},
+            {"pixel": 260, "value": 100},
+        ],
+        "y_axis_anchors": [
+            {"pixel": 170, "value": 0},
+            {"pixel": 30, "value": 5},
+        ],
+        # Deliberately no plot_box, color_rgb or pixel_points.
+    }
+    records = _extract_panel(
+        image_path, "paper-auto", "Figure1", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery", "caption": "Galvanostatic charge-discharge"},
+        {"figures": {"Figure1": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), None,
+    )
+    assert len(records) == 1
+    record = records[0]
+    assert record.extraction_method == "raster_color_column_median"
+    assert record.extraction_status == "EXTRACTED_PROVISIONAL"
+    assert len(record.points) >= 150
+    assert record.metadata["plot_detection"]["status"] == "PROVISIONAL_PLOT_BOX"
+    assert record.metadata["color_detection"]["status"] == "UNIQUE_CHROMATIC_FAMILY"
+    assert record.metadata["chart_family_classification"]["chart_family"] == "TIME_SERIES"
+    assert record.points[0].x == pytest.approx(0)
+    assert record.points[-1].x == pytest.approx(100)
+
+
+def test_pipeline_routes_multicolor_raster_curves_to_review_without_guessing(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image = Image.new("RGB", (300, 200), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((40, 30, 260, 170), outline=(20, 20, 20), width=2)
+    draw.line((45, 60, 255, 50), fill=(220, 20, 30), width=2)
+    draw.line((45, 140, 255, 150), fill=(20, 60, 220), width=2)
+    image_path = tmp_path / "multi-panel.png"
+    image.save(image_path)
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "ambiguous-gcd",
+        "technique": "GCD",
+        "domain": "battery",
+        "x_axis_anchors": [{"pixel": 40, "value": 0}, {"pixel": 260, "value": 100}],
+        "y_axis_anchors": [{"pixel": 170, "value": 0}, {"pixel": 30, "value": 5}],
+    }
+    record = _extract_panel(
+        image_path, "paper-auto", "Figure2", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure2": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), None,
+    )[0]
+    assert not record.points
+    assert record.extraction_status == "NEEDS_REVIEW"
+    assert record.metadata["color_detection"]["reason"] == "MULTIPLE_CHROMATIC_FAMILIES"
