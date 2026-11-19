@@ -29,10 +29,11 @@ ALGORITHM_VERSION = "0.1.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
-    "pipeline.py", "pdf_backend.py", "vector_paths.py", "plot_region.py",
-    "chart_classifier.py", "axis_text.py", "raster.py", "calibration.py",
-    "semantics.py", "entities.py", "context_index.py", "storage.py",
-    "manifest.py", "profiles.py", "qc.py", "hashing.py",
+    "pipeline.py", "adapter.py", "manifest.py", "models.py",
+    "pdf_backend.py", "vector_paths.py", "plot_region.py", "chart_classifier.py",
+    "axis_text.py", "raster.py", "calibration.py", "semantics.py",
+    "entities.py", "context_index.py", "storage.py", "profiles.py",
+    "qc.py", "hashing.py", "ocr.py",
 )
 _ALGORITHM_FINGERPRINT_CACHE: str | None = None
 
