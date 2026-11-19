@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scientific-figure-data"
+version = "0.1.0"
+description = "Evidence-first, resource-bounded scientific figure digitization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "See THIRD_PARTY_NOTICES.md and repository license policy" }
+authors = [{ name = "Figure_digitization contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdfium2>=4.30"]
+images = ["Pillow>=10", "numpy>=1.26", "opencv-python-headless>=4.9"]
+ocr = ["rapidocr-onnxruntime>=1.3"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+sfd = "scientific_figure_data.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
