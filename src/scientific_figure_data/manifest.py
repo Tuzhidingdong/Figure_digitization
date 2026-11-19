@@ -12,6 +12,20 @@ from .models import InputArtifact, PaperSnapshot, utc_now
 ADAPTER_VERSION = "0.1.0"
 
 
+def storage_paper_id(paper_id: str) -> str:
+    """Normalize a corpus-relative paper path into a Windows-safe stable ID."""
+    storage_id = str(paper_id).replace("/", "__").replace("\\", "__")
+    storage_id = re.sub(r'[<>:"|?*\x00-\x1f]', "_", storage_id).rstrip(" .")
+    reserved = {"CON", "PRN", "AUX", "NUL",
+                *(f"COM{i}" for i in range(1, 10)),
+                *(f"LPT{i}" for i in range(1, 10))}
+    if not storage_id or storage_id.upper() in reserved:
+        storage_id = "_" + (storage_id or "paper")
+    if len(storage_id) > 120:
+        storage_id = storage_id[:100] + "_" + sha256_json(paper_id)[:12]
+    return storage_id
+
+
 def iter_files(root: Path) -> Iterable[Path]:
     """Yield files lazily in stable order without materializing the complete file list."""
     for directory, dirnames, filenames in os.walk(root):
@@ -96,14 +110,7 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
         "artifacts": [{"path": a.path, "role": a.role, "size_bytes": a.size_bytes,
                        "mtime_ns": a.mtime_ns, "sha256": a.sha256} for a in artifacts],
     }
-    storage_id = paper_id.replace("/", "__").replace("\\\\", "__")
-    storage_id = re.sub(r'[<>:"|?*\x00-\x1f]', "_", storage_id).rstrip(" .")
-    if not storage_id or storage_id.upper() in {"CON", "PRN", "AUX", "NUL",
-                                                *(f"COM{i}" for i in range(1, 10)),
-                                                *(f"LPT{i}" for i in range(1, 10))}:
-        storage_id = "_" + (storage_id or "paper")
-    if len(storage_id) > 120:
-        storage_id = storage_id[:100] + "_" + sha256_json(paper_id)[:12]
+    storage_id = storage_paper_id(paper_id)
     return PaperSnapshot(
         paper_id=storage_id,
         source_dir=paper_dir.relative_to(corpus_root).as_posix(),
