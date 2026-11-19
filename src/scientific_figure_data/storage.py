@@ -293,7 +293,7 @@ class Catalog:
                  json.dumps(condition.get("evidence", {}), ensure_ascii=False)),
             )
 
-    def query_series(self, filters: dict[str, str | None], limit: int = 500) -> list[dict]:
+    def _query_sql(self, filters: dict[str, str | None], limit: int | None = None) -> tuple[str, list[Any]]:
         sql = "SELECT s.*, p.source_dir FROM series s JOIN papers p ON p.paper_id=s.paper_id WHERE 1=1"
         args: list[Any] = []
         mapping = {"paper_id": "s.paper_id", "technique": "s.technique", "domain": "s.domain",
@@ -328,8 +328,24 @@ class Catalog:
             sql += """ AND EXISTS (SELECT 1 FROM conditions c
                       WHERE c.measurement_id=s.measurement_id AND lower(c.name) LIKE ?)"""
             args.append(f"%{condition.casefold()}%")
-        sql += " ORDER BY s.paper_id,s.figure_id,s.panel_id,s.series_id LIMIT ?"
-        args.append(max(1, min(int(limit), 10000)))
+        sql += " ORDER BY s.paper_id,s.figure_id,s.panel_id,s.series_id"
+        if limit is not None:
+            sql += " LIMIT ?"
+            args.append(max(1, min(int(limit), 10000)))
+        return sql, args
+
+    def iter_query_series(self, filters: dict[str, str | None], batch_size: int = 500):
+        sql, args = self._query_sql(filters, limit=None)
+        cursor = self.con.execute(sql, args)
+        while True:
+            batch = cursor.fetchmany(max(1, batch_size))
+            if not batch:
+                break
+            for row in batch:
+                yield dict(row)
+
+    def query_series(self, filters: dict[str, str | None], limit: int = 500) -> list[dict]:
+        sql, args = self._query_sql(filters, limit=limit)
         return [dict(row) for row in self.con.execute(sql, args).fetchall()]
 
     def list_reviews(self, limit: int = 1000) -> list[dict]:
