@@ -1,0 +1,8 @@
+techniques:
+  degradation_kinetics: {family: time_series}
+  C_over_C0_time: {family: time_series}
+  TOC: {family: scalar_or_time_series}
+  COD: {family: scalar_or_time_series}
+  radical_quenching: {family: categorical_or_bar}
+metrics:
+  distinct: [parent_concentration, removal_efficiency, rate_constant, TOC, COD, mineralization]
