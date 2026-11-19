@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+import pytest
 from pathlib import Path
 
 from scientific_figure_data.adapter import discover_papers, snapshot_paper
@@ -457,6 +459,15 @@ def test_pdfium_native_object_inventory_passes_and_closes_textpage(monkeypatch):
         def get_textpage(self):
             return textpage
 
+        def get_width(self):
+            return 200.0
+
+        def get_height(self):
+            return 300.0
+
+        def get_rotation(self):
+            return 0
+
         def get_objects(self, max_depth, textpage):
             self.received_textpage = textpage
             return iter([FakeTextObject()])
@@ -777,8 +788,8 @@ def test_pdf_vector_path_is_mapped_into_crop_pixels_and_calibrated_in_original_o
     assert record.extraction_status == "EXTRACTED_PROVISIONAL"
     assert [point.point_index for point in record.points] == list(range(8))
     assert [point.pixel_x for point in record.points] == [point[0] for point in mapped]
-    assert record.points[0].x == -1.0
-    assert record.points[-1].x == 1.0
+    assert record.points[0].x == pytest.approx(-1.0)
+    assert record.points[-1].x == pytest.approx(1.0)
     assert record.evidence[0]["source_pdf_sha256"] == "a" * 64
 
 
