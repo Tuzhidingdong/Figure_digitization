@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .hashing import atomic_write_json, sha256_file, sha256_json
+from .hashing import atomic_write_json, sha256_file
 from .models import PaperSnapshot, SeriesRecord, utc_now
 
 SCHEMA = """
@@ -22,12 +22,15 @@ CREATE TABLE IF NOT EXISTS figures(
 );
 CREATE TABLE IF NOT EXISTS panels(
  paper_id TEXT NOT NULL, figure_id TEXT NOT NULL, panel_id TEXT NOT NULL,
- bbox_json TEXT, status TEXT, PRIMARY KEY(paper_id, figure_id, panel_id),
- FOREIGN KEY(paper_id, figure_id) REFERENCES figures(paper_id, figure_id)
+ bbox_json TEXT, status TEXT, PRIMARY KEY(paper_id, figure_id, panel_id)
 );
 CREATE TABLE IF NOT EXISTS entities(
  entity_id TEXT PRIMARY KEY, canonical_name TEXT NOT NULL, entity_type TEXT,
  domain TEXT, aliases_json TEXT NOT NULL DEFAULT '[]', evidence_json TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TABLE IF NOT EXISTS entity_relationships(
+ parent_entity_id TEXT NOT NULL, child_entity_id TEXT NOT NULL, relationship TEXT NOT NULL,
+ evidence_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(parent_entity_id,child_entity_id,relationship)
 );
 CREATE TABLE IF NOT EXISTS conditions(
  condition_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, measurement_id TEXT,
@@ -49,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_series_domain ON series(domain);
 CREATE TABLE IF NOT EXISTS series_points(
  series_id TEXT NOT NULL, point_index INTEGER NOT NULL, x_value REAL, x_label TEXT,
  y_value REAL, pixel_x REAL, pixel_y REAL, y_err_low REAL, y_err_high REAL, err_type TEXT,
- PRIMARY KEY(series_id, point_index), FOREIGN KEY(series_id) REFERENCES series(series_id)
+ PRIMARY KEY(series_id, point_index)
 );
 CREATE TABLE IF NOT EXISTS series_subject_links(
  series_id TEXT NOT NULL, entity_id TEXT NOT NULL, role_in_series TEXT NOT NULL,
@@ -80,6 +83,7 @@ CREATE TABLE IF NOT EXISTS applied_patches(
 );
 """
 
+
 def connect_catalog(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path, timeout=30)
@@ -91,57 +95,40 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     return con
 
 
-def point_dict(point) -> dict[str, Any]:
-    return asdict(point) if hasattr(point, "__dataclass_fields__") else dict(point)
-
-
 def write_paper_artifacts(
-    output_root: Path,
-    snapshot: PaperSnapshot,
-    figures: list[dict],
-    panels: list[dict],
-    series: list[SeriesRecord],
-    status: str,
-    extra: dict | None = None,
+    output_root: Path, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
+    series: list[SeriesRecord], status: str, extra: dict | None = None,
 ) -> dict:
     paper_root = output_root / "papers" / snapshot.paper_id
-    evidence_dir = paper_root / "evidence"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    paper_root.mkdir(parents=True, exist_ok=True)
-
+    (paper_root / "evidence").mkdir(parents=True, exist_ok=True)
     manifest = {
-        "schema_version": "1.0",
-        "paper_id": snapshot.paper_id,
-        "source_dir": snapshot.source_dir,
-        "input_fingerprint": snapshot.input_fingerprint,
-        "upstream_version": snapshot.detected_upstream_version,
-        "adapter_version": snapshot.adapter_version,
-        "created_at": snapshot.created_at,
-        "artifacts": [asdict(a) for a in snapshot.artifacts],
-        "missing_roles": snapshot.missing_roles,
-        "warnings": snapshot.warnings,
+        "schema_version": "1.0", "paper_id": snapshot.paper_id,
+        "source_dir": snapshot.source_dir, "input_fingerprint": snapshot.input_fingerprint,
+        "upstream_version": snapshot.detected_upstream_version, "adapter_version": snapshot.adapter_version,
+        "created_at": snapshot.created_at, "artifacts": [asdict(a) for a in snapshot.artifacts],
+        "missing_roles": snapshot.missing_roles, "warnings": snapshot.warnings,
         "processing_status": status,
     }
     atomic_write_json(paper_root / "paper_manifest.json", manifest)
     atomic_write_json(paper_root / "figure_inventory.json", {
         "schema_version": "1.0", "paper_id": snapshot.paper_id, "figures": figures
     })
+    atomic_write_json(paper_root / "panel_layout.json", {
+        "schema_version": "1.0", "paper_id": snapshot.paper_id, "panels": panels
+    })
+    extra = extra or {}
     digitization = {
-        "schema_version": "1.0",
-        "paper_id": snapshot.paper_id,
-        "input_fingerprint": snapshot.input_fingerprint,
-        "generated_at": utc_now(),
-        "status": status,
+        "schema_version": "1.0", "algorithm_version": "0.1.0",
+        "paper_id": snapshot.paper_id, "input_fingerprint": snapshot.input_fingerprint,
+        "context_index_fingerprint": extra.get("context_index_fingerprint"),
+        "generated_at": utc_now(), "status": status,
         "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
-        "series": [{
-            **{k: v for k, v in asdict(s).items() if k != "points"},
-            "points_count": len(s.points),
-        } for s in series],
-        "extra": extra or {},
+        "series": [{**{k: v for k, v in asdict(s).items() if k != "points"},
+                    "points_count": len(s.points)} for s in series],
+        "extra": extra,
     }
     atomic_write_json(paper_root / "digitization.json", digitization)
 
-    # A single CSV per panel prevents one-file-per-series/point proliferation.
     grouped: dict[tuple[str, str], list[SeriesRecord]] = {}
     for item in series:
         grouped.setdefault((item.figure_id, item.panel_id), []).append(item)
@@ -163,14 +150,16 @@ def write_paper_artifacts(
                                      point.y_err_low, point.y_err_high, point.err_type])
         csv_paths.append(relative_path.as_posix())
 
-    canonical_paths = ["paper_manifest.json", "figure_inventory.json", "digitization.json"] + csv_paths
+    canonical_paths = ["paper_manifest.json", "figure_inventory.json", "panel_layout.json",
+                       "digitization.json"] + csv_paths
     hashes = {name: sha256_file(paper_root / name) for name in canonical_paths}
     bundle = {
         "schema_version": "1.0", "bundle_version": "1.0", "paper_id": snapshot.paper_id,
         "generated_at": utc_now(), "input_fingerprint": snapshot.input_fingerprint,
+        "context_index_fingerprint": extra.get("context_index_fingerprint"),
         "algorithm_versions": {"core": "0.1.0"}, "profile_versions": {},
         "status": status, "canonical_artifacts": canonical_paths, "content_hashes": hashes,
-        "series_count": len(series), "figure_count": len(figures),
+        "series_count": len(series), "figure_count": len(figures), "panel_count": len(panels),
     }
     atomic_write_json(paper_root / "paper_bundle.json", bundle)
     return {"paper_root": str(paper_root), "bundle": bundle, "csv_paths": csv_paths}
@@ -188,28 +177,34 @@ class Catalog:
 
     def register_paper(self, snapshot: PaperSnapshot, status: str, artifact_paths: dict | None = None):
         paths = artifact_paths or {}
-        with self.con:
-            self.con.execute(
-                """INSERT INTO papers(paper_id,source_dir,input_fingerprint,status,manifest_path,bundle_path,updated_at)
-                   VALUES(?,?,?,?,?,?,?) ON CONFLICT(paper_id) DO UPDATE SET
-                   source_dir=excluded.source_dir,input_fingerprint=excluded.input_fingerprint,
-                   status=excluded.status,manifest_path=excluded.manifest_path,
-                   bundle_path=excluded.bundle_path,updated_at=excluded.updated_at""",
-                (snapshot.paper_id, snapshot.source_dir, snapshot.input_fingerprint, status,
-                 paths.get("manifest_path"), paths.get("bundle_path"), utc_now()),
-            )
+        self.con.execute(
+            """INSERT INTO papers(paper_id,source_dir,input_fingerprint,status,manifest_path,bundle_path,updated_at)
+               VALUES(?,?,?,?,?,?,?) ON CONFLICT(paper_id) DO UPDATE SET
+               source_dir=excluded.source_dir,input_fingerprint=excluded.input_fingerprint,
+               status=excluded.status,manifest_path=excluded.manifest_path,
+               bundle_path=excluded.bundle_path,updated_at=excluded.updated_at""",
+            (snapshot.paper_id, snapshot.source_dir, snapshot.input_fingerprint, status,
+             paths.get("manifest_path"), paths.get("bundle_path"), utc_now()),
+        )
 
     def index_paper(self, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
                     series: list[SeriesRecord], status: str, artifact_paths: dict | None = None):
         with self.con:
             self.register_paper(snapshot, status, artifact_paths)
+            old_ids = [r[0] for r in self.con.execute("SELECT series_id FROM series WHERE paper_id=?",
+                                                       (snapshot.paper_id,)).fetchall()]
+            if old_ids:
+                placeholders = ",".join("?" for _ in old_ids)
+                self.con.execute(f"DELETE FROM series_points WHERE series_id IN ({placeholders})", old_ids)
+                self.con.execute(f"DELETE FROM series_subject_links WHERE series_id IN ({placeholders})", old_ids)
             self.con.execute("DELETE FROM series WHERE paper_id=?", (snapshot.paper_id,))
+            self.con.execute("DELETE FROM conditions WHERE paper_id=?", (snapshot.paper_id,))
+            self.con.execute("DELETE FROM measurements WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM panels WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM figures WHERE paper_id=?", (snapshot.paper_id,))
             for fig in figures:
-                figure_id = str(fig["figure_id"])
                 self.con.execute("INSERT INTO figures VALUES(?,?,?,?)",
-                                 (snapshot.paper_id, figure_id, fig.get("page"), fig.get("caption")))
+                                 (snapshot.paper_id, str(fig["figure_id"]), fig.get("page"), fig.get("caption")))
             for panel in panels:
                 self.con.execute("INSERT INTO panels VALUES(?,?,?,?,?)",
                                  (snapshot.paper_id, str(panel["figure_id"]), str(panel["panel_id"]),
@@ -228,6 +223,12 @@ class Catalog:
              item.extraction_status, item.qc_status, item.review_state,
              json.dumps(item.metadata, ensure_ascii=False)),
         )
+        measurement_id = f"measurement:{item.series_id}"
+        self.con.execute(
+            "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
+            (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
+             json.dumps({"series_id": item.series_id}, ensure_ascii=False)),
+        )
         self.con.executemany(
             """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,pixel_x,pixel_y,
                y_err_low,y_err_high,err_type) VALUES(?,?,?,?,?,?,?,?,?,?)""",
@@ -235,15 +236,34 @@ class Catalog:
               p.x if isinstance(p.x, str) else None, p.y, p.pixel_x, p.pixel_y,
               p.y_err_low, p.y_err_high, p.err_type) for p in item.points],
         )
-        self.con.executemany(
-            "INSERT INTO series_subject_links(series_id,entity_id,role_in_series,evidence_json,link_status) VALUES(?,?,?,?,?)",
-            [(item.series_id, link.get("entity_id", "UNKNOWN"), link.get("role_in_series", "unknown"),
-              json.dumps(link.get("evidence", {}), ensure_ascii=False),
-              link.get("status", "UNASSIGNED")) for link in item.subject_links],
-        )
+        for link in item.subject_links:
+            entity_id = str(link.get("entity_id") or "UNKNOWN")
+            canonical = str(link.get("canonical_name") or link.get("entity_name") or entity_id)
+            self.con.execute(
+                """INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json)
+                   VALUES(?,?,?,?,?,?) ON CONFLICT(entity_id) DO NOTHING""",
+                (entity_id, canonical, link.get("entity_type"), item.domain,
+                 json.dumps(link.get("aliases", []), ensure_ascii=False),
+                 json.dumps(link.get("evidence", {}), ensure_ascii=False)),
+            )
+            self.con.execute(
+                "INSERT OR REPLACE INTO series_subject_links VALUES(?,?,?,?,?)",
+                (item.series_id, entity_id, link.get("role_in_series", "unknown"),
+                 json.dumps(link.get("evidence", {}), ensure_ascii=False),
+                 link.get("status", "UNASSIGNED")),
+            )
+        for index, condition in enumerate(item.conditions):
+            condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
+            self.con.execute(
+                "INSERT OR REPLACE INTO conditions VALUES(?,?,?,?,?,?)",
+                (condition_id, item.paper_id, measurement_id, str(condition.get("name", "unknown")),
+                 json.dumps({"value": condition.get("value"), "unit": condition.get("unit")},
+                            ensure_ascii=False),
+                 json.dumps(condition.get("evidence", {}), ensure_ascii=False)),
+            )
 
     def query_series(self, filters: dict[str, str | None], limit: int = 500) -> list[dict]:
-        sql = """SELECT s.*, p.source_dir FROM series s JOIN papers p ON p.paper_id=s.paper_id WHERE 1=1"""
+        sql = "SELECT s.*, p.source_dir FROM series s JOIN papers p ON p.paper_id=s.paper_id WHERE 1=1"
         args: list[Any] = []
         mapping = {"paper_id": "s.paper_id", "technique": "s.technique", "domain": "s.domain",
                    "review_state": "s.review_state", "qc_status": "s.qc_status"}
@@ -252,14 +272,24 @@ class Catalog:
             if value:
                 sql += f" AND {column}=?"
                 args.append(value)
-        entity = filters.get("entity_id")
-        if entity:
+        entity_id = filters.get("entity_id")
+        entity_name = filters.get("entity")
+        if entity_id:
             sql += " AND EXISTS (SELECT 1 FROM series_subject_links l WHERE l.series_id=s.series_id AND l.entity_id=?)"
-            args.append(entity)
+            args.append(entity_id)
+        elif entity_name:
+            sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l JOIN entities e ON e.entity_id=l.entity_id
+                      WHERE l.series_id=s.series_id AND (lower(e.canonical_name)=lower(?) OR lower(e.aliases_json) LIKE ?))"""
+            args.extend([entity_name, f"%{entity_name.casefold()}%"])
         role = filters.get("series_role")
         if role:
             sql += " AND EXISTS (SELECT 1 FROM series_subject_links l WHERE l.series_id=s.series_id AND l.role_in_series=?)"
             args.append(role)
+        condition = filters.get("condition")
+        if condition:
+            sql += """ AND EXISTS (SELECT 1 FROM conditions c JOIN measurements m ON m.measurement_id=c.measurement_id
+                      WHERE m.paper_id=s.paper_id AND m.figure_id=s.figure_id AND lower(c.name) LIKE ?)"""
+            args.append(f"%{condition.casefold()}%")
         sql += " ORDER BY s.paper_id,s.figure_id,s.panel_id,s.series_id LIMIT ?"
         args.append(max(1, min(int(limit), 10000)))
         return [dict(row) for row in self.con.execute(sql, args).fetchall()]
@@ -276,18 +306,31 @@ class Catalog:
             manifest_path = paper_root / "paper_manifest.json"
             digitization_path = paper_root / "digitization.json"
             figures_path = paper_root / "figure_inventory.json"
+            panels_path = paper_root / "panel_layout.json"
             if not (manifest_path.is_file() and digitization_path.is_file() and figures_path.is_file()):
                 continue
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             fig_data = json.loads(figures_path.read_text(encoding="utf-8"))
-            # Rebuild only the query-critical scalar index. Point CSVs remain canonical artifacts.
+            panel_data = json.loads(panels_path.read_text(encoding="utf-8")) if panels_path.exists() else {"panels": []}
+            digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
             snapshot = PaperSnapshot(
                 paper_id=manifest["paper_id"], source_dir=manifest["source_dir"],
                 detected_upstream_version=manifest.get("upstream_version"),
                 adapter_version=manifest["adapter_version"], created_at=manifest["created_at"],
                 input_fingerprint=manifest["input_fingerprint"],
             )
+            series_by_id = {s["series_id"]: s for s in digitization.get("series", [])}
+            point_rows: dict[str, list[dict]] = {key: [] for key in series_by_id}
+            for csv_path in (paper_root / "series").glob("**/panel_series.csv"):
+                with csv_path.open("r", newline="", encoding="utf-8") as handle:
+                    for row in csv.DictReader(handle):
+                        if row["series_id"] in point_rows:
+                            point_rows[row["series_id"]].append(row)
             with self.con:
+                self.con.execute("DELETE FROM series_subject_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                                 (snapshot.paper_id,))
+                self.con.execute("DELETE FROM series_points WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                                 (snapshot.paper_id,))
                 self.con.execute("DELETE FROM series WHERE paper_id=?", (snapshot.paper_id,))
                 self.con.execute("DELETE FROM panels WHERE paper_id=?", (snapshot.paper_id,))
                 self.con.execute("DELETE FROM figures WHERE paper_id=?", (snapshot.paper_id,))
@@ -296,18 +339,44 @@ class Catalog:
                 })
                 for fig in fig_data.get("figures", []):
                     self.con.execute("INSERT INTO figures VALUES(?,?,?,?)",
-                                     (snapshot.paper_id, fig.get("figure_id"), fig.get("page"),
-                                      fig.get("caption")))
-                for series in json.loads(digitization_path.read_text(encoding="utf-8")).get("series", []):
+                                     (snapshot.paper_id, fig.get("figure_id"), fig.get("page"), fig.get("caption")))
+                for panel in panel_data.get("panels", []):
+                    self.con.execute("INSERT INTO panels VALUES(?,?,?,?,?)",
+                                     (snapshot.paper_id, panel.get("figure_id"), panel.get("panel_id"),
+                                      json.dumps(panel.get("bbox")), panel.get("status", "INVENTORIED")))
+                for item in digitization.get("series", []):
                     self.con.execute(
-                        """INSERT OR REPLACE INTO series(series_id,paper_id,figure_id,panel_id,technique,
-                           domain,label,x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
+                        """INSERT INTO series(series_id,paper_id,figure_id,panel_id,technique,domain,label,
+                           x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (series["series_id"], snapshot.paper_id, series["figure_id"], series["panel_id"],
-                         series.get("technique"), series.get("domain"), series.get("label"),
-                         series.get("x_unit"), series.get("y_unit"), series.get("y_axis_side", "UNASSIGNED"),
-                         series.get("extraction_status", "NEEDS_REVIEW"), series.get("qc_status", "PROVISIONAL_UNCALIBRATED"),
-                         series.get("review_state", "NEEDS_REVIEW"), json.dumps(series.get("metadata", {}))),
+                        (item["series_id"], snapshot.paper_id, item["figure_id"], item["panel_id"],
+                         item.get("technique"), item.get("domain"), item.get("label"),
+                         item.get("x_unit"), item.get("y_unit"), item.get("y_axis_side", "UNASSIGNED"),
+                         item.get("extraction_status", "NEEDS_REVIEW"), item.get("qc_status", "PROVISIONAL_UNCALIBRATED"),
+                         item.get("review_state", "NEEDS_REVIEW"), json.dumps(item.get("metadata", {}))),
                     )
+                    for point in point_rows.get(item["series_id"], []):
+                        self.con.execute(
+                            "INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (item["series_id"], int(point["point_index"]),
+                             float(point["x_value"]) if point["x_value"] else None, point["x_label"] or None,
+                             float(point["y_value"]) if point["y_value"] else None,
+                             float(point["pixel_x"]) if point["pixel_x"] else None,
+                             float(point["pixel_y"]) if point["pixel_y"] else None,
+                             float(point["y_err_low"]) if point["y_err_low"] else None,
+                             float(point["y_err_high"]) if point["y_err_high"] else None, point["err_type"]),
+                        )
+                    for link in item.get("subject_links", []):
+                        entity_id = str(link.get("entity_id") or "UNKNOWN")
+                        self.con.execute(
+                            """INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json)
+                               VALUES(?,?,?,?,?,?) ON CONFLICT(entity_id) DO NOTHING""",
+                            (entity_id, link.get("canonical_name", entity_id), link.get("entity_type"),
+                             item.get("domain"), json.dumps(link.get("aliases", [])),
+                             json.dumps(link.get("evidence", {}))),
+                        )
+                        self.con.execute("INSERT OR REPLACE INTO series_subject_links VALUES(?,?,?,?,?)",
+                                         (item["series_id"], entity_id, link.get("role_in_series", "unknown"),
+                                          json.dumps(link.get("evidence", {})), link.get("status", "UNASSIGNED")))
             count += 1
         return {"papers_indexed": count}
