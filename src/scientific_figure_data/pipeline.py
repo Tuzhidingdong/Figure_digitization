@@ -813,7 +813,17 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 native_file_path, crop_mapping,
             )
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
-            panel_status = "EXTRACTED" if any(s.points for s in extracted) else "NEEDS_REVIEW"
+            has_points = any(item.points for item in extracted)
+            needs_series_review = any(
+                item.review_state != "REVIEWED_ACCEPTED"
+                or item.qc_status != "CALIBRATED_ACCEPTED"
+                for item in extracted
+            )
+            panel_status = (
+                "EXTRACTED_NEEDS_REVIEW" if has_points and needs_series_review
+                else "EXTRACTED" if has_points
+                else "NEEDS_REVIEW"
+            )
             for item in extracted:
                 item.evidence[0]["extraction_channel"] = item.extraction_method
                 item.metadata.setdefault("qc_components", {
@@ -834,7 +844,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 item.metadata.setdefault("points_count", len(item.points))
                 item.points.clear()
             series.extend(extracted)
-            review_needed = review_needed or panel_status == "NEEDS_REVIEW"
+            review_needed = review_needed or panel_status in {"NEEDS_REVIEW", "EXTRACTED_NEEDS_REVIEW"}
             panels.append({
                 "figure_id": figure_id, "panel_id": panel_id,
                 "bbox": bbox, "normalized_bbox": bbox if isinstance(bbox, (list, tuple)) and
