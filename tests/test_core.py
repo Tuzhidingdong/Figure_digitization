@@ -1497,3 +1497,100 @@ def test_reviewed_bundle_integrity_failure_blocks_and_force_recompute_creates_ve
     backups = list((paper_root / "versions").glob("pre-recompute-*"))
     assert backups
     assert any((backup / "digitization.json").is_file() for backup in backups)
+
+
+def test_processing_stage_fingerprint_includes_algorithm_profile_and_options(
+    tmp_path: Path, monkeypatch
+):
+    import scientific_figure_data.pipeline as pipeline
+
+    snapshot = make_snapshot()
+    paper_dir = tmp_path / "input" / "paper-1"
+    paper_dir.mkdir(parents=True)
+    output_root = tmp_path / "output"
+    monkeypatch.setattr(pipeline, "algorithm_implementation_fingerprint", lambda: "algorithm-A")
+    monkeypatch.setattr(pipeline, "profile_registry_fingerprint", lambda: "profile-A")
+    base = pipeline.processing_stage_state(snapshot, paper_dir, output_root, {"ocr": False})
+
+    monkeypatch.setattr(pipeline, "algorithm_implementation_fingerprint", lambda: "algorithm-B")
+    changed_algorithm = pipeline.processing_stage_state(snapshot, paper_dir, output_root, {"ocr": False})
+    assert changed_algorithm["stage_fingerprint"] != base["stage_fingerprint"]
+
+    monkeypatch.setattr(pipeline, "algorithm_implementation_fingerprint", lambda: "algorithm-A")
+    monkeypatch.setattr(pipeline, "profile_registry_fingerprint", lambda: "profile-B")
+    changed_profile = pipeline.processing_stage_state(snapshot, paper_dir, output_root, {"ocr": False})
+    assert changed_profile["stage_fingerprint"] != base["stage_fingerprint"]
+
+    monkeypatch.setattr(pipeline, "profile_registry_fingerprint", lambda: "profile-A")
+    changed_options = pipeline.processing_stage_state(snapshot, paper_dir, output_root, {
+        "ocr": True, "render_scale": 2.0,
+    })
+    assert changed_options["stage_fingerprint"] != base["stage_fingerprint"]
+
+
+def test_bundle_integrity_check_detects_manifested_file_tampering(tmp_path: Path):
+    from scientific_figure_data.pipeline import bundle_is_intact
+
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    assert bundle_is_intact(paper_root) is True
+    panel_csv = paper_root / "series" / "Figure1__a" / "panel_series.csv"
+    original = panel_csv.read_text(encoding="utf-8")
+    panel_csv.write_text(original + "tampered\n", encoding="utf-8")
+    assert bundle_is_intact(paper_root) is False
+
+
+def test_cli_resume_does_not_take_over_active_running_job(tmp_path: Path, capsys):
+    from scientific_figure_data.cli import main
+    from scientific_figure_data.scheduler import JobLedger
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-active"
+    paper.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    output_root = tmp_path / "output"
+    ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds=900)
+    ledger.prepare("paper-active")
+    ledger.start("paper-active")
+    ledger.close()
+
+    assert main([
+        "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["active_jobs_skipped"] == 1
+    assert report["completed"] == 0
+    ledger = JobLedger(output_root / "catalog.sqlite")
+    state = ledger.con.execute(
+        "SELECT state FROM jobs WHERE paper_id='paper-active'"
+    ).fetchone()["state"]
+    assert state == "RUNNING"
+    ledger.close()
+
+
+def test_reviewed_result_with_tampered_bundle_is_blocked_without_file_mutation(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    input_root = tmp_path / "input"
+    source = input_root / snapshot.paper_id
+    source.mkdir(parents=True)
+    (source / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    digitization_path = paper_root / "digitization.json"
+    digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
+    digitization["series"][0]["review_state"] = "REVIEWED_ACCEPTED"
+    digitization_path.write_text(json.dumps(digitization, indent=2), encoding="utf-8")
+
+    bundle_path = paper_root / "paper_bundle.json"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["content_hashes"]["digitization.json"] = sha256_file(digitization_path)
+    bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+    csv_path = paper_root / "series" / "Figure1__a" / "panel_series.csv"
+    csv_path.write_text(csv_path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+    digitization_hash = sha256_file(digitization_path)
+    csv_hash = sha256_file(csv_path)
+
+    result = process_paper(input_root, Path(snapshot.paper_id), tmp_path)
+    assert result["job_state"] == "BLOCKED"
+    assert result["reason"] == "REVIEWED_ARTIFACT_INTEGRITY_FAILURE"
+    assert sha256_file(digitization_path) == digitization_hash
+    assert sha256_file(csv_path) == csv_hash
