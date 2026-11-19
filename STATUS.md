@@ -129,7 +129,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Changed catalog rebuild and ML export to stream point rows in bounded batches rather than accumulating a full paper or corpus point matrix in memory.
 - Added cache artifact-hash validation and cleanup of incomplete panel CSV outputs left by interrupted workers.
 - Updated the implementation to attach source PDF SHA256, input fingerprint, algorithm version, extraction channel, and component QC states to series evidence.
-- Regression tests have been added but not yet executed successfully in a recorded CI run.
+- Regression tests have been added. CI run #24 did not reach pytest; the refreshed run for PR #2 must execute the suite before any test result is recorded.
 
 ## Current blockers / next engineering actions
 
