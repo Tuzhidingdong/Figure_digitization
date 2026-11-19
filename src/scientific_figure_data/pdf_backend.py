@@ -88,6 +88,19 @@ class PdfPageView:
             if callable(close):
                 close()
 
+    @staticmethod
+    def _read_rgba(raw_function, obj):
+        if raw_function is None:
+            return None
+        channels = [ctypes.c_uint(0) for _ in range(4)]
+        try:
+            ok = raw_function(obj, *(ctypes.byref(channel) for channel in channels))
+            if not ok:
+                return None
+            return [int(channel.value) for channel in channels]
+        except (TypeError, ValueError, OSError):
+            return None
+
     def inspect_native_objects(
         self, *, max_objects: int = 20000, max_total_path_segments: int = 30000,
         max_segments_per_path: int = 2000,
@@ -141,6 +154,19 @@ class PdfPageView:
 
         total_segments = 0
         objects = []
+        segment_names = {}
+        for constant_name, label in (
+            ("FPDF_SEGMENT_MOVETO", "MOVE_TO"),
+            ("FPDF_SEGMENT_LINETO", "LINE_TO"),
+            ("FPDF_SEGMENT_BEZIERTO", "BEZIER_TO"),
+        ):
+            value = getattr(raw, constant_name, None)
+            if value is not None:
+                segment_names[int(value)] = label
+        get_draw_mode = getattr(raw, "FPDFPath_GetDrawMode", None)
+        get_stroke_color = getattr(raw, "FPDFPageObj_GetStrokeColor", None)
+        get_fill_color = getattr(raw, "FPDFPageObj_GetFillColor", None)
+        get_stroke_width = getattr(raw, "FPDFPageObj_GetStrokeWidth", None)
         try:
             iterator = self._page.get_objects(max_depth=20, textpage=textpage)
             for object_index, obj in enumerate(iterator):
@@ -187,6 +213,29 @@ class PdfPageView:
                         pass
                 elif type_name == "PATH":
                     row["segments"] = []
+                    row["path_style"] = {
+                        "stroke_rgba": self._read_rgba(get_stroke_color, obj),
+                        "fill_rgba": self._read_rgba(get_fill_color, obj),
+                        "stroke_width_pdf": None,
+                        "fill_mode": None,
+                        "stroke_enabled": None,
+                    }
+                    if get_stroke_width is not None:
+                        stroke_width = ctypes.c_float()
+                        try:
+                            if get_stroke_width(obj, ctypes.byref(stroke_width)):
+                                row["path_style"]["stroke_width_pdf"] = float(stroke_width.value)
+                        except (TypeError, ValueError, OSError):
+                            pass
+                    if get_draw_mode is not None:
+                        fill_mode = ctypes.c_int(-1)
+                        stroke_enabled = ctypes.c_int(0)
+                        try:
+                            if get_draw_mode(obj, ctypes.byref(fill_mode), ctypes.byref(stroke_enabled)):
+                                row["path_style"]["fill_mode"] = int(fill_mode.value)
+                                row["path_style"]["stroke_enabled"] = bool(stroke_enabled.value)
+                        except (TypeError, ValueError, OSError):
+                            pass
                     try:
                         matrix = obj.get_matrix()
                         row["path_matrix"] = [float(v) for v in matrix.get()]
@@ -209,12 +258,21 @@ class PdfPageView:
                                 point = None
                             close_path = bool(raw.FPDFPathSegment_GetClose(segment))
                             row["segments"].append({
-                                "index": segment_index, "type": segment_type,
-                                "point_pdf": point, "closes_subpath": close_path,
+                                "index": segment_index,
+                                "type": segment_type,
+                                "type_name": segment_names.get(segment_type, "UNKNOWN"),
+                                "point_pdf": point,
+                                "closes_subpath": close_path,
                             })
                             total_segments += 1
                         if take < count:
                             row["segments_truncated"] = True
+                        row["line_only_path"] = all(
+                            item["type_name"] in {"MOVE_TO", "LINE_TO"} for item in row["segments"]
+                        )
+                        row["contains_closed_subpath"] = any(
+                            item["closes_subpath"] for item in row["segments"]
+                        )
                     except Exception as exc:
                         row["path_extract_error"] = f"{type(exc).__name__}: {exc}"
                 else:
