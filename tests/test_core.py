@@ -537,3 +537,77 @@ def test_entity_and_analyte_queries_use_exact_normalized_aliases(tmp_path: Path)
     assert [row["series_id"] for row in catalog.query_series({"analyte": "PFOA"})] == ["pfoa-series"]
     assert catalog.query_series({"analyte": "PFO"}) == []
     catalog.close()
+
+
+def test_job_ledger_recovers_only_expired_running_leases(tmp_path: Path):
+    from scientific_figure_data.models import JobState
+    from scientific_figure_data.scheduler import JobLedger
+
+    ledger = JobLedger(tmp_path / "catalog.sqlite", lease_seconds=600)
+    assert ledger.prepare("paper-active") is True
+    ledger.start("paper-active")
+    assert ledger.prepare("paper-active") is False
+    with ledger.con:
+        ledger.con.execute(
+            "UPDATE jobs SET lease_expires_at=0 WHERE paper_id=?",
+            ("paper-active",),
+        )
+    assert ledger.prepare("paper-active") is True
+    state = ledger.con.execute(
+        "SELECT state FROM jobs WHERE paper_id=?", ("paper-active",)
+    ).fetchone()["state"]
+    event = ledger.con.execute(
+        "SELECT event_type FROM job_events WHERE paper_id=? ORDER BY event_id DESC LIMIT 1",
+        ("paper-active",),
+    ).fetchone()["event_type"]
+    assert state == JobState.RETRY_WAIT.value
+    assert event == "INTERRUPTED_RECOVERY"
+    ledger.close()
+
+
+def test_reviewed_series_is_locked_until_explicit_force_recompute(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-locked"
+    paper.mkdir(parents=True)
+    inventory = paper / "figure_inventory.json"
+    inventory.write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "panels": [{"panel_id": "a", "technique": "CV", "domain": "battery"}],
+        }]
+    }), encoding="utf-8")
+    output_root = tmp_path / "output"
+
+    first = process_paper(input_root, Path("paper-locked"), output_root)
+    assert first["cached"] is False
+    paper_root = output_root / "papers" / "paper-locked"
+    digitization_path = paper_root / "digitization.json"
+    digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
+    assert digitization["series"]
+    digitization["series"][0]["review_state"] = "REVIEWED_ACCEPTED"
+    digitization["series"][0]["extraction_status"] = "REVIEWED_ACCEPTED"
+    digitization_path.write_text(json.dumps(digitization, indent=2), encoding="utf-8")
+
+    bundle_path = paper_root / "paper_bundle.json"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["content_hashes"]["digitization.json"] = sha256_file(digitization_path)
+    bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+    accepted_hash = sha256_file(digitization_path)
+
+    (paper / "main_analysis.md").write_text("New upstream context changed the input fingerprint.\n", encoding="utf-8")
+    locked = process_paper(input_root, Path("paper-locked"), output_root)
+    assert locked["job_state"] == "BLOCKED"
+    assert locked["status"] == "BLOCKED_REVIEW_LOCKED"
+    assert sha256_file(digitization_path) == accepted_hash
+
+    forced = process_paper(
+        input_root, Path("paper-locked"), output_root,
+        options={"force_recompute_reviewed": True},
+    )
+    assert forced["cached"] is False
+    assert forced["job_state"] == "NEEDS_REVIEW"
+    backups = list((paper_root / "versions").glob("pre-recompute-*"))
+    assert backups
+    assert any((backup / "digitization.json").is_file() for backup in backups)
