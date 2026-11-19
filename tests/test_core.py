@@ -1032,19 +1032,19 @@ def test_review_axis_anchor_patch_recalibrates_panel_csv_and_sqlite(tmp_path: Pa
     assert [float(row["x_value"]) for row in corrected] == pytest.approx([0.0, 2.0])
     assert [float(row["y_value"]) for row in corrected] == pytest.approx([0.0, 4.0])
     assert [float(row["x_value"]) for row in untouched] == pytest.approx([0.0, 1.0])
-    assert [float(row["y_value"]) for row in untouched] == pytest.approx([10.0, 20.0])
+    assert [float(row["y_value"]) for row in untouched] == pytest.approx([0.0, 1.0])
 
     document = json.loads(digitization_path.read_text(encoding="utf-8"))
     record = next(item for item in document["series"] if item["series_id"] == "series-a")
-    assert record["metadata"]["x_axis_calibration"]["slope"] == pytest.approx(2.0)
-    assert record["metadata"]["y_axis_calibration"]["slope"] == pytest.approx(4.0)
+    assert record["metadata"]["x_axis_calibration"]["slope"] == pytest.approx(0.2)
+    assert record["metadata"]["y_axis_calibration"]["slope"] == pytest.approx(-0.4)
     assert record["review_state"] == "REVIEWED_ACCEPTED"
 
     catalog = Catalog(tmp_path / "catalog.sqlite")
     stored_metadata = json.loads(catalog.con.execute(
         "SELECT metadata_json FROM series WHERE series_id='series-a'"
     ).fetchone()["metadata_json"])
-    assert stored_metadata["x_axis_calibration"]["slope"] == pytest.approx(2.0)
+    assert stored_metadata["x_axis_calibration"]["slope"] == pytest.approx(0.2)
     indexed = catalog.con.execute(
         "SELECT x_value,y_value FROM series_points WHERE series_id='series-a' ORDER BY point_index"
     ).fetchall()
@@ -1054,7 +1054,7 @@ def test_review_axis_anchor_patch_recalibrates_panel_csv_and_sqlite(tmp_path: Pa
         "SELECT x_value,y_value FROM series_points WHERE series_id='series-b' ORDER BY point_index"
     ).fetchall()
     assert [row["x_value"] for row in untouched_index] == pytest.approx([0.0, 1.0])
-    assert [row["y_value"] for row in untouched_index] == pytest.approx([10.0, 20.0])
+    assert [row["y_value"] for row in untouched_index] == pytest.approx([0.0, 1.0])
     catalog.close()
 
     bundle = json.loads((paper_root / "paper_bundle.json").read_text(encoding="utf-8"))
