@@ -181,12 +181,14 @@ class Catalog:
                     paper_root: Path | None = None, batch_size: int = 1000):
         with self.con:
             self.register_paper(snapshot, status, artifact_paths)
-            old_ids = [r[0] for r in self.con.execute("SELECT series_id FROM series WHERE paper_id=?",
-                                                       (snapshot.paper_id,)).fetchall()]
-            if old_ids:
-                placeholders = ",".join("?" for _ in old_ids)
-                self.con.execute(f"DELETE FROM series_points WHERE series_id IN ({placeholders})", old_ids)
-                self.con.execute(f"DELETE FROM series_subject_links WHERE series_id IN ({placeholders})", old_ids)
+            self.con.execute(
+                "DELETE FROM series_points WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                (snapshot.paper_id,),
+            )
+            self.con.execute(
+                "DELETE FROM series_subject_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                (snapshot.paper_id,),
+            )
             self.con.execute("DELETE FROM series WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM conditions WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM measurements WHERE paper_id=?", (snapshot.paper_id,))
@@ -205,8 +207,9 @@ class Catalog:
             if paper_root:
                 self._index_panel_csv_points(paper_root, series, batch_size)
 
-    def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord], batch_size: int = 1000):
-        known = {item.series_id for item in series}
+    def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord] | set[str],
+                                batch_size: int = 1000):
+        known = series if isinstance(series, set) else {item.series_id for item in series}
         for csv_path in (paper_root / "series").glob("**/panel_series.csv"):
             batch = []
             with csv_path.open("r", newline="", encoding="utf-8") as handle:
@@ -355,12 +358,6 @@ class Catalog:
                 input_fingerprint=manifest["input_fingerprint"],
             )
             series_by_id = {s["series_id"]: s for s in digitization.get("series", [])}
-            point_rows: dict[str, list[dict]] = {key: [] for key in series_by_id}
-            for csv_path in (paper_root / "series").glob("**/panel_series.csv"):
-                with csv_path.open("r", newline="", encoding="utf-8") as handle:
-                    for row in csv.DictReader(handle):
-                        if row["series_id"] in point_rows:
-                            point_rows[row["series_id"]].append(row)
             with self.con:
                 self.con.execute("DELETE FROM series_subject_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
                                  (snapshot.paper_id,))
@@ -399,17 +396,7 @@ class Catalog:
                         evidence=item.get("evidence", []), metadata=item.get("metadata", {}),
                     )
                     self._insert_series(series_record)
-                    for point in point_rows.get(item["series_id"], []):
-                        self.con.execute(
-                            "INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)",
-                            (item["series_id"], int(point["point_index"]),
-                             float(point["x_value"]) if point["x_value"] else None, point["x_label"] or None,
-                             float(point["y_value"]) if point["y_value"] else None,
-                             float(point["pixel_x"]) if point["pixel_x"] else None,
-                             float(point["pixel_y"]) if point["pixel_y"] else None,
-                             float(point["y_err_low"]) if point["y_err_low"] else None,
-                             float(point["y_err_high"]) if point["y_err_high"] else None, point["err_type"]),
-                        )
+                self._index_panel_csv_points(paper_root, set(series_by_id))
             count += 1
         return {"papers_indexed": count}
 
