@@ -1,0 +1,19 @@
+analytes:
+  PFOA:
+    name: perfluorooctanoic acid
+    aliases: [PFOA, perfluorooctanoate]
+    formula: C8HF15O2
+    parent_compound: true
+  PFOS:
+    name: perfluorooctanesulfonic acid
+    aliases: [PFOS, perfluorooctanesulfonate]
+    parent_compound: true
+  PFHxA:
+    name: perfluorohexanoic acid
+    aliases: [PFHxA, perfluorohexanoate]
+    parent_compound: true
+  fluoride:
+    name: fluoride ion
+    aliases: [F-, fluoride, free fluoride]
+    entity_type: detected_product
+    measurement_role: fluoride_release
