@@ -84,12 +84,19 @@ def _figure_panels(figure: dict) -> list[dict]:
              "bbox": figure.get("bbox") or figure.get("bounding_box")}]
 
 
-def _load_overrides(output_root: Path, paper_id: str) -> dict:
-    path = output_root / "overrides" / paper_id / "digitization_overrides.json"
-    if not path.is_file():
-        return {}
-    data = _json_file(path)
-    return data if isinstance(data, dict) else {}
+def _load_overrides(paper_dir: Path, output_root: Path, paper_id: str) -> dict:
+    # The upstream-side override is read-only. A separate downstream override takes precedence.
+    candidates = [
+        paper_dir / "digitization_overrides.json",
+        output_root / "overrides" / paper_id / "digitization_overrides.json",
+    ]
+    merged = {}
+    for path in candidates:
+        if path.is_file():
+            data = _json_file(path)
+            if isinstance(data, dict):
+                merged = {**merged, **data}
+    return merged
 
 
 def _series_overrides(overrides: dict, figure_id: str, panel_id: str) -> list[dict]:
@@ -308,7 +315,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         memory_budget_bytes=int(options.get("context_memory_budget", 500_000)),
     )
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
-    overrides = _load_overrides(output_root, snapshot.paper_id)
+    overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
     pdf_path = None
     for artifact in snapshot.artifacts:
         if artifact.role == "main_pdf":
