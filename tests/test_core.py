@@ -984,3 +984,94 @@ def test_pipeline_uses_native_tick_text_before_manual_or_ocr_ticks(tmp_path: Pat
     assert record.metadata["axis_text_evidence"]["source"] == "PDF_NATIVE_TEXT"
     assert [point.x for point in record.points] == pytest.approx([0, 5, 10])
     assert [point.y for point in record.points] == pytest.approx([0, 5, 10])
+
+
+def test_review_axis_anchor_patch_recalibrates_panel_csv_and_sqlite(tmp_path: Path):
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    digitization_path = paper_root / "digitization.json"
+    panel_csv = paper_root / "series" / "Figure1__a" / "panel_series.csv"
+    patch = {
+        "schema_version": "1.0",
+        "patch_id": "axis-review-001",
+        "paper_id": snapshot.paper_id,
+        "target_artifact": "digitization.json",
+        "original_result_hash": sha256_file(digitization_path),
+        "reviewer": "axis-reviewer",
+        "changes": [{
+            "series_id": "series-a",
+            "set": {
+                "x_axis_anchors": [
+                    {"pixel": 0.0, "value": 0.0},
+                    {"pixel": 1.0, "value": 2.0},
+                ],
+                "y_axis_anchors": [
+                    {"pixel": 0.0, "value": 0.0},
+                    {"pixel": 1.0, "value": 4.0},
+                ],
+            },
+        }],
+    }
+    patch_path = tmp_path / "axis-patch.json"
+    patch_path.write_text(json.dumps(patch), encoding="utf-8")
+    result = apply_review_patch(tmp_path, patch_path)
+    assert result["status"] == "REVIEWED_ACCEPTED"
+
+    import csv
+    with panel_csv.open("r", newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    corrected = [row for row in rows if row["series_id"] == "series-a"]
+    untouched = [row for row in rows if row["series_id"] == "series-b"]
+    assert [float(row["x_value"]) for row in corrected] == pytest.approx([0.0, 2.0])
+    assert [float(row["y_value"]) for row in corrected] == pytest.approx([0.0, 4.0])
+    assert [float(row["x_value"]) for row in untouched] == pytest.approx([0.0, 1.0])
+    assert [float(row["y_value"]) for row in untouched] == pytest.approx([10.0, 20.0])
+
+    document = json.loads(digitization_path.read_text(encoding="utf-8"))
+    record = next(item for item in document["series"] if item["series_id"] == "series-a")
+    assert record["metadata"]["x_axis_calibration"]["slope"] == pytest.approx(2.0)
+    assert record["metadata"]["y_axis_calibration"]["slope"] == pytest.approx(4.0)
+    assert record["review_state"] == "REVIEWED_ACCEPTED"
+
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    stored_metadata = json.loads(catalog.con.execute(
+        "SELECT metadata_json FROM series WHERE series_id='series-a'"
+    ).fetchone()["metadata_json"])
+    assert stored_metadata["x_axis_calibration"]["slope"] == pytest.approx(2.0)
+    indexed = catalog.con.execute(
+        "SELECT x_value,y_value FROM series_points WHERE series_id='series-a' ORDER BY point_index"
+    ).fetchall()
+    assert [row["x_value"] for row in indexed] == pytest.approx([0.0, 2.0])
+    assert [row["y_value"] for row in indexed] == pytest.approx([0.0, 4.0])
+    untouched_index = catalog.con.execute(
+        "SELECT x_value,y_value FROM series_points WHERE series_id='series-b' ORDER BY point_index"
+    ).fetchall()
+    assert [row["x_value"] for row in untouched_index] == pytest.approx([0.0, 1.0])
+    assert [row["y_value"] for row in untouched_index] == pytest.approx([10.0, 20.0])
+    catalog.close()
+
+    bundle = json.loads((paper_root / "paper_bundle.json").read_text(encoding="utf-8"))
+    assert bundle["content_hashes"]["digitization.json"] == sha256_file(digitization_path)
+    assert bundle["content_hashes"]["series/Figure1__a/panel_series.csv"] == sha256_file(panel_csv)
+
+
+def test_review_anchor_patch_rejects_duplicate_and_nonfinite_pixels():
+    from scientific_figure_data.review import _validate_patch
+
+    base = {
+        "patch_id": "bad-axis",
+        "paper_id": "paper-1",
+        "target_artifact": "digitization.json",
+        "original_result_hash": "a" * 64,
+        "changes": [{
+            "series_id": "series-a",
+            "set": {"x_axis_anchors": [
+                {"pixel": 1.0, "value": 0.0},
+                {"pixel": 1.0, "value": 1.0},
+            ]},
+        }],
+    }
+    with pytest.raises(ValueError, match="unique"):
+        _validate_patch(base)
+    base["changes"][0]["set"]["x_axis_anchors"][1]["pixel"] = float("inf")
+    with pytest.raises(ValueError, match="finite"):
+        _validate_patch(base)
