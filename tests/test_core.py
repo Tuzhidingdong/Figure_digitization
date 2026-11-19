@@ -416,3 +416,73 @@ def test_scheduler_resume_reuses_completed_paper_stage(tmp_path: Path):
     second = run_corpus(input_root, output_root, discover_papers(input_root), workers=1)
     assert second["cached"] == 1
     assert second["completed_with_review"] == 1
+
+
+def test_pdfium_native_object_inventory_passes_and_closes_textpage(monkeypatch):
+    import importlib
+    import types
+    from scientific_figure_data.pdf_backend import PdfPageView
+
+    class FakeTextPage:
+        closed = False
+
+        def get_text_range(self):
+            return "0 1 2 3"
+
+        def close(self):
+            self.closed = True
+
+    textpage = FakeTextPage()
+
+    class FakeTextObject:
+        type = 1
+        level = 0
+
+        def get_bounds(self):
+            return (10.0, 20.0, 110.0, 120.0)
+
+        def extract(self):
+            assert not textpage.closed
+            return textpage.get_text_range()
+
+        def get_font_size(self):
+            return 7.0
+
+        def get_font(self):
+            return None
+
+    class FakePage:
+        received_textpage = None
+
+        def get_textpage(self):
+            return textpage
+
+        def get_objects(self, max_depth, textpage):
+            self.received_textpage = textpage
+            return iter([FakeTextObject()])
+
+    raw_module = types.SimpleNamespace(
+        FPDF_PAGEOBJ_TEXT=1,
+        FPDF_PAGEOBJ_PATH=2,
+        FPDF_PAGEOBJ_IMAGE=3,
+        FPDF_PAGEOBJ_SHADING=4,
+        FPDF_PAGEOBJ_FORM=5,
+    )
+    real_import = importlib.import_module
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pypdfium2.raw":
+            return raw_module
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    page = FakePage()
+    result = PdfPageView(page, object()).inspect_native_objects()
+
+    assert page.received_textpage is textpage
+    assert textpage.closed is True
+    assert result["object_inventory_status"] == "OK"
+    assert result["native_text"] == "0 1 2 3"
+    assert result["objects"][0]["text"] == "0 1 2 3"
+    assert result["objects"][0]["font_size"] == 7.0
+    assert result["objects"][0]["bounds_pdf"] == [10.0, 20.0, 110.0, 120.0]
