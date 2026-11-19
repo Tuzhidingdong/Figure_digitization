@@ -9,6 +9,7 @@ from pathlib import Path
 from .adapter import discover_papers, snapshot_paper
 from .exporter import export_dataset
 from .hashing import atomic_write_json, sha256_file
+from .manifest import storage_paper_id
 from .review import apply_review_patch
 from .scheduler import JobLedger, run_corpus
 from .storage import Catalog, connect_catalog
@@ -171,7 +172,7 @@ def _run(args) -> int:
     def selected_papers():
         for paper in discover_papers(input_root):
             relative = paper.relative_to(input_root).as_posix()
-            storage_id = relative.replace("/", "__")
+            storage_id = storage_paper_id(relative)
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
                 continue
             if selected_states is not None and relative not in selected_states:
