@@ -914,3 +914,73 @@ def test_unresolved_dual_axis_keeps_vector_geometry_and_calibrated_x(tmp_path: P
     assert all(point.x is not None for point in record.points)
     assert all(point.y is None for point in record.points)
     assert all(point.pixel_y is not None for point in record.points)
+
+
+def test_native_pdf_text_tick_anchors_are_mapped_without_ocr():
+    from scientific_figure_data.axis_text import extract_native_numeric_axis_anchors
+
+    def text_obj(index, text, x, y):
+        return {
+            "object_index": index, "object_type": "TEXT", "text": text,
+            "bounds_pdf": [x - 2, y - 2, x + 2, y + 2],
+            "font_size": 7.0, "font_name": "Arial",
+        }
+
+    native = {"objects": [
+        text_obj(1, "0", 30, 10), text_obj(2, "5", 100, 10), text_obj(3, "10", 170, 10),
+        text_obj(4, "0", 10, 30), text_obj(5, "5", 10, 70), text_obj(6, "10", 10, 110),
+        text_obj(7, "999", 90, 70),  # inside plot: not an axis tick
+        text_obj(8, "CV", 100, 145),
+    ]}
+    parsed = extract_native_numeric_axis_anchors(
+        native, (20, 20, 180, 120),
+        {"crop_left_pdf": 0, "crop_top_pdf": 150, "render_scale": 2},
+    )
+    assert [item["value"] for item in parsed["x_anchors"]] == [0.0, 5.0, 10.0]
+    assert [item["pixel"] for item in parsed["x_anchors"]] == [60.0, 200.0, 340.0]
+    assert [item["value"] for item in parsed["y_left_anchors"]] == [10.0, 5.0, 0.0]
+    assert [item["pixel"] for item in parsed["y_left_anchors"]] == [80.0, 160.0, 240.0]
+    assert parsed["source"] == "PDF_NATIVE_TEXT"
+
+
+def test_pipeline_uses_native_tick_text_before_manual_or_ocr_ticks(tmp_path: Path):
+    from scientific_figure_data.pipeline import _extract_panel
+
+    def text_obj(index, text, x, y):
+        return {
+            "object_index": index, "object_type": "TEXT", "text": text,
+            "bounds_pdf": [x - 2, y - 2, x + 2, y + 2],
+            "font_size": 7.0, "font_name": "Arial",
+        }
+
+    native_path = tmp_path / "native-axis.json"
+    native_path.write_text(json.dumps({"objects": [
+        text_obj(1, "0", 30, 10), text_obj(2, "5", 100, 10), text_obj(3, "10", 170, 10),
+        text_obj(4, "0", 10, 30), text_obj(5, "5", 10, 70), text_obj(6, "10", 10, 110),
+    ]}), encoding="utf-8")
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "native-text-axis-series", "technique": "GCD", "domain": "battery",
+        "plot_bbox_pdf": [20, 20, 180, 120],
+        "pixel_points": [[60, 240], [200, 160], [340, 80]],
+        "x_unit": "min", "y_unit": "V",
+    }
+    records = _extract_panel(
+        None, "paper-1", "Figure4", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure4": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), 7, {"artifact": "native-axis.json"}, [],
+        "a" * 64, "b" * 64, native_path,
+        {"crop_left_pdf": 0, "crop_top_pdf": 150, "render_scale": 2,
+         "page_rotation_degrees": 0},
+    )
+    record = records[0]
+    assert record.extraction_status == "EXTRACTED_PROVISIONAL"
+    assert record.metadata["axis_text_evidence"]["source"] == "PDF_NATIVE_TEXT"
+    assert [point.x for point in record.points] == pytest.approx([0, 5, 10])
+    assert [point.y for point in record.points] == pytest.approx([0, 5, 10])
