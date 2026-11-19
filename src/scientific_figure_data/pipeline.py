@@ -522,7 +522,7 @@ def _extract_panel(
                 color_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
         vector_selection = None
         vector_requested = bool(vector_indices) or (
-            bool(plot_bbox_pdf) and not pixel_points and not color_rgb
+            bool(plot_bbox_pdf) and not pixel_points
         )
         if (vector_requested and native_page_path and native_page_path.is_file() and plot_bbox_pdf
                 and crop_mapping and crop_mapping.get("page_rotation_degrees", 0) == 0):
@@ -595,9 +595,11 @@ def _extract_panel(
                 results.append(record)
                 continue
             if vector_selection and vector_selection.get("status") == "NEEDS_REVIEW":
-                results.append(record)
-                continue
-        elif vector_requested:
+                if vector_indices or not color_rgb:
+                    results.append(record)
+                    continue
+                record.metadata["vector_fallback"] = "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
+        elif vector_requested and (vector_indices or not color_rgb):
             record.metadata = {
                 "reason": "VECTOR_PATH_MAPPING_UNAVAILABLE",
                 "note": "Vector extraction requires an unrotated PDF page, explicit plot_bbox_pdf, crop geometry, and PDFium native path evidence.",
@@ -648,6 +650,7 @@ def _extract_panel(
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
+                               "vector_selection": vector_selection,
                                "plot_detection": plot_detection, "color_detection": color_detection,
                                "chart_family_classification": classification,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
