@@ -1,0 +1,5 @@
+name: materials_characterization
+version: '1.0'
+inherits: [common_chemistry]
+domain: materials
+description: Shared materials characterization techniques and spectral axes.
