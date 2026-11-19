@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from .adapter import discover_papers, snapshot_paper
@@ -157,11 +158,16 @@ def _run(args) -> int:
         db = output_root / "catalog.sqlite"
         if db.is_file():
             con = connect_catalog(db)
-            states = ("PENDING", "RETRY_WAIT", "RUNNING") if args.resume else ("RETRY_WAIT",)
+            states = ("PENDING", "RETRY_WAIT") if args.resume else ("RETRY_WAIT", "FAILED_PERMANENT")
             placeholders = ",".join("?" for _ in states)
             selected_states = {r["paper_id"] for r in con.execute(
                 f"SELECT paper_id FROM jobs WHERE state IN ({placeholders})", states
             )}
+            if args.resume:
+                selected_states.update(r["paper_id"] for r in con.execute(
+                    "SELECT paper_id FROM jobs WHERE state='RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < ?)",
+                    (time.time(),)
+                ))
             con.close()
         else:
             selected_states = set()
