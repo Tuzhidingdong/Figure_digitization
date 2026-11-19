@@ -115,6 +115,8 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - **No successful CI run is recorded in this STATUS update.**
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, will not count as real-paper scientific acceptance.
+- Added a Windows CLI end-to-end test for scan → dry-run → run → status → query → export → index rebuild → validate, using one small paper record and confirming the upstream Figure Inventory SHA256 is unchanged.
+- Added a scheduler cache-reuse test for a second run against unchanged input. Latest-source Windows CI is pending for these additions.
 
 ## Engineering log
 
@@ -129,7 +131,8 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Changed catalog rebuild and ML export to stream point rows in bounded batches rather than accumulating a full paper or corpus point matrix in memory.
 - Added cache artifact-hash validation and cleanup of incomplete panel CSV outputs left by interrupted workers.
 - Updated the implementation to attach source PDF SHA256, input fingerprint, algorithm version, extraction channel, and component QC states to series evidence.
-- Regression tests: 15 currently pass on each Python 3.11/3.12/3.13 runner for the CI run #39 source snapshot. Additional later commits are awaiting the refreshed CI run.
+- Regression tests: 15 passed on each Python 3.11/3.12/3.13 runner in CI run #43.
+- Two Windows CLI/scheduler end-to-end tests have since been added. They are not marked passed until a fresh CI run completes.
 
 ## Current blockers / next engineering actions
 
