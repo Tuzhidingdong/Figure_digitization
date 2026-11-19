@@ -21,7 +21,7 @@ class JobState(str, Enum):
     FAILED_PERMANENT = "FAILED_PERMANENT"
 
 
-class ReviewState(StrEnum):
+class ReviewState(str, Enum):
     UNREVIEWED = "UNREVIEWED"
     NEEDS_REVIEW = "NEEDS_REVIEW"
     REVIEWED_ACCEPTED = "REVIEWED_ACCEPTED"
