@@ -91,7 +91,9 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                 data_stream.write("[")
             first_json_row = True
             series_iterator = catalog.iter_query_series(selected_filters, batch_size=series_batch_size)
-            panel_key = lambda row: (row["paper_id"], row["figure_id"], row["panel_id"])
+            def panel_key(row):
+                return (row["paper_id"], row["figure_id"], row["panel_id"])
+
             for key, grouped_records in groupby(series_iterator, key=panel_key):
                 panel_records = list(grouped_records)  # bounded to one panel, not one paper/corpus
                 record_map = {record["series_id"]: record for record in panel_records}
