@@ -10,6 +10,7 @@ from .adapter import discover_papers, snapshot_paper
 from .exporter import export_dataset
 from .hashing import atomic_write_json, sha256_file
 from .manifest import storage_paper_id
+from .pipeline import bundle_is_intact, processing_stage_state
 from .review import apply_review_patch
 from .scheduler import JobLedger, run_corpus
 from .storage import Catalog, connect_catalog
@@ -150,34 +151,6 @@ def _run(args) -> int:
     output_root = args.output_root.resolve()
     if output_root == input_root or input_root in output_root.parents:
         raise ValueError("Output root must be separate from, and outside, the upstream input root")
-    selected_states = None
-    if args.resume or args.failed_only:
-        db = output_root / "catalog.sqlite"
-        if db.is_file():
-            con = connect_catalog(db)
-            states = ("PENDING", "RETRY_WAIT") if args.resume else ("RETRY_WAIT", "FAILED_PERMANENT")
-            placeholders = ",".join("?" for _ in states)
-            selected_states = {r["paper_id"] for r in con.execute(
-                f"SELECT paper_id FROM jobs WHERE state IN ({placeholders})", states
-            )}
-            if args.resume:
-                selected_states.update(r["paper_id"] for r in con.execute(
-                    "SELECT paper_id FROM jobs WHERE state='RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < ?)",
-                    (time.time(),)
-                ))
-            con.close()
-        else:
-            selected_states = set()
-
-    def selected_papers():
-        for paper in discover_papers(input_root):
-            relative = paper.relative_to(input_root).as_posix()
-            storage_id = storage_paper_id(relative)
-            if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
-                continue
-            if selected_states is not None and relative not in selected_states:
-                continue
-            yield paper
 
     options = {
         "memory_limit_mb": args.memory_limit,
@@ -190,7 +163,95 @@ def _run(args) -> int:
         "qc_thresholds": str(args.qc_thresholds) if args.qc_thresholds else None,
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
+        "resume_cached_skipped": 0,
     }
+    selected_states = None
+    prior_fingerprints: dict[str, str] = {}
+    prior_job_states: dict[str, str] = {}
+    if args.failed_only or args.resume:
+        db = output_root / "catalog.sqlite"
+        if db.is_file():
+            con = connect_catalog(db)
+            prior_fingerprints = {
+                row["paper_id"]: row["input_fingerprint"]
+                for row in con.execute("SELECT paper_id,input_fingerprint FROM papers")
+            }
+            prior_job_states = {
+                row["paper_id"]: row["state"]
+                for row in con.execute("SELECT paper_id,state FROM jobs")
+            }
+            if args.resume:
+                states = ("PENDING", "RETRY_WAIT")
+                placeholders = ",".join("?" for _ in states)
+                selected_states = {row["paper_id"] for row in con.execute(
+                    f"SELECT paper_id FROM jobs WHERE state IN ({placeholders})", states
+                )}
+                selected_states.update(row["paper_id"] for row in con.execute(
+                    "SELECT paper_id FROM jobs WHERE state='RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < ?)",
+                    (time.time(),)
+                ))
+            else:
+                states = ("RETRY_WAIT", "FAILED_PERMANENT")
+                placeholders = ",".join("?" for _ in states)
+                selected_states = {row["paper_id"] for row in con.execute(
+                    f"SELECT paper_id FROM jobs WHERE state IN ({placeholders})", states
+                )}
+            con.close()
+        elif args.failed_only:
+            selected_states = set()
+        else:
+            # A first-time resume is equivalent to an initial run.
+            selected_states = None
+
+    def selected_papers():
+        for paper in discover_papers(input_root):
+            relative = paper.relative_to(input_root).as_posix()
+            storage_id = storage_paper_id(relative)
+            if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
+                continue
+            if args.failed_only:
+                if selected_states is None or storage_id not in selected_states:
+                    continue
+                yield paper
+                continue
+            if args.resume and selected_states is not None and storage_id not in selected_states:
+                previous_fingerprint = prior_fingerprints.get(storage_id)
+                previous_job_state = prior_job_states.get(storage_id)
+                if previous_fingerprint is None or previous_job_state is None:
+                    yield paper
+                    continue
+                current_snapshot = snapshot_paper(paper, input_root)
+                if current_snapshot.input_fingerprint != previous_fingerprint:
+                    yield paper
+                    continue
+                paper_root = output_root / "papers" / storage_id
+                bundle_path = paper_root / "paper_bundle.json"
+                stage_state = processing_stage_state(current_snapshot, paper, output_root, options)
+                try:
+                    bundle = json.loads(bundle_path.read_text(encoding="utf-8")) if bundle_path.is_file() else {}
+                    same_stage = bundle.get("stage_fingerprint") == stage_state["stage_fingerprint"]
+                except (OSError, ValueError, TypeError):
+                    same_stage = False
+                if not same_stage or not bundle_is_intact(paper_root):
+                    yield paper
+                    continue
+                if args.force_recompute_reviewed:
+                    digitization_path = paper_root / "digitization.json"
+                    try:
+                        digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
+                        reviewed = any(
+                            item.get("review_state") == "REVIEWED_ACCEPTED"
+                            for item in digitization.get("series", [])
+                        )
+                    except (OSError, ValueError, TypeError):
+                        reviewed = False
+                    if reviewed:
+                        yield paper
+                        continue
+                options["resume_cached_skipped"] += 1
+                continue
+            yield paper
+
     result = run_corpus(input_root, output_root, selected_papers(), args.workers,
                         args.max_attempts, args.lease_seconds, args.dry_run, options)
     print(json.dumps(result, indent=2))
