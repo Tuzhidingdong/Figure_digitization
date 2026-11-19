@@ -17,6 +17,7 @@ from .models import AxisCalibration, JobState, PaperSnapshot, SeriesRecord, safe
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
+from .qc import load_thresholds
 from .storage import write_paper_artifacts, append_panel_series_csv
 
 
@@ -337,11 +338,14 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     existing = paper_output / "digitization.json"
     force_reviewed = bool(options.get("force_recompute_reviewed", False))
     overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
+    threshold_path = Path(options["qc_thresholds"]) if options.get("qc_thresholds") else None
+    thresholds = load_thresholds(threshold_path)
     stage_fingerprint = sha256_json({
         "input_fingerprint": snapshot.input_fingerprint,
         "algorithm_version": ALGORITHM_VERSION,
         "overrides": overrides,
         "profile_config_fingerprint": profile_registry_fingerprint(),
+        "qc_thresholds": thresholds,
     })
     if existing.is_file():
         old = _json_file(existing)
@@ -536,6 +540,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
                "temp_disk_limit_mb": temp_disk_limit_mb,
                "evidence_bytes": _directory_size(paper_output / "evidence"),
+               "qc_threshold_status": thresholds["status"],
+               "qc_thresholds": thresholds,
                "llm_tokens": 0},
     )
     return {
