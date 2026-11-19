@@ -50,6 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-render-pixels", type=int, default=12000000)
     run.add_argument("--max-open-pdfs", type=int, default=1)
     run.add_argument("--batch-size", type=int, default=1000)
+    run.add_argument("--qc-thresholds", type=Path,
+                     help="Optional JSON/YAML QC thresholds; calibrated values must be evidence-backed")
     run.add_argument("--ocr", action="store_true")
     run.add_argument("--force-recompute-reviewed", action="store_true")
     run.add_argument("--dry-run", action="store_true")
@@ -184,6 +186,7 @@ def _run(args) -> int:
         "max_render_pixels": args.max_render_pixels,
         "max_open_pdfs": args.max_open_pdfs,
         "batch_size": args.batch_size,
+        "qc_thresholds": str(args.qc_thresholds) if args.qc_thresholds else None,
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
     }
