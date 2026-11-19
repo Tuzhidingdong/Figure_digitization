@@ -10,8 +10,6 @@ from .models import PaperSnapshot
 
 PAPER_MARKERS = {
     "paper_manifest.json",
-    "manifest.json",
-    "evidence_index.json",
     "figure_inventory.json",
     "figures.json",
     "figure_index.json",
@@ -20,6 +18,7 @@ PAPER_MARKERS = {
     "si_analysis.md",
     "si_analysis.txt",
 }
+ROOT_WEAK_MARKERS = {"manifest.json", "evidence_index.json"}
 
 
 def discover_papers(input_root: Path) -> Iterator[Path]:
@@ -38,9 +37,11 @@ def discover_papers(input_root: Path) -> Iterator[Path]:
         names = {name.casefold() for name in filenames}
         is_root = Path(directory).resolve() == root
         has_marker = bool(names.intersection(PAPER_MARKERS))
+        has_weak_marker = bool(names.intersection(ROOT_WEAK_MARKERS))
         has_pdf = any(name.endswith(".pdf") for name in names)
+        root_manifest_is_paper = is_root and has_weak_marker and not dirnames
 
-        if has_marker or (has_pdf and not is_root) or (has_pdf and is_root and not dirnames):
+        if has_marker or root_manifest_is_paper or (has_pdf and not is_root) or (has_pdf and is_root and not dirnames):
             yield Path(directory)
             # Do not descend into an already identified paper's images/PDF/SI assets.
             dirnames[:] = []
