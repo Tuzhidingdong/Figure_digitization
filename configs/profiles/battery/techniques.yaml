@@ -1,0 +1,12 @@
+techniques:
+  XRD: {family: spectrum, x_axis: 2theta, y_axis: relative_intensity}
+  Raman: {family: spectrum, x_axis: raman_shift, y_axis: relative_intensity}
+  FTIR: {family: spectrum, x_axis: wavenumber, y_axis: relative_intensity}
+  XPS: {family: spectrum, x_axis: binding_energy, y_axis: relative_intensity}
+  CV: {family: non_monotonic_curve, preserve_point_order: true}
+  GCD: {family: time_series}
+  EIS: {family: non_monotonic_curve, preserve_point_order: true}
+  GITT: {family: time_series}
+metrics:
+  capacity_bases: [gravimetric, areal, volumetric]
+  cell_scopes: [positive_electrode, negative_electrode, half_cell, full_cell]
