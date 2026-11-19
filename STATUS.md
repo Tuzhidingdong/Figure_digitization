@@ -116,6 +116,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
 - Windows CI run #49 compiled and passed Ruff on Python 3.11, 3.12, and 3.13, but pytest failed on the new PDFium text-object test because the page-evidence wrapper referenced a nonexistent `PdfPageView.name`.
 - Fixed that test-discovered issue in commit `3ce320628e0efb8f9376d6ca29b0a379a136be90`; the latest code needs a fresh Windows CI run.
+- Draft verification PR #6 is being used to rerun the current Windows source matrix after the PDF backend fix.
 - Added an optional backend spike that performs per-page measurements with PDFium, PDFMiner, and pikepdf/QPDF. The extra libraries are not part of the default installation.
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
