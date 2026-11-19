@@ -859,3 +859,47 @@ def test_ocr_axis_anchors_feed_calibration_without_llm(tmp_path: Path):
     assert records[0].metadata["x_calibration"]["anchors"][0]["value"] == 0.0
     assert records[0].metadata["y_calibration"]["anchors"][0]["value"] == 10.0
     assert records[0].metadata["axis_text_evidence"]["provisional"] is True
+
+
+def test_unresolved_dual_axis_keeps_vector_geometry_and_calibrated_x(tmp_path: Path):
+    from scientific_figure_data.pipeline import _extract_panel
+
+    points_pdf = [
+        (10, 20), (20, 30), (30, 40), (40, 45),
+        (50, 50), (60, 55), (70, 60), (80, 70),
+    ]
+    native_path = tmp_path / "dual-axis-native.json"
+    native_path.write_text(json.dumps({
+        "objects": [_vector_path_object(11, points_pdf)]
+    }), encoding="utf-8")
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "dual-axis-curve",
+        "technique": "GCD", "domain": "battery",
+        "data_family": "TIME_SERIES",
+        "plot_bbox_pdf": [0, 0, 100, 100],
+        "vector_object_indices": [11],
+        "x_axis_anchors": [{"pixel": 20, "value": 0}, {"pixel": 160, "value": 7}],
+        # Y anchors intentionally unresolved: left/right assignment is ambiguous.
+    }
+    records = _extract_panel(
+        None, "paper-1", "Figure3", "b",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure3": {"panels": {"b": {"series": [definition]}}}}},
+        EmptyContext(), 6, None, [], "e" * 64, "f" * 64, native_path,
+        {"crop_left_pdf": 0, "crop_top_pdf": 100, "render_scale": 2,
+         "page_rotation_degrees": 0},
+    )
+    record = records[0]
+    assert record.y_axis_side == "UNASSIGNED"
+    assert record.extraction_method == "PDFIUM_NATIVE_VECTOR_POLYLINE"
+    assert record.extraction_status == "GEOMETRY_ONLY_NEEDS_REVIEW"
+    assert len(record.points) == 8
+    assert all(point.x is not None for point in record.points)
+    assert all(point.y is None for point in record.points)
+    assert all(point.pixel_y is not None for point in record.points)
