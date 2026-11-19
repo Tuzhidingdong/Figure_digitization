@@ -135,12 +135,15 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Updated the implementation to attach source PDF SHA256, input fingerprint, algorithm version, extraction channel, and component QC states to series evidence.
 - CI run #39: 15 tests passed on each Windows Python 3.11/3.12/3.13 runner.
 - CI run #45: 17 tests passed on each Windows Python 3.11/3.12/3.13 runner, including the end-to-end CLI and scheduler cache-reuse tests.
-- Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
-- Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
+- Post-run-45: run #49 exposed a missing backend identifier on PdfPageView; fixed it and verified the fix in run #58.
+- Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page. The optional dependencies are not installed by default; real PDF measurements remain blocked on user-approved sample PDFs.
+- Added exact normalized entity/analyte alias matching with migration for older SQLite catalogs.
+- Changed the offline review helper to lazy-load only the currently selected Panel CSV.
+- Added regression tests for lease timeout recovery and REVIEWED_ACCEPTED recomputation lock; the current suite has 22 tests and awaits the next Windows CI run.
 
 ## Current blockers / next engineering actions
 
-1. Re-run the current source on Windows CI after the run-49 PDFium test fix and optional backend-probe expansion.
+1. Run the latest 22-test regression suite on Windows Python 3.11/3.12/3.13; this snapshot adds exact entity/analyte alias matching, old-catalog alias migration, stale RUNNING lease recovery, and reviewed-result lock/force-recompute tests.
 2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
 3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
 4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
