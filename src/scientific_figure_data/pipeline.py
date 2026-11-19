@@ -13,7 +13,7 @@ from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
-from .models import JobState, PaperSnapshot, SeriesRecord, safe_id
+from .models import AxisCalibration, JobState, PaperSnapshot, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
@@ -212,10 +212,31 @@ def _extract_panel(
                 link.get("evidence"), exact_match=bool(link.get("exact_match", False)),
             ))
         record.conditions = definition.get("conditions", [])
+        relative_signal = str(definition.get("y_signal_mode", "")).upper() in {
+            "ARBITRARY_RELATIVE", "SERIES_RELATIVE_SIGNAL"
+        }
+        plot_box = definition.get("plot_box")
         try:
             x_cal = fit_linear_axis("x", definition.get("x_axis_anchors", []), definition.get("x_unit"))
-            y_cal = fit_linear_axis("y", definition.get("y_axis_anchors", []), definition.get("y_unit"))
-        except (ValueError, TypeError):
+            if relative_signal:
+                if not plot_box or not image_path:
+                    raise ValueError("Relative signal requires an explicit plot_box and panel image")
+                from PIL import Image
+                with Image.open(image_path) as plot_image:
+                    image_width, image_height = plot_image.size
+                bx0, by0, bx1, by1 = [float(v) for v in plot_box]
+                if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
+                    bx0, bx1 = bx0 * image_width, bx1 * image_width
+                    by0, by1 = by0 * image_height, by1 * image_height
+                if bx1 <= bx0 or by1 <= by0:
+                    raise ValueError("Relative signal plot_box is invalid")
+                y_cal = AxisCalibration(
+                    "y", None, -1.0 / (by1 - by0), by1 / (by1 - by0), [], 0.0,
+                    status="SERIES_RELATIVE_SIGNAL",
+                )
+            else:
+                y_cal = fit_linear_axis("y", definition.get("y_axis_anchors", []), definition.get("y_unit"))
+        except (ValueError, TypeError, ImportError):
             results.append(record)
             continue
 
@@ -234,11 +255,13 @@ def _extract_panel(
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in definition["color_rgb"]),
                 int(definition.get("color_tolerance", 24)), x_cal, y_cal,
+                plot_box=tuple(plot_box) if relative_signal and plot_box else None,
             )
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = "EXTRACTED_PROVISIONAL" if record.points else "NEEDS_REVIEW"
             record.metadata = {"x_calibration": calibration_to_dict(x_cal),
-                               "y_calibration": calibration_to_dict(y_cal), "raster_qc": qc}
+                               "y_calibration": calibration_to_dict(y_cal), "raster_qc": qc,
+                               "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
         else:
             record.metadata = {
                 "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
