@@ -138,8 +138,20 @@ def write_paper_artifacts(
     # accumulate them here; this function handles compact paper-level metadata.
     csv_paths = [p.relative_to(paper_root).as_posix()
                  for p in (paper_root / "series").glob("**/panel_series.csv")] if (paper_root / "series").exists() else []
-    canonical_paths = ["paper_manifest.json", "figure_inventory.json", "panel_layout.json",
-                       "digitization.json"] + csv_paths
+    evidence_paths = [
+        path.relative_to(paper_root).as_posix()
+        for path in (paper_root / "evidence").glob("**/*")
+        if path.is_file()
+    ]
+    context_paths = [
+        path.relative_to(paper_root).as_posix()
+        for path in (paper_root / "context").glob("**/*")
+        if path.is_file()
+    ] if (paper_root / "context").exists() else []
+    canonical_paths = list(dict.fromkeys(
+        ["paper_manifest.json", "figure_inventory.json", "panel_layout.json", "digitization.json"]
+        + csv_paths + evidence_paths + context_paths
+    ))
     hashes = {name: sha256_file(paper_root / name) for name in canonical_paths}
     bundle = {
         "schema_version": "1.0", "bundle_version": "1.0", "paper_id": snapshot.paper_id,
