@@ -611,3 +611,47 @@ def test_reviewed_series_is_locked_until_explicit_force_recompute(tmp_path: Path
     backups = list((paper_root / "versions").glob("pre-recompute-*"))
     assert backups
     assert any((backup / "digitization.json").is_file() for backup in backups)
+
+
+def test_rapidocr_uses_cpu_single_thread_and_reuses_engine(monkeypatch, tmp_path: Path):
+    import sys
+    import types
+    from scientific_figure_data import ocr
+
+    class FakeRapidOCR:
+        constructions = 0
+        calls = 0
+        parameters = None
+
+        def __init__(self, params):
+            type(self).constructions += 1
+            type(self).parameters = params
+
+        def __call__(self, image_path):
+            type(self).calls += 1
+            return types.SimpleNamespace(
+                boxes=[[[1.0, 2.0], [20.0, 2.0], [20.0, 8.0], [1.0, 8.0]]],
+                txts=("Sample A",),
+                scores=(0.98,),
+            )
+
+    fake_module = types.ModuleType("rapidocr")
+    fake_module.RapidOCR = FakeRapidOCR
+    monkeypatch.setitem(sys.modules, "rapidocr", fake_module)
+    ocr.reset_ocr_engine_for_tests()
+    image_path = tmp_path / "panel.png"
+    image_path.write_bytes(b"fake image")
+    try:
+        first = ocr.run_ocr(image_path)
+        second = ocr.run_ocr(image_path)
+        assert first == second
+        assert first[0]["text"] == "Sample A"
+        assert first[0]["confidence"] == 0.98
+        assert first[0]["polygon"][0] == [1.0, 2.0]
+        assert FakeRapidOCR.constructions == 1
+        assert FakeRapidOCR.calls == 2
+        assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.intra_op_num_threads"] == 1
+        assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.inter_op_num_threads"] == 1
+        assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.use_cuda"] is False
+    finally:
+        ocr.reset_ocr_engine_for_tests()
