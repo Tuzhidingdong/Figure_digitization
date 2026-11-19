@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS measurements(
 );
 CREATE TABLE IF NOT EXISTS series(
  series_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, figure_id TEXT NOT NULL,
- panel_id TEXT NOT NULL, technique TEXT, domain TEXT, label TEXT, x_unit TEXT, y_unit TEXT,
+ panel_id TEXT NOT NULL, measurement_id TEXT, technique TEXT, domain TEXT, label TEXT, x_unit TEXT, y_unit TEXT,
  y_axis_side TEXT NOT NULL, extraction_status TEXT NOT NULL, qc_status TEXT NOT NULL,
  review_state TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}'
 );
@@ -92,6 +92,10 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     con.execute("PRAGMA synchronous=FULL")
     con.execute("PRAGMA busy_timeout=30000")
     con.executescript(SCHEMA)
+    # Additive schema migration for catalogs created by earlier development snapshots.
+    series_columns = {row[1] for row in con.execute("PRAGMA table_info(series)").fetchall()}
+    if "measurement_id" not in series_columns:
+        con.execute("ALTER TABLE series ADD COLUMN measurement_id TEXT")
     return con
 
 
@@ -227,15 +231,16 @@ class Catalog:
 
     def _insert_series(self, item: SeriesRecord):
         self.con.execute(
-            """INSERT INTO series(series_id,paper_id,figure_id,panel_id,technique,domain,label,
+            """INSERT INTO series(series_id,paper_id,figure_id,panel_id,measurement_id,technique,domain,label,
                x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (item.series_id, item.paper_id, item.figure_id, item.panel_id, item.technique,
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (item.series_id, item.paper_id, item.figure_id, item.panel_id,
+             item.measurement_id or f"measurement:{item.series_id}", item.technique,
              item.domain, item.label, item.x_unit, item.y_unit, item.y_axis_side,
              item.extraction_status, item.qc_status, item.review_state,
              json.dumps(item.metadata, ensure_ascii=False)),
         )
-        measurement_id = str(item.metadata.get("measurement_id") or f"measurement:{item.series_id}")
+        measurement_id = str(item.measurement_id or f"measurement:{item.series_id}")
         self.con.execute(
             "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
             (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
@@ -315,8 +320,8 @@ class Catalog:
             args.append(role)
         condition = filters.get("condition")
         if condition:
-            sql += """ AND EXISTS (SELECT 1 FROM conditions c JOIN measurements m ON m.measurement_id=c.measurement_id
-                      WHERE m.paper_id=s.paper_id AND m.figure_id=s.figure_id AND lower(c.name) LIKE ?)"""
+            sql += """ AND EXISTS (SELECT 1 FROM conditions c
+                      WHERE c.measurement_id=s.measurement_id AND lower(c.name) LIKE ?)"""
             args.append(f"%{condition.casefold()}%")
         sql += " ORDER BY s.paper_id,s.figure_id,s.panel_id,s.series_id LIMIT ?"
         args.append(max(1, min(int(limit), 10000)))
@@ -372,17 +377,26 @@ class Catalog:
                     self.con.execute("INSERT INTO panels VALUES(?,?,?,?,?)",
                                      (snapshot.paper_id, panel.get("figure_id"), panel.get("panel_id"),
                                       json.dumps(panel.get("bbox")), panel.get("status", "INVENTORIED")))
+                self.con.execute("DELETE FROM conditions WHERE paper_id=?", (snapshot.paper_id,))
+                self.con.execute("DELETE FROM measurements WHERE paper_id=?", (snapshot.paper_id,))
                 for item in digitization.get("series", []):
-                    self.con.execute(
-                        """INSERT INTO series(series_id,paper_id,figure_id,panel_id,technique,domain,label,
-                           x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (item["series_id"], snapshot.paper_id, item["figure_id"], item["panel_id"],
-                         item.get("technique"), item.get("domain"), item.get("label"),
-                         item.get("x_unit"), item.get("y_unit"), item.get("y_axis_side", "UNASSIGNED"),
-                         item.get("extraction_status", "NEEDS_REVIEW"), item.get("qc_status", "PROVISIONAL_UNCALIBRATED"),
-                         item.get("review_state", "NEEDS_REVIEW"), json.dumps(item.get("metadata", {}))),
+                    series_record = SeriesRecord(
+                        series_id=item["series_id"], paper_id=snapshot.paper_id,
+                        figure_id=item["figure_id"], panel_id=item["panel_id"],
+                        technique=item.get("technique"), domain=item.get("domain"),
+                        label=item.get("label"), x_label=item.get("x_label"), y_label=item.get("y_label"),
+                        x_unit=item.get("x_unit"), y_unit=item.get("y_unit"),
+                        measurement_id=item.get("measurement_id") or f"measurement:{item['series_id']}",
+                        y_axis_side=item.get("y_axis_side", "UNASSIGNED"),
+                        extraction_method=item.get("extraction_method", "UNRESOLVED"),
+                        extraction_status=item.get("extraction_status", "NEEDS_REVIEW"),
+                        qc_status=item.get("qc_status", "PROVISIONAL_UNCALIBRATED"),
+                        review_state=item.get("review_state", "NEEDS_REVIEW"),
+                        subject_links=item.get("subject_links", []),
+                        conditions=item.get("conditions", []),
+                        evidence=item.get("evidence", []), metadata=item.get("metadata", {}),
                     )
+                    self._insert_series(series_record)
                     for point in point_rows.get(item["series_id"], []):
                         self.con.execute(
                             "INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -394,18 +408,6 @@ class Catalog:
                              float(point["y_err_low"]) if point["y_err_low"] else None,
                              float(point["y_err_high"]) if point["y_err_high"] else None, point["err_type"]),
                         )
-                    for link in item.get("subject_links", []):
-                        entity_id = str(link.get("entity_id") or "UNKNOWN")
-                        self.con.execute(
-                            """INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json)
-                               VALUES(?,?,?,?,?,?) ON CONFLICT(entity_id) DO NOTHING""",
-                            (entity_id, link.get("canonical_name", entity_id), link.get("entity_type"),
-                             item.get("domain"), json.dumps(link.get("aliases", [])),
-                             json.dumps(link.get("evidence", {}))),
-                        )
-                        self.con.execute("INSERT OR REPLACE INTO series_subject_links VALUES(?,?,?,?,?)",
-                                         (item["series_id"], entity_id, link.get("role_in_series", "unknown"),
-                                          json.dumps(link.get("evidence", {})), link.get("status", "UNASSIGNED")))
             count += 1
         return {"papers_indexed": count}
 
