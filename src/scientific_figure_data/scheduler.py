@@ -46,21 +46,23 @@ class JobLedger:
             (paper_id, event_type, utc_now(), json.dumps(payload, ensure_ascii=False)),
         )
 
-    def prepare(self, paper_id: str):
+    def prepare(self, paper_id: str) -> bool:
         with self.con:
             row = self.con.execute("SELECT state,lease_expires_at FROM jobs WHERE paper_id=?",
                                    (paper_id,)).fetchone()
             if row and row["state"] == JobState.RUNNING.value:
-                if row["lease_expires_at"] is None or row["lease_expires_at"] < time.time():
-                    self.event(paper_id, "INTERRUPTED_RECOVERY", {"previous_state": "RUNNING"})
-                    self.con.execute(
-                        "UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=? WHERE paper_id=?",
-                        (JobState.RETRY_WAIT.value, utc_now(), paper_id))
+                if row["lease_expires_at"] is not None and row["lease_expires_at"] >= time.time():
+                    return False
+                self.event(paper_id, "INTERRUPTED_RECOVERY", {"previous_state": "RUNNING"})
+                self.con.execute(
+                    "UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=? WHERE paper_id=?",
+                    (JobState.RETRY_WAIT.value, utc_now(), paper_id))
             self.con.execute(
                 """INSERT INTO jobs(paper_id,state,updated_at) VALUES(?,?,?)
                    ON CONFLICT(paper_id) DO NOTHING""",
                 (paper_id, JobState.PENDING.value, utc_now()),
             )
+        return True
 
     def start(self, paper_id: str):
         now = time.time()
@@ -113,7 +115,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
     catalog = Catalog(output_root / "catalog.sqlite")
     results = {"completed": 0, "completed_with_review": 0, "blocked_review_locked": 0,
-               "failed": 0, "retried": 0, "cached": 0}
+               "failed": 0, "retried": 0, "cached": 0, "active_jobs_skipped": 0}
     source = iter(paper_paths)
     retry_queue = deque()
     source_exhausted = False
@@ -139,7 +141,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         source_exhausted = True
                         break
                     paper_id = paper.relative_to(input_root).as_posix()
-                    ledger.prepare(paper_id)
+                    if not ledger.prepare(paper_id):
+                        results["active_jobs_skipped"] += 1
+                        continue
                     total_seen += 1
                 else:
                     break
@@ -159,7 +163,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     result = future.result()
                     if result.get("cached"):
                         results["cached"] += 1
-                    else:
+                    if result.get("job_state") != JobState.BLOCKED.value:
                         from .models import PaperSnapshot, InputArtifact, SeriesRecord, SeriesPoint
                         snapshot_data = result["snapshot"]
                         snapshot = PaperSnapshot(
