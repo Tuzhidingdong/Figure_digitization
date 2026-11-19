@@ -67,6 +67,11 @@ class PdfPageView:
     def size(self) -> tuple[float, float]:
         return float(self._page.get_width()), float(self._page.get_height())
 
+    @property
+    def rotation_degrees(self) -> int:
+        getter = getattr(self._page, "get_rotation", None)
+        return int(getter()) if callable(getter) else 0
+
     def render(self, scale: float = 1.5):
         if scale <= 0 or scale > 8:
             raise ValueError("render scale must be greater than 0 and no more than 8")
@@ -131,6 +136,9 @@ class PdfPageView:
             "path_geometry_complete": False,
             "truncation": None,
             "coordinate_system": "PDF_PAGE_SPACE",
+            "page_width_pdf": self.size[0],
+            "page_height_pdf": self.size[1],
+            "page_rotation_degrees": self.rotation_degrees,
         }
         if raw is None or not hasattr(self._page, "get_objects"):
             close = getattr(textpage, "close", None)
