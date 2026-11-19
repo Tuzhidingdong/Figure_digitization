@@ -177,7 +177,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                                 **item, "points": [SeriesPoint(**p) for p in item.get("points", [])]
                             }))
                         catalog.index_paper(snapshot, result.get("figures", []), result.get("panels", []),
-                                            series, result["status"], result.get("artifact_paths"))
+                                            series, result["status"], result.get("artifact_paths"),
+                                            paper_root=output_root / "papers" / snapshot.paper_id)
                     state = result.get("job_state", JobState.COMPLETED.value)
                     ledger.finish(paper_id, state)
                     if state == JobState.BLOCKED.value:
