@@ -7,7 +7,7 @@ name = "scientific-figure-data"
 version = "0.1.0"
 description = "Evidence-first, resource-bounded scientific figure digitization"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "See THIRD_PARTY_NOTICES.md and repository license policy" }
 authors = [{ name = "Figure_digitization contributors" }]
 dependencies = []
