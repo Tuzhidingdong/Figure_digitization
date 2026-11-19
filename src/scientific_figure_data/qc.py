@@ -17,17 +17,27 @@ PROVISIONAL = {
 
 
 def load_thresholds(path: Path | None = None) -> dict:
-    if path and path.is_file():
-        with path.open("r", encoding="utf-8") as handle:
-            config = json.load(handle) if path.suffix.lower() == ".json" else None
-        if config is not None:
-            return config
-    return dict(PROVISIONAL)
+    if not path or not path.is_file():
+        return dict(PROVISIONAL)
+    with path.open("r", encoding="utf-8") as handle:
+        if path.suffix.lower() == ".json":
+            config = json.load(handle)
+        else:
+            try:
+                import yaml
+            except ImportError as exc:
+                raise RuntimeError("PyYAML is required to read YAML QC thresholds") from exc
+            config = yaml.safe_load(handle)
+    if not isinstance(config, dict):
+        raise ValueError("QC threshold file must contain a mapping")
+    status = config.get("status")
+    if status not in {"PROVISIONAL_UNCALIBRATED", "CALIBRATED"}:
+        raise ValueError("QC thresholds must explicitly declare PROVISIONAL_UNCALIBRATED or CALIBRATED")
+    return config
 
 
 def write_provisional_thresholds(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # YAML is kept human-editable; no runtime YAML dependency is required.
     lines = [
         "schema_version: '1.0'",
         "status: PROVISIONAL_UNCALIBRATED",
