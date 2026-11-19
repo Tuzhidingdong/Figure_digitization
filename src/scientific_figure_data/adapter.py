@@ -41,7 +41,8 @@ def discover_papers(input_root: Path) -> Iterator[Path]:
         has_pdf = any(name.endswith(".pdf") for name in names)
         root_manifest_is_paper = is_root and has_weak_marker and not dirnames
 
-        if has_marker or root_manifest_is_paper or (has_pdf and not is_root) or (has_pdf and is_root and not dirnames):
+        if (has_marker or (has_weak_marker and not is_root) or root_manifest_is_paper
+                or (has_pdf and not is_root) or (has_pdf and is_root and not dirnames)):
             yield Path(directory)
             # Do not descend into an already identified paper's images/PDF/SI assets.
             dirnames[:] = []
