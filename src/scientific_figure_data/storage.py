@@ -101,6 +101,24 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     series_columns = {row[1] for row in con.execute("PRAGMA table_info(series)").fetchall()}
     if "measurement_id" not in series_columns:
         con.execute("ALTER TABLE series ADD COLUMN measurement_id TEXT")
+    # Migrate entity aliases for catalogs created before the exact-alias index existed.
+    import unicodedata
+    for entity in con.execute(
+        "SELECT entity_id,canonical_name,aliases_json FROM entities"
+    ).fetchall():
+        try:
+            aliases = json.loads(entity["aliases_json"] or "[]")
+        except (TypeError, ValueError):
+            aliases = []
+        names = {str(entity["canonical_name"] or "")}
+        if isinstance(aliases, list):
+            names.update(str(alias) for alias in aliases if alias)
+        con.executemany(
+            "INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_norm) VALUES(?,?,?)",
+            [(entity["entity_id"], alias,
+              unicodedata.normalize("NFKC", alias).casefold())
+             for alias in names if alias],
+        )
     return con
 
 
