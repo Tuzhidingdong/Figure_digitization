@@ -15,16 +15,16 @@ Automated digitization is conservative. A chart is not assigned guessed axes, un
 Python 3.11 or newer is required.
 
     python -m pip install -e .
-    # Optional PDF rendering:
+    # PDF rendering and native text/vector evidence:
     python -m pip install -e ".[pdf]"
-    # Optional image algorithms:
-    python -m pip install -e ".[images]"
+    # PDF + raster figure extraction:
+    python -m pip install -e ".[pdf,images]"
     # Optional PDF backend comparison spike:
     python -m pip install -e ".[pdf-spike]"
     # Development:
     python -m pip install -e ".[dev]"
 
-No GPU or LLM is required. OCR is optional and is not installed by the default package.
+No GPU or LLM is required. OCR is optional and is not installed by the default package. To enable local single-thread CPU OCR, install `.[ocr]` and pass `--ocr`.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ Use --dry-run before a first corpus run. Existing upstream files are read-only. 
 ## Commands
 
 - scan: discover papers and write immutable input snapshots.
-- run: process eligible papers, with --resume, --failed-only, --paper-id, --dry-run and resource controls.
+- run: process eligible papers, with --resume, --failed-only, --paper-id, --dry-run and resource controls. Resume rechecks input, implementation, profile/QC and bundle fingerprints; intact unchanged papers are skipped before a worker starts.
 - status/report: inspect job state and run metrics.
 - query: filter indexed papers, entities, techniques, and domains.
 - export: produce CSV/JSON plus an export manifest with compatibility warnings.
@@ -58,7 +58,7 @@ A compact cross-page context index is built from existing main/SI text and extra
 
 - The PDF backend probe measures the capabilities available in the installed builds; raw PDFium path access is not presumed complete.
 - No real benchmark PDFs are included. The probe reports NO_INPUT_PDFS when no files are supplied.
-- The initial raster tracer requires explicit color/axis calibration evidence. It refuses ambiguous branching components.
+- For simple charts, the raster path can provisionally detect a rectangular plot frame and a unique chromatic trace family, then use text/explicit axis anchors. Multiple color families, same-color separated bands, ambiguous frames and branching components route to review. This is a narrow heuristic, not general chart understanding.
 - CV/EIS order is preserved when a trace is explicitly supplied; automatic extraction does not sort paths by X.
 - QC defaults are provisional and every such result is labeled PROVISIONAL_UNCALIBRATED.
 - P1/P2 are not claimed complete.
