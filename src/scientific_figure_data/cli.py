@@ -45,7 +45,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--lease-seconds", type=int, default=180)
     run.add_argument("--memory-limit", type=int, default=2048, help="soft per-process memory budget in MiB")
     run.add_argument("--render-scale", type=float, default=1.5)
-    run.add_argument("--cache-limit", type=int, default=128)
     run.add_argument("--temp-disk-limit", type=int, default=2048)
     run.add_argument("--context-memory-budget", type=int, default=500000)
     run.add_argument("--max-render-pixels", type=int, default=12000000)
@@ -122,19 +121,14 @@ def _scan(args) -> int:
     output_root = args.output_root.resolve()
     if output_root == input_root or input_root in output_root.parents:
         raise ValueError("Output root must be separate from, and outside, the upstream input root")
-    manifests = output_root / "manifests"
-    manifests.mkdir(parents=True, exist_ok=True)
+    output_root.mkdir(parents=True, exist_ok=True)
     jsonl_path = output_root / "corpus_manifest.jsonl"
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
     count = 0
     with temporary.open("w", encoding="utf-8") as stream:
         for paper_dir in discover_papers(input_root):
             snapshot = snapshot_paper(paper_dir, input_root)
-            atomic_write_json(manifests / f"{snapshot.paper_id}.json", snapshot.to_dict())
-            stream.write(json.dumps({
-                "paper_id": snapshot.paper_id, "source_dir": snapshot.source_dir,
-                "fingerprint": snapshot.input_fingerprint, "missing_roles": snapshot.missing_roles
-            }, ensure_ascii=False) + "\n")
+            stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
             count += 1
     temporary.replace(jsonl_path)
     atomic_write_json(output_root / "corpus_manifest.json", {
@@ -175,7 +169,8 @@ def _run(args) -> int:
     def selected_papers():
         for paper in discover_papers(input_root):
             relative = paper.relative_to(input_root).as_posix()
-            if args.paper_id and relative != args.paper_id and paper.name != args.paper_id:
+            storage_id = relative.replace("/", "__")
+            if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
                 continue
             if selected_states is not None and relative not in selected_states:
                 continue
@@ -184,7 +179,6 @@ def _run(args) -> int:
     options = {
         "memory_limit_mb": args.memory_limit,
         "render_scale": args.render_scale,
-        "cache_limit_mb": args.cache_limit,
         "temp_disk_limit_mb": args.temp_disk_limit,
         "context_memory_budget": args.context_memory_budget,
         "max_render_pixels": args.max_render_pixels,
@@ -207,7 +201,13 @@ def _status(args) -> int:
     ledger = JobLedger(db)
     counts = ledger.status()
     ledger.close()
-    print(json.dumps({"jobs": counts}, indent=2))
+    if args.command == "report":
+        report_path = args.output_root / "run_report.json"
+        report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.is_file() else {}
+        report["current_job_state_counts"] = counts
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        print(json.dumps({"jobs": counts}, indent=2))
     return 0
 
 
@@ -260,7 +260,8 @@ def _validate(args) -> int:
     errors = []
     checked = 0
     for paper_root in sorted((root / "papers").glob("*")) if (root / "papers").exists() else []:
-        for name in ("paper_manifest.json", "figure_inventory.json", "digitization.json", "paper_bundle.json"):
+        for name in ("paper_manifest.json", "figure_inventory.json", "panel_layout.json",
+                     "digitization.json", "paper_bundle.json"):
             path = paper_root / name
             if not path.is_file():
                 errors.append(f"{path}: missing")
@@ -270,16 +271,68 @@ def _validate(args) -> int:
                 checked += 1
             except Exception as exc:
                 errors.append(f"{path}: {type(exc).__name__}: {exc}")
+        bundle_path = paper_root / "paper_bundle.json"
+        if bundle_path.is_file():
+            try:
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                for relative, expected_hash in bundle.get("content_hashes", {}).items():
+                    artifact = (paper_root / relative).resolve()
+                    try:
+                        artifact.relative_to(paper_root.resolve())
+                    except ValueError:
+                        errors.append(f"{bundle_path}: unsafe artifact path {relative}")
+                        continue
+                    if not artifact.is_file():
+                        errors.append(f"{artifact}: bundle artifact missing")
+                    elif sha256_file(artifact) != expected_hash:
+                        errors.append(f"{artifact}: bundle SHA256 mismatch")
+            except Exception as exc:
+                errors.append(f"{bundle_path}: bundle hash validation failed: {type(exc).__name__}: {exc}")
+        if args.input_root:
+            manifest_path = paper_root / "paper_manifest.json"
+            if manifest_path.is_file():
+                try:
+                    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    for artifact in data.get("artifacts", []):
+                        expected = artifact.get("sha256")
+                        if not expected or str(expected).startswith("UNREADABLE:"):
+                            continue
+                        source = (args.input_root.resolve() / artifact["path"]).resolve()
+                        try:
+                            source.relative_to(args.input_root.resolve())
+                        except ValueError:
+                            errors.append(f"{source}: unsafe upstream path")
+                            continue
+                        if not source.is_file():
+                            errors.append(f"{source}: upstream source missing")
+                        elif sha256_file(source) != expected:
+                            errors.append(f"{source}: upstream SHA256 changed")
+                except Exception as exc:
+                    errors.append(f"{manifest_path}: {type(exc).__name__}: {exc}")
     if args.input_root:
-        input_root = args.input_root.resolve()
-        for manifest_path in (root / "manifests").glob("*.json"):
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
-            for artifact in data.get("artifacts", []):
-                source = input_root / artifact["path"]
-                if source.is_file() and source.stat().st_size == artifact["size_bytes"]:
-                    continue
-                if not source.exists():
-                    errors.append(f"{source}: upstream source missing")
+        stream_path = root / "corpus_manifest.jsonl"
+        if stream_path.is_file():
+            with stream_path.open("r", encoding="utf-8") as stream:
+                for line_number, line in enumerate(stream, 1):
+                    try:
+                        snapshot = json.loads(line)
+                    except json.JSONDecodeError:
+                        errors.append(f"{stream_path}:{line_number}: invalid JSONL record")
+                        continue
+                    for artifact in snapshot.get("artifacts", []):
+                        expected = artifact.get("sha256")
+                        if not expected or str(expected).startswith("UNREADABLE:"):
+                            continue
+                        source = (args.input_root.resolve() / artifact["path"]).resolve()
+                        try:
+                            source.relative_to(args.input_root.resolve())
+                        except ValueError:
+                            errors.append(f"{stream_path}:{line_number}: unsafe upstream path")
+                            continue
+                        if not source.is_file():
+                            errors.append(f"{source}: upstream source missing")
+                        elif sha256_file(source) != expected:
+                            errors.append(f"{source}: upstream SHA256 changed since scan")
     print(json.dumps({"checked_json_artifacts": checked, "errors": errors,
                       "status": "OK" if not errors else "INVALID"}, indent=2))
     return 0 if not errors else 1
