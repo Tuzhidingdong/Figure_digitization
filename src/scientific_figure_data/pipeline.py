@@ -815,9 +815,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             has_points = any(item.points for item in extracted)
             needs_series_review = any(
-                item.review_state != "REVIEWED_ACCEPTED"
-                or item.qc_status != "CALIBRATED_ACCEPTED"
-                for item in extracted
+                item.review_state != "REVIEWED_ACCEPTED" for item in extracted
             )
             panel_status = (
                 "EXTRACTED_NEEDS_REVIEW" if has_points and needs_series_review
