@@ -12,14 +12,32 @@ from pathlib import Path
 from typing import Any
 
 from .errors import StalePatchError
+from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
 from .hashing import atomic_write_json, sha256_file
 from .storage import connect_catalog
 
 ALLOWED_FIELDS = {
     "label", "technique", "domain", "x_label", "y_label", "x_unit", "y_unit",
-    "y_axis_side", "points"
+    "y_axis_side", "x_axis_anchors", "y_axis_anchors", "points"
 }
 ALLOWED_AXIS_SIDES = {"LEFT", "RIGHT", "UNASSIGNED"}
+
+
+def _validate_anchors(value: Any, axis: str) -> None:
+    if not isinstance(value, list) or len(value) < 2:
+        raise ValueError(f"{axis}_axis_anchors must contain at least two anchors")
+    pixels = set()
+    for anchor in value:
+        if not isinstance(anchor, dict) or set(anchor) != {"pixel", "value"}:
+            raise ValueError(f"Each {axis} anchor must contain exactly pixel and value")
+        for key in ("pixel", "value"):
+            number = anchor[key]
+            if not isinstance(number, (int, float)) or not math.isfinite(number):
+                raise ValueError(f"{axis} anchor {key} must be finite numeric data")
+        pixel_key = round(float(anchor["pixel"]), 9)
+        if pixel_key in pixels:
+            raise ValueError(f"{axis} anchor pixel positions must be unique")
+        pixels.add(pixel_key)
 
 
 def _validate_patch(patch: dict) -> None:
@@ -59,6 +77,10 @@ def _validate_patch(patch: dict) -> None:
             raise ValueError(f"Unsupported review fields: {sorted(forbidden)}")
         if "y_axis_side" in values and values["y_axis_side"] not in ALLOWED_AXIS_SIDES:
             raise ValueError("y_axis_side must be LEFT, RIGHT, or UNASSIGNED")
+        if "x_axis_anchors" in values:
+            _validate_anchors(values["x_axis_anchors"], "x")
+        if "y_axis_anchors" in values:
+            _validate_anchors(values["y_axis_anchors"], "y")
         if "points" in values:
             points = values["points"]
             if not isinstance(points, list):
@@ -137,21 +159,36 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         document = json.loads(target.read_text(encoding="utf-8"))
         series_index = {item["series_id"]: item for item in document.get("series", [])}
         csv_updates: dict[Path, dict[str, list[dict]]] = {}
+        csv_axis_updates: dict[Path, dict[str, dict[str, Any]]] = {}
         for change in patch["changes"]:
             series_id = change["series_id"]
             if series_id not in series_index:
                 raise ValueError(f"Unknown series_id in patch: {series_id}")
             item = series_index[series_id]
             values = change["set"]
+            csv_path = paper_root / "series" / f"{item['figure_id']}__{item['panel_id']}" / "panel_series.csv"
+            axis_transforms = {}
+            for key in ("x_axis_anchors", "y_axis_anchors"):
+                if key in values:
+                    axis = key[0]
+                    calibration = fit_linear_axis(axis, values[key], item.get(f"{axis}_unit"))
+                    item.setdefault("metadata", {})[f"{axis}_axis_anchors"] = values[key]
+                    item.setdefault("metadata", {})[f"{axis}_calibration"] = calibration_to_dict(calibration)
+                    axis_transforms[axis] = calibration
             for key, value in values.items():
                 if key == "points":
                     item["points_count"] = len(value)
-                    csv_path = paper_root / "series" / f"{item['figure_id']}__{item['panel_id']}" / "panel_series.csv"
                     if not csv_path.is_file():
                         raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
                     csv_updates.setdefault(csv_path, {})[series_id] = value
+                elif key in {"x_axis_anchors", "y_axis_anchors"}:
+                    continue
                 else:
                     item[key] = value
+            if axis_transforms:
+                if not csv_path.is_file():
+                    raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
+                csv_axis_updates.setdefault(csv_path, {})[series_id] = axis_transforms
             item["extraction_status"] = "REVIEWED_ACCEPTED"
             item["review_state"] = "REVIEWED_ACCEPTED"
             item.setdefault("metadata", {})["review_patch_id"] = patch_id
@@ -175,8 +212,11 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
             shutil.copy2(csv_path, backup_path)
             backups[csv_path] = backup_path
         try:
-            for csv_path, replacements in csv_updates.items():
-                _replace_series_points_atomic(csv_path, replacements)
+            for csv_path in set(csv_updates) | set(csv_axis_updates):
+                _replace_series_points_atomic(
+                    csv_path, csv_updates.get(csv_path, {}),
+                    csv_axis_updates.get(csv_path, {}),
+                )
             atomic_write_json(target, document)
             new_hash_preview = sha256_file(target)
             # Refresh canonical hashes before committing the SQLite transaction so files and
@@ -272,10 +312,15 @@ def _replacement_row(series_id: str, point: dict) -> dict:
     }
 
 
-def _replace_series_points_atomic(csv_path: Path, replacements: dict[str, list[dict]]) -> None:
-    """Rewrite one panel CSV with bounded memory, replacing one or more series atomically."""
+def _replace_series_points_atomic(
+    csv_path: Path,
+    replacements: dict[str, list[dict]],
+    axis_updates: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    """Rewrite a panel CSV atomically using bounded memory and optional recalibration."""
     import os
     import tempfile
+    axis_updates = axis_updates or {}
     header = ["series_id", "point_index", "x_value", "x_label", "y_value", "pixel_x",
               "pixel_y", "y_err_low", "y_err_high", "err_type"]
     fd, temporary = tempfile.mkstemp(prefix=f".{csv_path.name}.", suffix=".tmp", dir=csv_path.parent)
@@ -287,11 +332,30 @@ def _replace_series_points_atomic(csv_path: Path, replacements: dict[str, list[d
             writer.writeheader()
             replaced_ids = set(replacements)
             for row in reader:
-                if row.get("series_id") not in replaced_ids:
-                    writer.writerow(row)
+                series_id = row.get("series_id")
+                if series_id in replaced_ids:
+                    continue
+                transforms = axis_updates.get(series_id, {})
+                pixel_x = _float_or_none(row.get("pixel_x"))
+                pixel_y = _float_or_none(row.get("pixel_y"))
+                if "x" in transforms and pixel_x is not None:
+                    row["x_value"] = str(map_pixel(transforms["x"], pixel_x))
+                    row["x_label"] = ""
+                if "y" in transforms and pixel_y is not None:
+                    row["y_value"] = str(map_pixel(transforms["y"], pixel_y))
+                writer.writerow(row)
             for series_id, points in replacements.items():
+                transforms = axis_updates.get(series_id, {})
                 for point in points:
-                    writer.writerow(_replacement_row(series_id, point))
+                    row = _replacement_row(series_id, point)
+                    pixel_x = _float_or_none(row.get("pixel_x"))
+                    pixel_y = _float_or_none(row.get("pixel_y"))
+                    if "x" in transforms and pixel_x is not None:
+                        row["x_value"] = str(map_pixel(transforms["x"], pixel_x))
+                        row["x_label"] = ""
+                    if "y" in transforms and pixel_y is not None:
+                        row["y_value"] = str(map_pixel(transforms["y"], pixel_y))
+                    writer.writerow(row)
             target.flush()
             os.fsync(target.fileno())
         os.replace(temporary, csv_path)
@@ -302,3 +366,12 @@ def _replace_series_points_atomic(csv_path: Path, replacements: dict[str, list[d
             pass
         raise
 
+
+def _float_or_none(value):
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
