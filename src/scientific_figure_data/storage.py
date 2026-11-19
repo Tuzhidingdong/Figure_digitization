@@ -294,7 +294,7 @@ class Catalog:
             )
 
     def _query_sql(self, filters: dict[str, str | None], limit: int | None = None) -> tuple[str, list[Any]]:
-        sql = "SELECT s.*, p.source_dir FROM series s JOIN papers p ON p.paper_id=s.paper_id WHERE 1=1"
+        sql = "SELECT s.*, p.source_dir, p.input_fingerprint FROM series s JOIN papers p ON p.paper_id=s.paper_id WHERE 1=1"
         args: list[Any] = []
         mapping = {"paper_id": "s.paper_id", "technique": "s.technique", "domain": "s.domain",
                    "review_state": "s.review_state", "qc_status": "s.qc_status"}
@@ -347,6 +347,26 @@ class Catalog:
     def query_series(self, filters: dict[str, str | None], limit: int = 500) -> list[dict]:
         sql, args = self._query_sql(filters, limit=limit)
         return [dict(row) for row in self.con.execute(sql, args).fetchall()]
+
+
+    def series_associations(self, series_id: str) -> dict:
+        entity_rows = self.con.execute(
+            """SELECT e.entity_id,e.canonical_name,e.entity_type,e.domain,e.aliases_json,
+                      l.role_in_series,l.link_status,l.evidence_json
+               FROM series_subject_links l LEFT JOIN entities e ON e.entity_id=l.entity_id
+               WHERE l.series_id=? ORDER BY l.role_in_series,e.canonical_name""",
+            (series_id,),
+        ).fetchall()
+        condition_rows = self.con.execute(
+            """SELECT c.condition_id,c.name,c.value_json,c.evidence_json
+               FROM conditions c JOIN series s ON s.measurement_id=c.measurement_id
+               WHERE s.series_id=? ORDER BY c.name""",
+            (series_id,),
+        ).fetchall()
+        return {
+            "subject_links": [dict(row) for row in entity_rows],
+            "conditions": [dict(row) for row in condition_rows],
+        }
 
     def list_reviews(self, limit: int = 1000) -> list[dict]:
         return [dict(row) for row in self.con.execute(
