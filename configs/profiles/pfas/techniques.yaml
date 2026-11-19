@@ -1,0 +1,11 @@
+techniques:
+  parent_compound_time: {family: time_series}
+  fluoride_release: {family: time_series}
+  fluorine_balance: {family: scalar_or_bar}
+  LC-MS/MS: {family: advanced_spectrum, tier: P2}
+metrics:
+  distinct: [parent_removal, defluorination, mineralization, fluoride_release, total_fluorine, organic_fluorine]
+rules:
+  lod_loq_to_zero: false
+  parent_removal_equals_defluorination: false
+  defluorination_equals_mineralization: false
