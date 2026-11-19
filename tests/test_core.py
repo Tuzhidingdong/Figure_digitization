@@ -1594,3 +1594,113 @@ def test_reviewed_result_with_tampered_bundle_is_blocked_without_file_mutation(t
     assert result["reason"] == "REVIEWED_ARTIFACT_INTEGRITY_FAILURE"
     assert sha256_file(digitization_path) == digitization_hash
     assert sha256_file(csv_path) == csv_hash
+
+
+def test_adapter_recognizes_nested_manifest_only_paper_without_pdf(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+
+    root = tmp_path / "corpus"
+    root.mkdir()
+    (root / "manifest.json").write_text('{"corpus":true}', encoding="utf-8")
+    first = root / "paper-a"
+    first.mkdir()
+    (first / "manifest.json").write_text('{"upstream_version":"chem-literature-1"}', encoding="utf-8")
+    second = root / "paper-b"
+    second.mkdir()
+    (second / "evidence_index.json").write_text('{"items":[]}', encoding="utf-8")
+    assert list(discover_papers(root)) == [first, second]
+
+
+def _make_vector_test_image(tmp_path: Path, name: str = "hybrid.png"):
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (100, 100), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((10, 10, 90, 90), outline=(15, 15, 15), width=2)
+    draw.line((15, 80, 25, 72, 35, 64, 45, 56, 55, 48, 65, 40, 75, 32, 85, 20),
+              fill=(220, 20, 30), width=2)
+    path = tmp_path / name
+    image.save(path)
+    return path
+
+
+def _make_vector_test_native(tmp_path: Path, include_second: bool = False):
+    points = [(15, 20), (25, 28), (35, 36), (45, 44),
+              (55, 52), (65, 60), (75, 68), (85, 80)]
+    objects = [_vector_path_object(101, points, color=(220, 20, 30, 255))]
+    if include_second:
+        other = [(15, 70), (25, 65), (35, 60), (45, 55),
+                 (55, 50), (65, 45), (75, 40), (85, 30)]
+        objects.append(_vector_path_object(102, other, color=(20, 80, 210, 255)))
+    path = tmp_path / ("native-multi.json" if include_second else "native-single.json")
+    path.write_text(json.dumps({"objects": objects}), encoding="utf-8")
+    return path
+
+
+def test_hybrid_pipeline_prioritizes_native_vector_even_when_raster_color_is_detected(tmp_path: Path):
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = _make_vector_test_image(tmp_path)
+    native_path = _make_vector_test_native(tmp_path)
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "hybrid-native",
+        "technique": "GCD", "domain": "battery", "data_family": "TIME_SERIES",
+        "x_axis_anchors": [{"pixel": 15, "value": 0}, {"pixel": 85, "value": 10}],
+        "y_axis_anchors": [{"pixel": 80, "value": 0}, {"pixel": 20, "value": 5}],
+    }
+    record = _extract_panel(
+        image_path, "p", "Figure1", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure1": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), 1,
+        {"native_text_preview": ""},
+        [], "a" * 64, "b" * 64,
+        native_path,
+        {"crop_left_pdf": 0, "crop_top_pdf": 100, "render_scale": 1,
+         "page_rotation_degrees": 0},
+    )[0]
+    assert record.extraction_method == "PDFIUM_NATIVE_VECTOR_POLYLINE"
+    assert record.metadata["vector_object_index"] == 101
+    assert record.metadata["color_detection"]["status"] == "UNIQUE_CHROMATIC_FAMILY"
+    assert len(record.points) == 8
+
+
+def test_hybrid_pipeline_falls_back_to_unique_raster_when_vector_candidates_are_ambiguous(
+    tmp_path: Path
+):
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = _make_vector_test_image(tmp_path, "hybrid-fallback.png")
+    native_path = _make_vector_test_native(tmp_path, include_second=True)
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "hybrid-raster-fallback",
+        "technique": "GCD", "domain": "battery", "data_family": "TIME_SERIES",
+        "x_axis_anchors": [{"pixel": 15, "value": 0}, {"pixel": 85, "value": 10}],
+        "y_axis_anchors": [{"pixel": 80, "value": 0}, {"pixel": 20, "value": 5}],
+    }
+    record = _extract_panel(
+        image_path, "p", "Figure2", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure2": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), 1,
+        {"native_text_preview": ""},
+        [], "c" * 64, "d" * 64,
+        native_path,
+        {"crop_left_pdf": 0, "crop_top_pdf": 100, "render_scale": 1,
+         "page_rotation_degrees": 0},
+    )[0]
+    assert record.extraction_method == "raster_color_column_median"
+    assert record.metadata["vector_fallback"] == "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
+    assert record.metadata["vector_selection"]["reason"] == "MULTIPLE_VECTOR_CANDIDATES"
+    assert len(record.points) > 0
