@@ -114,7 +114,9 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - The Windows CI workflow has been committed.
 - Windows CI run #39 passed package install, compileall, Ruff, and all 15 tests on Python 3.11, 3.12, and 3.13.
 - Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
-- A further Pdfium native-text lifetime test was added after run #45 and still needs a fresh CI run.
+- Windows CI run #49 compiled and passed Ruff on Python 3.11, 3.12, and 3.13, but pytest failed on the new PDFium text-object test because the page-evidence wrapper referenced a nonexistent `PdfPageView.name`.
+- Fixed that test-discovered issue in commit `3ce320628e0efb8f9376d6ca29b0a379a136be90`; the latest code needs a fresh Windows CI run.
+- Added an optional backend spike that performs per-page measurements with PDFium, PDFMiner, and pikepdf/QPDF. The extra libraries are not part of the default installation.
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
 
@@ -133,16 +135,17 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Updated the implementation to attach source PDF SHA256, input fingerprint, algorithm version, extraction channel, and component QC states to series evidence.
 - CI run #39: 15 tests passed on each Windows Python 3.11/3.12/3.13 runner.
 - CI run #45: 17 tests passed on each Windows Python 3.11/3.12/3.13 runner, including the end-to-end CLI and scheduler cache-reuse tests.
-- Post-run-45: added one isolated PDFium native-text test to assert TextPage lifetime; pending CI.
+- Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
+- Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
 
 ## Current blockers / next engineering actions
 
-1. Resolve any static, import, package-build, or test failures reported by Windows CI; do not mark tests passed without the actual run result.
+1. Re-run the current source on Windows CI after the run-49 PDFium test fix and optional backend-probe expansion.
 2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
 3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
 4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
 5. Improve P0 chart family/axis evidence extraction and vector/raster hybrid routing without extending unsupported automation claims.
-6. Run the PDF backend technical spike on 3–5 user-approved real PDFs and record per-page time, Peak RSS, object/path coverage, and licensing decisions.
+6. Run the PDF backend technical spike on 3–5 user-approved real PDFs using PDFium, PDFMiner, and pikepdf/QPDF, then record per-page time, Peak RSS, object/path coverage, and licensing decisions.
 7. Validate the P0 extraction path against user-approved annotated Battery, AOP, and PFAS papers; generate calibrated QC thresholds only from those annotations.
 8. Keep P1/P2 deferred until the P0 evidence chain and benchmark results are acceptable.
 
