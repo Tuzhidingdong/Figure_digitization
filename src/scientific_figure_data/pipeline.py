@@ -515,9 +515,6 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "evidence_bytes": _directory_size(paper_output / "evidence"),
                "llm_tokens": 0},
     )
-    # Snapshot is also persisted outside the per-paper bundle for corpus-level auditing.
-    from .hashing import atomic_write_json
-    atomic_write_json(output_root / "manifests" / f"{safe_id(snapshot.paper_id)}.json", snapshot.to_dict())
     return {
         "cached": False, "snapshot": snapshot.to_dict(), "figures": figures, "panels": panels,
         "series": [asdict(s) for s in series], "status": status, "job_state": job_state,
