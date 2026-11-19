@@ -1,0 +1,5 @@
+name: common_chemistry
+version: '1.0'
+inherits: []
+domain: chemistry
+description: Shared chemistry terms, units, and evidence semantics.
