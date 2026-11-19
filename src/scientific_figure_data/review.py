@@ -17,7 +17,7 @@ from .storage import connect_catalog
 
 ALLOWED_FIELDS = {
     "label", "technique", "domain", "x_label", "y_label", "x_unit", "y_unit",
-    "y_axis_side", "extraction_status", "points"
+    "y_axis_side", "points"
 }
 ALLOWED_AXIS_SIDES = {"LEFT", "RIGHT", "UNASSIGNED"}
 
@@ -34,6 +34,8 @@ def _validate_patch(patch: dict) -> None:
         raise ValueError("patch_id must contain only letters, digits, dot, underscore or hyphen (max 80)")
     if not isinstance(patch["paper_id"], str) or not patch["paper_id"] or len(patch["paper_id"]) > 240:
         raise ValueError("paper_id must be a non-empty string of at most 240 characters")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", str(patch["original_result_hash"])):
+        raise ValueError("original_result_hash must be a 64-character SHA256 hex digest")
     reviewer = patch.get("reviewer", "")
     if not isinstance(reviewer, str) or len(reviewer) > 200:
         raise ValueError("reviewer must be a string of at most 200 characters")
@@ -195,7 +197,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     sid = change["series_id"]
                     assignments = ["review_state='REVIEWED_ACCEPTED'", "extraction_status='REVIEWED_ACCEPTED'"]
                     args: list[Any] = []
-                    for key in ("label", "technique", "domain", "x_unit", "y_unit", "y_axis_side"):
+                    for key in ("label", "technique", "domain", "x_label", "y_label", "x_unit", "y_unit", "y_axis_side"):
                         if key in values:
                             assignments.append(f"{key}=?")
                             args.append(values[key])
@@ -203,13 +205,21 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     con.execute(f"UPDATE series SET {', '.join(assignments)} WHERE series_id=?", args)
                     if "points" in values:
                         con.execute("DELETE FROM series_points WHERE series_id=?", (sid,))
+                        def point_values():
+                            for point in values["points"]:
+                                x_value = point.get("x")
+                                yield (
+                                    sid, int(point["point_index"]),
+                                    x_value if isinstance(x_value, (int, float)) else None,
+                                    x_value if isinstance(x_value, str) else None,
+                                    point.get("y"), point.get("pixel_x"), point.get("pixel_y"),
+                                    point.get("y_err_low"), point.get("y_err_high"),
+                                    point.get("err_type", "UNKNOWN"),
+                                )
                         con.executemany(
                             """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,
                                pixel_x,pixel_y,y_err_low,y_err_high,err_type) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                            [(sid, int(p["point_index"]), p.get("x") if isinstance(p.get("x"), (int, float)) else None,
-                              p.get("x") if isinstance(p.get("x"), str) else None, p.get("y"),
-                              p.get("pixel_x"), p.get("pixel_y"), p.get("y_err_low"),
-                              p.get("y_err_high"), p.get("err_type", "UNKNOWN")) for p in values["points"]],
+                            point_values(),
                         )
                 con.execute(
                     "INSERT INTO applied_patches VALUES(?,?,?,?,?)",
@@ -292,24 +302,3 @@ def _replace_series_points_atomic(csv_path: Path, replacements: dict[str, list[d
             pass
         raise
 
-
-def _write_csv_atomic(path: Path, rows: list[dict]) -> None:
-    import os
-    import tempfile
-    header = ["series_id", "point_index", "x_value", "x_label", "y_value", "pixel_x",
-              "pixel_y", "y_err_low", "y_err_high", "err_type"]
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=header)
-            writer.writeheader()
-            writer.writerows(rows)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    except Exception:
-        try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
-        raise
