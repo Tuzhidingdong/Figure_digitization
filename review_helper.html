@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scientific Figure Data — Offline Review</title>
+<style>
+:root{color-scheme:light dark;font:14px system-ui,sans-serif}body{margin:1.5rem;max-width:1100px}h1{font-size:1.4rem}section{border:1px solid #8886;border-radius:8px;padding:1rem;margin:1rem 0}
+label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;padding:.45rem;margin:.2rem 0;max-width:100%}button{cursor:pointer}canvas{max-width:100%;border:1px solid #8886;background:#fff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.muted{opacity:.7}.status{font-weight:600}
+</style>
+</head>
+<body>
+<h1>Scientific Figure Data — Offline Review Helper</h1>
+<p class="muted">Runs locally in this browser tab. It does not upload files or make network requests. Select one paper output folder containing digitization.json, panel_series CSVs, and evidence images.</p>
+<section>
+<label>Paper output folder
+<input id="folder" type="file" webkitdirectory multiple></label>
+<div id="loadStatus" class="status">No paper folder selected.</div>
+</section>
+<section id="editor" hidden>
+<div class="grid">
+<div>
+<label>Series
+<select id="seriesSelect"></select></label>
+<label>Corrected label
+<input id="label"></label>
+<label>Y-axis side
+<select id="axisSide"><option>UNASSIGNED</option><option>LEFT</option><option>RIGHT</option></select></label>
+<label>Technique
+<input id="technique"></label>
+<label>Domain
+<input id="domain"></label>
+<button id="addChange">Add correction</button>
+</div>
+<div>
+<p id="seriesInfo" class="muted"></p>
+<canvas id="plot" width="900" height="520"></canvas>
+</div>
+</div>
+<p><strong>Pending changes:</strong> <span id="changeCount">0</span></p>
+<button id="exportPatch">Export Review Patch JSON</button>
+<pre id="patchStatus" class="muted"></pre>
+</section>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let fileMap = new Map(), digitization = null, originalHash = null, seriesById = new Map(), csvByPanel = new Map(), changes = [];
+  const parseCSV = text => {
+    const lines = text.replace(/\r/g,"").split("\n").filter(Boolean);
+    if (!lines.length) return [];
+    const parseLine = line => {
+      const out=[]; let value="", quoted=false;
+      for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){value+='"';i++;}else quoted=!quoted;}
+        else if(ch===","&&!quoted){out.push(value);value="";}else value+=ch;}
+      out.push(value);return out;
+    };
+    const headers=parseLine(lines[0]);
+    return lines.slice(1).map(line=>Object.fromEntries(parseLine(line).map((v,i)=>[headers[i],v])));
+  };
+  const sha256 = async buffer => {
+    const digest = await crypto.subtle.digest("SHA-256", buffer);
+    return Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("");
+  };
+  const load = async files => {
+    fileMap.clear(); csvByPanel.clear(); seriesById.clear(); changes=[];
+    for(const f of files){const rel=f.webkitRelativePath.split("/").slice(1).join("/");fileMap.set(rel,f);}
+    const entries=[...fileMap.entries()];
+    const item=entries.find(([p])=>p.endsWith("digitization.json"));
+    if(!item) throw new Error("digitization.json not found in selected folder");
+    const [digitizationPath,digitizationFile]=item;
+    const bytes=await digitizationFile.arrayBuffer();
+    originalHash=await sha256(bytes);
+    digitization=JSON.parse(new TextDecoder().decode(bytes));
+    for(const [p,f] of entries.filter(([p])=>p.endsWith("panel_series.csv"))){
+      csvByPanel.set(p,parseCSV(await f.text()));
+    }
+    for(const s of digitization.series||[]) seriesById.set(s.series_id,s);
+    $("seriesSelect").replaceChildren();
+    for(const s of seriesById.values()){const option=document.createElement("option");option.value=s.series_id;option.textContent=s.series_id+" — "+(s.label||"unlabelled");$("seriesSelect").append(option);}
+    $("editor").hidden=false;
+    $("loadStatus").textContent="Loaded "+seriesById.size+" series. SHA256 "+originalHash;
+    if(seriesById.size) selectSeries($("seriesSelect").value);
+  };
+  function currentSeries(){return seriesById.get($("seriesSelect").value);}
+  function panelRows(series){
+    const suffix="series/"+series.figure_id+"__"+series.panel_id+"/panel_series.csv";
+    const pair=[...csvByPanel.entries()].find(([path])=>path.endsWith(suffix));
+    return pair?pair[1].filter(row=>row.series_id===series.series_id):[];
+  }
+  function draw(series){
+    const canvas=$("plot"),ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height);
+    const expected=series.figure_id+"_"+series.panel_id+".png";
+    const imageEntry=[...fileMap.entries()].find(([p])=>p.endsWith(expected));
+    const drawPoints=()=>{
+      const points=panelRows(series).filter(p=>p.pixel_x!==""&&p.pixel_y!=="");
+      if(points.length<2)return;
+      ctx.strokeStyle="#d22";ctx.lineWidth=2;ctx.beginPath();
+      points.forEach((p,i)=>{const x=Number(p.pixel_x),y=Number(p.pixel_y);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
+      ctx.stroke();
+    };
+    if(imageEntry){const url=URL.createObjectURL(imageEntry[1]);const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);drawPoints();};img.src=url;}
+    else {ctx.fillStyle="#333";ctx.fillText("Source panel crop not found in selected folder",20,30);drawPoints();}
+  }
+  function selectSeries(id){
+    const series=seriesById.get(id);if(!series)return;
+    $("label").value=series.label||"";$("axisSide").value=series.y_axis_side||"UNASSIGNED";
+    $("technique").value=series.technique||"";$("domain").value=series.domain||"";
+    $("seriesInfo").textContent=series.paper_id+" / "+series.figure_id+" / "+series.panel_id+" · "+series.extraction_status+" · "+series.qc_status;
+    draw(series);
+  }
+  $("folder").addEventListener("change",async e=>{
+    try{await load([...e.target.files]);}catch(err){$("loadStatus").textContent=String(err);$("editor").hidden=true;}
+  });
+  $("seriesSelect").addEventListener("change",e=>selectSeries(e.target.value));
+  $("addChange").addEventListener("click",()=>{
+    const s=currentSeries();if(!s)return;
+    const set={label:$("label").value,y_axis_side:$("axisSide").value,
+               technique:$("technique").value||null,domain:$("domain").value||null};
+    changes=changes.filter(c=>c.series_id!==s.series_id);changes.push({series_id:s.series_id,set});
+    $("changeCount").textContent=String(changes.length);
+    $("patchStatus").textContent="Correction staged for "+s.series_id;
+  });
+  $("exportPatch").addEventListener("click",()=>{
+    if(!digitization||!changes.length){$("patchStatus").textContent="No corrections to export.";return;}
+    const patch={schema_version:"1.0",patch_id:"review-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8),
+      paper_id:digitization.paper_id,target_artifact:"digitization.json",original_result_hash:originalHash,
+      created_at:new Date().toISOString(),reviewer:"",changes};
+    const blob=new Blob([JSON.stringify(patch,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=patch.patch_id+".json";a.click();URL.revokeObjectURL(url);
+    $("patchStatus").textContent="Patch exported. Apply it with: sfd review apply --output-root OUTPUT_ROOT --patch PATCH_PATH";
+  });
+})();
+</script>
+</body>
+</html>
