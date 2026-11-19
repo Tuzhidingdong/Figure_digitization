@@ -463,6 +463,7 @@ def _extract_panel(
                     record.metadata = {
                         "path_order": "PRESERVED",
                         "data_family": family,
+                        "chart_family_classification": classification,
                         "vector_object_index": selected_paths[0].object_index,
                         "vector_bbox_pdf": list(selected_paths[0].bbox_pdf),
                         "vector_stroke_rgba": selected_paths[0].stroke_rgba,
@@ -482,6 +483,7 @@ def _extract_panel(
                         "vector_selection": vector_selection,
                         "plot_detection": plot_detection,
                         "data_family": family,
+                        "chart_family_classification": classification,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                         "calibration_errors": calibration_errors,
@@ -491,6 +493,7 @@ def _extract_panel(
                     "reason": "VECTOR_PATH_SELECTION_ERROR",
                     "detail": f"{type(exc).__name__}: {exc}",
                     "data_family": family,
+                    "chart_family_classification": classification,
                 }
             if record.points:
                 record.qc_status = "PROVISIONAL_UNCALIBRATED"
@@ -506,6 +509,8 @@ def _extract_panel(
                 "note": "Vector extraction requires an unrotated PDF page, explicit plot_bbox_pdf, crop geometry, and PDFium native path evidence.",
                 "vector_object_indices": vector_indices,
                 "plot_bbox_pdf": plot_bbox_pdf,
+                "chart_family_classification": classification,
+                "plot_detection": plot_detection,
                 "calibration_errors": calibration_errors,
             }
             results.append(record)
