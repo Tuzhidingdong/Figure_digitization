@@ -121,6 +121,18 @@ def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = Fal
     if not all(p.is_file() for p in (digitization_path, manifest_path, figures_path, panels_path)):
         return None
     digitization = _json_file(digitization_path)
+    bundle_path = paper_root / "paper_bundle.json"
+    if not bundle_path.is_file():
+        return None
+    bundle = _json_file(bundle_path)
+    for relative, expected_hash in bundle.get("content_hashes", {}).items():
+        artifact = (paper_root / relative).resolve()
+        try:
+            artifact.relative_to(paper_root.resolve())
+        except ValueError:
+            return None
+        if not artifact.is_file() or sha256_file(artifact) != expected_hash:
+            return None
     if not locked:
         if digitization.get("input_fingerprint") != snapshot.input_fingerprint:
             return None
@@ -366,6 +378,17 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         if series_dir.exists():
             shutil.copytree(series_dir, version_dir / "series", dirs_exist_ok=True)
             shutil.rmtree(series_dir)
+        evidence_dir = paper_output / "evidence"
+        if evidence_dir.exists():
+            shutil.copytree(evidence_dir, version_dir / "evidence", dirs_exist_ok=True)
+            shutil.rmtree(evidence_dir)
+    elif not existing.is_file():
+        # A previous worker may have died after streaming panel CSVs but before
+        # committing digitization.json. Such partial rows are not resumable truth.
+        for partial_name in ("series", "evidence"):
+            partial_path = paper_output / partial_name
+            if partial_path.exists():
+                shutil.rmtree(partial_path)
 
     memory_limit_mb = int(options.get("memory_limit_mb", 2048))
     render_scale = float(options.get("render_scale", 1.5))
