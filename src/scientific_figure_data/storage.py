@@ -124,32 +124,15 @@ def write_paper_artifacts(
         "generated_at": utc_now(), "status": status,
         "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
         "series": [{**{k: v for k, v in asdict(s).items() if k != "points"},
-                    "points_count": len(s.points)} for s in series],
+                    "points_count": len(s.points) or int(s.metadata.get("points_count", 0))} for s in series],
         "extra": extra,
     }
     atomic_write_json(paper_root / "digitization.json", digitization)
 
-    grouped: dict[tuple[str, str], list[SeriesRecord]] = {}
-    for item in series:
-        grouped.setdefault((item.figure_id, item.panel_id), []).append(item)
-    csv_paths = []
-    for (figure_id, panel_id), panel_series in grouped.items():
-        relative_path = Path("series") / f"{figure_id}__{panel_id}" / "panel_series.csv"
-        csv_path = paper_root / relative_path
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
-        with csv_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.writer(handle)
-            writer.writerow(["series_id", "point_index", "x_value", "x_label", "y_value",
-                             "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type"])
-            for item in panel_series:
-                for point in item.points:
-                    writer.writerow([item.series_id, point.point_index,
-                                     point.x if isinstance(point.x, (int, float)) else "",
-                                     point.x if isinstance(point.x, str) else "",
-                                     point.y, point.pixel_x, point.pixel_y,
-                                     point.y_err_low, point.y_err_high, point.err_type])
-        csv_paths.append(relative_path.as_posix())
-
+    # Point batches are streamed to panel CSVs during extraction. Do not rewrite or
+    # accumulate them here; this function handles compact paper-level metadata.
+    csv_paths = [p.relative_to(paper_root).as_posix()
+                 for p in (paper_root / "series").glob("**/panel_series.csv")] if (paper_root / "series").exists() else []
     canonical_paths = ["paper_manifest.json", "figure_inventory.json", "panel_layout.json",
                        "digitization.json"] + csv_paths
     hashes = {name: sha256_file(paper_root / name) for name in canonical_paths}
@@ -188,7 +171,8 @@ class Catalog:
         )
 
     def index_paper(self, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
-                    series: list[SeriesRecord], status: str, artifact_paths: dict | None = None):
+                    series: list[SeriesRecord], status: str, artifact_paths: dict | None = None,
+                    paper_root: Path | None = None):
         with self.con:
             self.register_paper(snapshot, status, artifact_paths)
             old_ids = [r[0] for r in self.con.execute("SELECT series_id FROM series WHERE paper_id=?",
@@ -212,6 +196,34 @@ class Catalog:
                                   panel.get("status", "INVENTORIED")))
             for item in series:
                 self._insert_series(item)
+            if paper_root:
+                self._index_panel_csv_points(paper_root, series)
+
+    def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord]):
+        known = {item.series_id for item in series}
+        for csv_path in (paper_root / "series").glob("**/panel_series.csv"):
+            batch = []
+            with csv_path.open("r", newline="", encoding="utf-8") as handle:
+                for row in csv.DictReader(handle):
+                    sid = row.get("series_id")
+                    if sid not in known:
+                        continue
+                    batch.append((
+                        sid, int(row["point_index"]),
+                        float(row["x_value"]) if row.get("x_value") else None,
+                        row.get("x_label") or None,
+                        float(row["y_value"]) if row.get("y_value") else None,
+                        float(row["pixel_x"]) if row.get("pixel_x") else None,
+                        float(row["pixel_y"]) if row.get("pixel_y") else None,
+                        float(row["y_err_low"]) if row.get("y_err_low") else None,
+                        float(row["y_err_high"]) if row.get("y_err_high") else None,
+                        row.get("err_type") or "UNKNOWN",
+                    ))
+                    if len(batch) >= 1000:
+                        self.con.executemany("INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)", batch)
+                        batch.clear()
+            if batch:
+                self.con.executemany("INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)", batch)
 
     def _insert_series(self, item: SeriesRecord):
         self.con.execute(
@@ -229,13 +241,14 @@ class Catalog:
             (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
              json.dumps({"series_id": item.series_id}, ensure_ascii=False)),
         )
-        self.con.executemany(
-            """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,pixel_x,pixel_y,
-               y_err_low,y_err_high,err_type) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            [(item.series_id, p.point_index, p.x if isinstance(p.x, (int, float)) else None,
-              p.x if isinstance(p.x, str) else None, p.y, p.pixel_x, p.pixel_y,
-              p.y_err_low, p.y_err_high, p.err_type) for p in item.points],
-        )
+        if item.points:
+            self.con.executemany(
+                """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,pixel_x,pixel_y,
+                   y_err_low,y_err_high,err_type) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                [(item.series_id, p.point_index, p.x if isinstance(p.x, (int, float)) else None,
+                  p.x if isinstance(p.x, str) else None, p.y, p.pixel_x, p.pixel_y,
+                  p.y_err_low, p.y_err_high, p.err_type) for p in item.points],
+            )
         for link in item.subject_links:
             entity_id = str(link.get("entity_id") or "UNKNOWN")
             canonical = str(link.get("canonical_name") or link.get("entity_name") or entity_id)
@@ -380,3 +393,28 @@ class Catalog:
                                           json.dumps(link.get("evidence", {})), link.get("status", "UNASSIGNED")))
             count += 1
         return {"papers_indexed": count}
+
+
+def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
+                            series: list[SeriesRecord]) -> Path | None:
+    """Persist one panel's point batch immediately and release its image/point buffers."""
+    panel_series = [item for item in series if item.points]
+    if not panel_series:
+        return None
+    path = paper_root / "series" / f"{figure_id}__{panel_id}" / "panel_series.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    exists = path.is_file()
+    with path.open("a" if exists else "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        if not exists:
+            writer.writerow(["series_id", "point_index", "x_value", "x_label", "y_value",
+                             "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type"])
+        for item in panel_series:
+            item.metadata["points_count"] = len(item.points)
+            for point in item.points:
+                writer.writerow([item.series_id, point.point_index,
+                                 point.x if isinstance(point.x, (int, float)) else "",
+                                 point.x if isinstance(point.x, str) else "",
+                                 point.y, point.pixel_x, point.pixel_y,
+                                 point.y_err_low, point.y_err_high, point.err_type])
+    return path
