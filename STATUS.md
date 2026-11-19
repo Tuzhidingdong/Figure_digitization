@@ -115,6 +115,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Windows CI run #39 passed package install, compileall, Ruff, and all 15 tests on Python 3.11, 3.12, and 3.13.
 - Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
 - A further Pdfium native-text lifetime test was added after run #45 and still needs a fresh CI run.
+- Latest-source verification PR is being triggered for the added Pdfium native-text regression test; the CI result is pending inspection.
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
 
