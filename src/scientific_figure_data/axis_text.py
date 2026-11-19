@@ -132,3 +132,100 @@ def extract_numeric_axis_anchors(
         "min_confidence": min_confidence,
         "provisional": True,
     }
+
+
+def extract_native_numeric_axis_anchors(
+    native_page: dict,
+    plot_bbox_pdf: tuple[float, float, float, float],
+    crop_mapping: dict,
+    *,
+    margin_fraction: float = 0.22,
+    min_margin_pdf_points: float = 4.0,
+) -> dict:
+    """Read numeric tick labels directly from PDF text objects without OCR."""
+    x0, y0, x1, y1 = [float(value) for value in plot_bbox_pdf]
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError("plot_bbox_pdf must have positive width and height")
+    margin_x = max(min_margin_pdf_points, (x1 - x0) * margin_fraction)
+    margin_y = max(min_margin_pdf_points, (y1 - y0) * margin_fraction)
+    crop_left = float(crop_mapping["crop_left_pdf"])
+    crop_top = float(crop_mapping["crop_top_pdf"])
+    render_scale = float(crop_mapping["render_scale"])
+    if render_scale <= 0:
+        raise ValueError("crop_mapping render_scale must be positive")
+
+    x_candidates = []
+    y_left_candidates = []
+    y_right_candidates = []
+    for obj in native_page.get("objects", []):
+        if obj.get("object_type") != "TEXT":
+            continue
+        value = _parse_numeric(str(obj.get("text", "")))
+        bounds = obj.get("bounds_pdf")
+        if value is None or not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+            continue
+        left, bottom, right, top = [float(item) for item in bounds]
+        cx = (left + right) / 2
+        cy = (bottom + top) / 2
+        evidence = {
+            "object_index": obj.get("object_index"),
+            "text": str(obj.get("text", "")),
+            "value": value,
+            "bounds_pdf": list(bounds),
+            "font_size_pdf": obj.get("font_size"),
+            "font_name": obj.get("font_name"),
+        }
+        if x0 <= cx <= x1 and y0 - margin_y <= cy < y0:
+            x_candidates.append({
+                "pixel": (cx - crop_left) * render_scale,
+                "value": value, "evidence": evidence,
+            })
+        elif x0 - margin_x <= cx < x0 and y0 <= cy <= y1:
+            y_left_candidates.append({
+                "pixel": (crop_top - cy) * render_scale,
+                "value": value, "evidence": evidence,
+            })
+        elif x1 < cx <= x1 + margin_x and y0 <= cy <= y1:
+            y_right_candidates.append({
+                "pixel": (crop_top - cy) * render_scale,
+                "value": value, "evidence": evidence,
+            })
+
+    def normalize(items):
+        by_pixel = {}
+        for item in items:
+            key = round(item["pixel"], 1)
+            current = by_pixel.get(key)
+            if current is None:
+                by_pixel[key] = item
+            else:
+                current_text_len = len(current["evidence"]["text"])
+                new_text_len = len(item["evidence"]["text"])
+                if new_text_len > current_text_len:
+                    by_pixel[key] = item
+        return sorted(by_pixel.values(), key=lambda item: item["pixel"])
+
+    x_values = normalize(x_candidates)
+    y_left = normalize(y_left_candidates)
+    y_right = normalize(y_right_candidates)
+    x_anchors = [{"pixel": item["pixel"], "value": item["value"]} for item in x_values]
+    y_left_anchors = [{"pixel": item["pixel"], "value": item["value"]} for item in y_left]
+    y_right_anchors = [{"pixel": item["pixel"], "value": item["value"]} for item in y_right]
+    if not _monotonic_anchors(x_anchors):
+        x_anchors = []
+    if not _monotonic_anchors(y_left_anchors):
+        y_left_anchors = []
+    if not _monotonic_anchors(y_right_anchors):
+        y_right_anchors = []
+    return {
+        "x_anchors": x_anchors,
+        "y_left_anchors": y_left_anchors,
+        "y_right_anchors": y_right_anchors,
+        "x_evidence": [item["evidence"] for item in x_values] if x_anchors else [],
+        "y_left_evidence": [item["evidence"] for item in y_left] if y_left_anchors else [],
+        "y_right_evidence": [item["evidence"] for item in y_right] if y_right_anchors else [],
+        "status": "NATIVE_NUMERIC_TICKS_FOUND" if x_anchors or y_left_anchors or y_right_anchors
+                  else "NO_NATIVE_NUMERIC_TICKS",
+        "source": "PDF_NATIVE_TEXT",
+        "provisional": True,
+    }
