@@ -175,6 +175,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     calibration = fit_linear_axis(axis, values[key], item.get(f"{axis}_unit"))
                     item.setdefault("metadata", {})[f"{axis}_axis_anchors"] = values[key]
                     item.setdefault("metadata", {})[f"{axis}_calibration"] = calibration_to_dict(calibration)
+                    item.setdefault("metadata", {})[f"{axis}_axis_calibration"] = calibration_to_dict(calibration)
                     axis_transforms[axis] = calibration
             for key, value in values.items():
                 if key == "points":
