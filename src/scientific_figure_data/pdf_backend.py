@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import importlib
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -96,7 +97,10 @@ class PdfPageView:
         Paths are recorded as geometry evidence only. This routine does not assume that
         every PDFium path is a scientific data curve or that text-as-path is not glyph art.
         """
-        raw = getattr(self._pdfium, "raw", None)
+        try:
+            raw = importlib.import_module("pypdfium2.raw")
+        except ImportError:
+            raw = None
         summary = {
             "backend": self.name,
             "object_inventory_status": "UNAVAILABLE",
