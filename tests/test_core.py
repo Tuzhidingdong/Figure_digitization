@@ -1009,12 +1009,12 @@ def test_review_axis_anchor_patch_recalibrates_panel_csv_and_sqlite(tmp_path: Pa
             "series_id": "series-a",
             "set": {
                 "x_axis_anchors": [
-                    {"pixel": 0.0, "value": 0.0},
-                    {"pixel": 1.0, "value": 2.0},
+                    {"pixel": 10.0, "value": 0.0},
+                    {"pixel": 20.0, "value": 2.0},
                 ],
                 "y_axis_anchors": [
-                    {"pixel": 0.0, "value": 0.0},
-                    {"pixel": 1.0, "value": 4.0},
+                    {"pixel": 20.0, "value": 0.0},
+                    {"pixel": 10.0, "value": 4.0},
                 ],
             },
         }],
