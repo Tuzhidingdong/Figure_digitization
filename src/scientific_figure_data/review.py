@@ -134,7 +134,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
             return conflict
         document = json.loads(target.read_text(encoding="utf-8"))
         series_index = {item["series_id"]: item for item in document.get("series", [])}
-        csv_updates: dict[Path, list[dict]] = {}
+        csv_updates: dict[Path, dict[str, list[dict]]] = {}
         for change in patch["changes"]:
             series_id = change["series_id"]
             if series_id not in series_index:
@@ -147,7 +147,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     csv_path = paper_root / "series" / f"{item['figure_id']}__{item['panel_id']}" / "panel_series.csv"
                     if not csv_path.is_file():
                         raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
-                    csv_updates[csv_path] = _replace_series_points(csv_path, series_id, value)
+                    csv_updates.setdefault(csv_path, {})[series_id] = value
                 else:
                     item[key] = value
             item["extraction_status"] = "REVIEWED_ACCEPTED"
@@ -173,8 +173,8 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
             shutil.copy2(csv_path, backup_path)
             backups[csv_path] = backup_path
         try:
-            for csv_path, rows in csv_updates.items():
-                _write_csv_atomic(csv_path, rows)
+            for csv_path, replacements in csv_updates.items():
+                _replace_series_points_atomic(csv_path, replacements)
             atomic_write_json(target, document)
             new_hash_preview = sha256_file(target)
             # Refresh canonical hashes before committing the SQLite transaction so files and
@@ -246,26 +246,51 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         con.close()
 
 
-def _replace_series_points(csv_path: Path, series_id: str, replacement: list[dict]) -> list[dict]:
-    with csv_path.open("r", newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
+def _replacement_row(series_id: str, point: dict) -> dict:
+    x = point.get("x")
+    return {
+        "series_id": series_id,
+        "point_index": str(point["point_index"]),
+        "x_value": str(x) if isinstance(x, (int, float)) else "",
+        "x_label": x if isinstance(x, str) else "",
+        "y_value": "" if point.get("y") is None else str(point["y"]),
+        "pixel_x": "" if point.get("pixel_x") is None else str(point["pixel_x"]),
+        "pixel_y": "" if point.get("pixel_y") is None else str(point["pixel_y"]),
+        "y_err_low": "" if point.get("y_err_low") is None else str(point["y_err_low"]),
+        "y_err_high": "" if point.get("y_err_high") is None else str(point["y_err_high"]),
+        "err_type": point.get("err_type", "UNKNOWN"),
+    }
+
+
+def _replace_series_points_atomic(csv_path: Path, replacements: dict[str, list[dict]]) -> None:
+    """Rewrite one panel CSV with bounded memory, replacing one or more series atomically."""
+    import os
+    import tempfile
     header = ["series_id", "point_index", "x_value", "x_label", "y_value", "pixel_x",
               "pixel_y", "y_err_low", "y_err_high", "err_type"]
-    retained = [r for r in rows if r.get("series_id") != series_id]
-    for point in replacement:
-        x = point.get("x")
-        retained.append({
-            "series_id": series_id, "point_index": str(point["point_index"]),
-            "x_value": str(x) if isinstance(x, (int, float)) else "",
-            "x_label": x if isinstance(x, str) else "",
-            "y_value": "" if point.get("y") is None else str(point["y"]),
-            "pixel_x": "" if point.get("pixel_x") is None else str(point["pixel_x"]),
-            "pixel_y": "" if point.get("pixel_y") is None else str(point["pixel_y"]),
-            "y_err_low": "" if point.get("y_err_low") is None else str(point["y_err_low"]),
-            "y_err_high": "" if point.get("y_err_high") is None else str(point["y_err_high"]),
-            "err_type": point.get("err_type", "UNKNOWN"),
-        })
-    return retained
+    fd, temporary = tempfile.mkstemp(prefix=f".{csv_path.name}.", suffix=".tmp", dir=csv_path.parent)
+    try:
+        with csv_path.open("r", newline="", encoding="utf-8") as source, \
+             os.fdopen(fd, "w", newline="", encoding="utf-8") as target:
+            reader = csv.DictReader(source)
+            writer = csv.DictWriter(target, fieldnames=header)
+            writer.writeheader()
+            replaced_ids = set(replacements)
+            for row in reader:
+                if row.get("series_id") not in replaced_ids:
+                    writer.writerow(row)
+            for series_id, points in replacements.items():
+                for point in points:
+                    writer.writerow(_replacement_row(series_id, point))
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, csv_path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _write_csv_atomic(path: Path, rows: list[dict]) -> None:
