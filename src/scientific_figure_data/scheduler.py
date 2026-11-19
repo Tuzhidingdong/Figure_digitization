@@ -13,6 +13,7 @@ from typing import Iterable
 
 from .models import JobState, utc_now
 from .storage import connect_catalog, Catalog
+from .hashing import atomic_write_json
 
 
 def _worker_initializer():
@@ -109,6 +110,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     input_root = input_root.resolve()
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
+    started_at = time.perf_counter()
+    peak_rss_bytes = 0
     if dry_run:
         count = sum(1 for _ in paper_paths)
         return {"planned_papers": count, "dry_run": True, "workers": workers}
@@ -182,7 +185,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                             }))
                         catalog.index_paper(snapshot, result.get("figures", []), result.get("panels", []),
                                             series, result["status"], result.get("artifact_paths"),
-                                            paper_root=output_root / "papers" / snapshot.paper_id)
+                                            paper_root=output_root / "papers" / snapshot.paper_id,
+                                            batch_size=int(options.get("batch_size", 1000)))
                     state = result.get("job_state", JobState.COMPLETED.value)
                     ledger.finish(paper_id, state)
                     if state == JobState.BLOCKED.value:
@@ -220,9 +224,46 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         executor = new_executor()
             for _, paper_id in running.values():
                 ledger.heartbeat(paper_id)
+            try:
+                import psutil
+                process = psutil.Process()
+                current_rss = process.memory_info().rss
+                for child in process.children(recursive=True):
+                    try:
+                        current_rss += child.memory_info().rss
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                peak_rss_bytes = max(peak_rss_bytes, current_rss)
+            except ImportError:
+                pass
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
         ledger.close()
         catalog.close()
-    return {**results, "papers_seen": total_seen, "workers": workers,
-            "default_llm_tokens": 0}
+    elapsed = max(0.0, time.perf_counter() - started_at)
+    report = {
+        **results,
+        "papers_seen": total_seen + results["active_jobs_skipped"],
+        "workers": workers,
+        "elapsed_seconds": round(elapsed, 3),
+        "throughput_papers_per_minute": round((total_seen / elapsed) * 60, 3) if elapsed else 0.0,
+        "peak_parent_and_worker_rss_bytes": peak_rss_bytes or None,
+        "default_llm_tokens": 0,
+        "algorithm_version": "0.1.0",
+        "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+    }
+    try:
+        rows = ledger.con.execute(
+            "SELECT last_error FROM jobs WHERE state='FAILED_PERMANENT' AND last_error IS NOT NULL"
+        ).fetchall()
+        categories = {}
+        for row in rows:
+            first_line = str(row["last_error"]).splitlines()[0]
+            category = first_line.split(":", 1)[0]
+            categories[category] = categories.get(category, 0) + 1
+        report["failure_reason_distribution"] = categories
+        report["job_state_counts"] = ledger.status()
+    except Exception:
+        report["failure_reason_distribution"] = {}
+    atomic_write_json(output_root / "run_report.json", report)
+    return report
