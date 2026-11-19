@@ -1,0 +1,5 @@
+name: aop
+version: '1.0'
+inherits: [common_chemistry]
+domain: aop
+description: Advanced oxidation processes.
