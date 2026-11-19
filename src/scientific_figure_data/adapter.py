@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 from typing import Iterator
 
@@ -26,7 +26,8 @@ def discover_papers(input_root: Path) -> Iterator[Path]:
 
 
 def snapshot_paper(paper_dir: Path, input_root: Path) -> PaperSnapshot:
-    return create_snapshot(paper_dir, input_root, paper_dir.name)
+    relative_id = paper_dir.resolve().relative_to(input_root.resolve()).as_posix()
+    return create_snapshot(paper_dir, input_root, relative_id)
 
 
 def load_json_artifact(paper_dir: Path, relative_to_paper: str) -> dict | list | None:
@@ -41,15 +42,14 @@ def load_json_artifact(paper_dir: Path, relative_to_paper: str) -> dict | list |
         return json.load(handle)
 
 
-def locate_pdf(paper_dir: Path, snapshot: PaperSnapshot) -> Path | None:
+def locate_pdf(paper_dir: Path, input_root: Path, snapshot: PaperSnapshot) -> Path | None:
     for artifact in snapshot.artifacts:
         if artifact.role == "main_pdf":
-            candidate = (paper_dir.parent.parent / artifact.path).resolve()
+            candidate = (input_root / artifact.path).resolve()
             try:
                 candidate.relative_to(paper_dir.resolve())
             except ValueError:
-                # The relative path is corpus-root relative; use its basename only within this paper.
-                candidate = paper_dir / Path(artifact.path).name
+                continue
             if candidate.is_file():
                 return candidate
     return None
