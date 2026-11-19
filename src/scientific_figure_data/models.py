@@ -108,6 +108,43 @@ class SeriesRecord:
 
 
 @dataclass(slots=True)
+class Condition:
+    condition_id: str
+    name: str
+    value: Any
+    unit: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class Measurement:
+    measurement_id: str
+    paper_id: str
+    technique: str | None
+    domain: str | None
+    condition_ids: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class EntityRelationship:
+    parent_entity_id: str
+    child_entity_id: str
+    relationship: str
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class DataObservation:
+    observation_id: str
+    paper_id: str
+    name: str
+    raw_value: Any
+    unit: str | None = None
+    source: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class FigureRecord:
     figure_id: str
     paper_id: str
