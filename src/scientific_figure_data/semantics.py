@@ -22,7 +22,7 @@ def convert_dimensionally(value: float, source_unit: str, target_unit: str) -> f
 def resolve_reference_scale(value: float, target_scale: str, details: dict) -> dict:
     """Apply only an explicitly documented conversion; never infer offsets from labels."""
     required = ("reference_electrode", "filling_solution", "filling_concentration",
-                "temperature_k", "electrolyte", "formula_id", "formula_evidence_id",
+                "temperature_k", "electrolyte", "pH", "formula_id", "formula_evidence_id",
                 "scale_factor", "offset_v")
     missing = [key for key in required if details.get(key) in (None, "")]
     if missing:
@@ -58,6 +58,11 @@ def pfas_metric_warning(metric_a: str, metric_b: str) -> str | None:
 
 def preserve_censored_value(raw_value: str) -> dict:
     import re
+    censored = re.fullmatch(r"\s*(<|<=|>|>=)\s*(LOD|LOQ)\s*", raw_value, re.I)
+    if censored:
+        return {"raw": raw_value, "comparator": censored.group(1),
+                "limit_type": censored.group(2).upper(), "numeric_value": None,
+                "status": "CENSORED_VALUE"}
     match = re.fullmatch(r"\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*(.*)", raw_value)
     if match:
         return {"raw": raw_value, "comparator": match.group(1),
