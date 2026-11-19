@@ -221,6 +221,11 @@ def _run(args) -> int:
                 if previous_fingerprint is None or previous_job_state is None:
                     yield paper
                     continue
+                if previous_job_state not in {
+                    "COMPLETED", "COMPLETED_WITH_REVIEW", "NEEDS_REVIEW", "BLOCKED"
+                }:
+                    yield paper
+                    continue
                 current_snapshot = snapshot_paper(paper, input_root)
                 if current_snapshot.input_fingerprint != previous_fingerprint:
                     yield paper
