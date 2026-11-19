@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+from itertools import groupby
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -91,42 +92,55 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
             else:
                 data_stream.write("[")
             first_json_row = True
-            for record in catalog.iter_query_series(selected_filters, batch_size=series_batch_size):
-                series_count += 1
-                if record["y_axis_side"] == "UNASSIGNED":
-                    add_warning(record["series_id"], "DUAL_AXIS_UNASSIGNED")
-                if record["qc_status"] == "PROVISIONAL_UNCALIBRATED":
-                    add_warning(record["series_id"], "QC_PROVISIONAL_UNCALIBRATED")
-                if record["review_state"] != "REVIEWED_ACCEPTED":
-                    add_warning(record["series_id"], "NOT_REVIEWED_ACCEPTED")
-                associations = catalog.series_associations(record["series_id"])
-                if not associations["subject_links"] or all(
-                    link.get("link_status") != "ASSIGNED_WITH_EVIDENCE"
-                    for link in associations["subject_links"]
-                ):
-                    add_warning(record["series_id"], "SUBJECT_LINK_UNASSIGNED")
-                if not associations["conditions"]:
-                    add_warning(record["series_id"], "CONDITIONS_NOT_LINKED")
-                metadata = json.loads(record.get("metadata_json") or "{}")
-                if "REFERENCE_CONVERSION_UNRESOLVED" in json.dumps(metadata):
-                    add_warning(record["series_id"], "REFERENCE_CONVERSION_UNRESOLVED")
+            series_iterator = catalog.iter_query_series(selected_filters, batch_size=series_batch_size)
+            panel_key = lambda row: (row["paper_id"], row["figure_id"], row["panel_id"])
+            for key, grouped_records in groupby(series_iterator, key=panel_key):
+                panel_records = list(grouped_records)  # bounded to one panel, not one paper/corpus
+                record_map = {record["series_id"]: record for record in panel_records}
+                associations_map = {}
+                for record in panel_records:
+                    series_count += 1
+                    if record["y_axis_side"] == "UNASSIGNED":
+                        add_warning(record["series_id"], "DUAL_AXIS_UNASSIGNED")
+                    if record["qc_status"] == "PROVISIONAL_UNCALIBRATED":
+                        add_warning(record["series_id"], "QC_PROVISIONAL_UNCALIBRATED")
+                    if record["review_state"] != "REVIEWED_ACCEPTED":
+                        add_warning(record["series_id"], "NOT_REVIEWED_ACCEPTED")
+                    associations = catalog.series_associations(record["series_id"])
+                    associations_map[record["series_id"]] = associations
+                    if not associations["subject_links"] or all(
+                        link.get("link_status") != "ASSIGNED_WITH_EVIDENCE"
+                        for link in associations["subject_links"]
+                    ):
+                        add_warning(record["series_id"], "SUBJECT_LINK_UNASSIGNED")
+                    if not associations["conditions"]:
+                        add_warning(record["series_id"], "CONDITIONS_NOT_LINKED")
+                    metadata = json.loads(record.get("metadata_json") or "{}")
+                    if "REFERENCE_CONVERSION_UNRESOLVED" in json.dumps(metadata):
+                        add_warning(record["series_id"], "REFERENCE_CONVERSION_UNRESOLVED")
+                paper_id, figure_id, panel_id = key
                 points_path = (
-                    output_root / "papers" / record["paper_id"] / "series" /
-                    f"{record['figure_id']}__{record['panel_id']}" / "panel_series.csv"
+                    output_root / "papers" / paper_id / "series" /
+                    f"{figure_id}__{panel_id}" / "panel_series.csv"
                 )
                 if not points_path.is_file():
-                    add_warning(record["series_id"], "CANONICAL_POINTS_FILE_MISSING")
+                    for series_id in record_map:
+                        add_warning(series_id, "CANONICAL_POINTS_FILE_MISSING")
                     continue
-                for point in _point_rows(points_path, record["series_id"]):
-                    row = _make_row(record, point, associations)
-                    if csv_writer:
-                        csv_writer.writerow(row)
-                    else:
-                        if not first_json_row:
-                            data_stream.write(",")
-                        data_stream.write(json.dumps(row, ensure_ascii=False))
-                        first_json_row = False
-                    point_count += 1
+                with points_path.open("r", newline="", encoding="utf-8") as points_stream:
+                    for point in csv.DictReader(points_stream):
+                        record = record_map.get(point["series_id"])
+                        if record is None:
+                            continue
+                        row = _make_row(record, point, associations_map[record["series_id"]])
+                        if csv_writer:
+                            csv_writer.writerow(row)
+                        else:
+                            if not first_json_row:
+                                data_stream.write(",")
+                            data_stream.write(json.dumps(row, ensure_ascii=False))
+                            first_json_row = False
+                        point_count += 1
             if fmt == "json":
                 data_stream.write("]\n")
             data_stream.flush()
