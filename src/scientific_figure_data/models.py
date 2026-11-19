@@ -10,7 +10,7 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-class JobState(StrEnum):
+class JobState(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     RETRY_WAIT = "RETRY_WAIT"
