@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-PROFILE_ROOT = Path(__file__).resolve().parents[2] / "configs" / "profiles"
+_REPOSITORY_PROFILE_ROOT = Path(__file__).resolve().parents[2] / "configs" / "profiles"
+_PACKAGE_PROFILE_ROOT = Path(__file__).resolve().parent / "configs" / "profiles"
+PROFILE_ROOT = _REPOSITORY_PROFILE_ROOT if _REPOSITORY_PROFILE_ROOT.is_dir() else _PACKAGE_PROFILE_ROOT
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
