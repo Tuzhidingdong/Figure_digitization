@@ -5,6 +5,8 @@ This project keeps the core runtime dependency-light. Optional packages are not 
 | Component | Use | Declared package/license status | Distribution note |
 |---|---|---|---|
 | Python standard library | Core runtime, SQLite, hashing, JSON, CSV, scheduler | Python PSF license | Provided by Python distribution |
+| psutil | Process memory measurement and resource limits | BSD-3-Clause | Runtime dependency; include package notice |
+| PyYAML | YAML domain-profile configuration | MIT | Runtime dependency; include package notice |
 | pypdfium2 | Optional PDF rendering and text page access | Verify exact pinned release notices; pypdfium2 project uses Apache-2.0/BSD-3-Clause notices and bundles PDFium | Preserve included PDFium and dependency notices with any binary distribution |
 | PDFium | Native PDF engine used by pypdfium2 | Upstream component license notices apply | Raw API availability varies by build; symbol presence is not proof of full path extraction |
 | Pillow | Optional image loading/cropping | HPND | Include package notice if redistributed |
