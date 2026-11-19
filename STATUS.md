@@ -1,58 +1,85 @@
 # STATUS — Figure_digitization
 
-> Execution tracking for TASK_PLAN_v1.4.1.md. This file records implementation progress only; it does not modify the frozen objective, scope, constraints, or acceptance criteria.
+> Execution tracking for [TASK_PLAN_v1.4.1.md](./TASK_PLAN_v1.4.1.md). This file records implementation progress only; it does not modify the frozen objective, scope, constraints, or acceptance criteria.
 
 ## Baseline
 
 - Task Plan: [TASK_PLAN_v1.4.1.md](./TASK_PLAN_v1.4.1.md)
 - Task Plan version: v1.4.1
-- Baseline status: FROZEN
+- Baseline status: FROZEN — DO NOT EDIT
 - Plan commit: 6d6386e13da72d67d70bc0a93b83df2cce6594c3
-- Implementation status: NOT STARTED
+- Implementation branch: main
+- Implementation status: IN PROGRESS
 - Release status: NOT AUTHORIZED
+- Default runtime: Windows 10/11; 8 GB RAM; 4 logical CPU cores; no GPU
+- Default worker mode: one isolated worker, sequential lazy streaming
+- Default LLM usage: zero tokens
 
 ## Current milestone
 
-**M0 — Repository and technical-spike preparation**
+**M0 — Repository and executable foundation**
 
-The requirements baseline has been committed. No application code, extraction algorithm, runtime dependency, or release artifact has been implemented.
+The frozen requirements baseline has been verified. Implementation is authorized. The repository had no application code at the start of this milestone. Work is proceeding on `main`; the frozen Task Plan is not being edited.
 
 ## Progress
 
-| Area | Status | Evidence |
+| Area | Status | Evidence / notes |
 |---|---|---|
-| v1.4.1 Task Plan frozen | COMPLETE | TASK_PLAN_v1.4.1.md |
-| Upstream read-only contract | NOT STARTED | — |
-| Corpus/paper manifest design | NOT STARTED | — |
-| PDF backend technical spike (3–5 representative PDFs) | NOT STARTED | — |
-| Annotated real-paper benchmark selection | PENDING USER INPUT | — |
-| P0 implementation | NOT STARTED | — |
-| P0 real-paper validation | NOT STARTED | — |
-| P1 implementation | DEFERRED | — |
-| P2 implementation | DEFERRED | — |
+| v1.4.1 Task Plan frozen | COMPLETE | `TASK_PLAN_v1.4.1.md`; original blob retained |
+| Implementation authorization | COMPLETE | User authorization in conversation, 2026-11-19 |
+| Repository foundation and package metadata | IN PROGRESS | Initial implementation |
+| Read-only upstream adapter | NOT STARTED | |
+| Corpus/paper manifests and fingerprints | NOT STARTED | |
+| Paper-level MAIN/SI context index | NOT STARTED | |
+| PDF backend abstraction and 3–5-PDF probe | NOT STARTED | No approved real PDF benchmark files supplied yet |
+| Scheduler, leases, recovery | NOT STARTED | |
+| P0 figure/panel inventory | NOT STARTED | |
+| P0 raster/vector/hybrid extraction | NOT STARTED | Must report actual supported scope honestly |
+| Domain profiles | NOT STARTED | Battery / AOP / PFOA-PFAS |
+| Canonical artifacts and SQLite single writer | NOT STARTED | |
+| Query and ML export CLI | NOT STARTED | |
+| Offline review helper and patch apply | NOT STARTED | |
+| QC provisional thresholds | NOT STARTED | Calibrated thresholds require annotated real papers |
+| Windows resource and crash tests | NOT STARTED | Cannot be fully verified in hosted GitHub-only development |
+| Real-paper P0 validation | BLOCKED ON USER BENCHMARK INPUT | No approved PDFs/annotations are present in this repository |
+| P1 implementation | DEFERRED | Per frozen plan |
+| P2 implementation | DEFERRED | Per frozen plan |
 
 ## Acceptance tracking
 
-- P0 criteria: AC-01–AC-50 and AC-52–AC-98, subject to their stated prerequisites and evidence requirements.
-- P1 criteria: AC-51, AC-99, AC-100.
-- P2 criteria: AC-101.
-- Release criteria: AC-06, AC-16, AC-36, AC-68, AC-94, AC-102 (some are also P0 implementation criteria).
+The canonical acceptance criteria are AC-01–AC-102 in the frozen Task Plan.
 
-No acceptance criterion is marked implemented or validated at baseline.
+No criterion is marked scientifically validated until corresponding evidence is recorded. Implementation tests do not substitute for real-paper benchmark acceptance.
 
-## First authorized engineering work
+- P0: AC-01–AC-50, AC-52–AC-98, subject to stated prerequisites.
+- P1: AC-51, AC-99–AC-100.
+- P2: AC-101.
+- Release: AC-06, AC-16, AC-36, AC-68, AC-94, AC-102.
 
-1. Initialize repository structure and documentation conventions without changing the frozen Task Plan.
-2. Define the read-only chem-literature input contract and representative adapter fixtures.
-3. Prepare the 3–5 PDF backend technical spike, including Peak RSS, per-page time, object/path coverage, Windows compatibility, and license review.
-4. Record the spike results and backend decision before committing to the P0 PDF extraction implementation.
+## Engineering log
+
+### 2026-11-19 — M0 started
+
+- Verified repository default branch and frozen Task Plan.
+- Verified baseline Task Plan commit: `6d6386e13da72d67d70bc0a93b83df2cce6594c3`.
+- Verified latest pre-development commit: `a8d7ed790d52b36208771450098d0721a5a40c27`.
+- Confirmed the repository had no application code at the start.
+- User explicitly authorized implementation directly in this repository.
+- Non-negotiable: do not modify `TASK_PLAN_v1.4.1.md`.
+- Real-paper backend benchmarking and calibrated QC remain dependent on user-approved PDF/annotation inputs.
 
 ## Constraints carried forward
 
-- Windows-first; baseline target 8 GB RAM / 4 logical CPU cores / no GPU.
-- Default one-worker sequential streaming.
+- Windows-first; baseline 8 GB RAM / 4 logical CPU cores / no GPU.
+- One worker by default; lazy synchronous iteration inside the worker.
+- Bounded queues only at actual asynchronous boundaries.
+- Heavy PDF/image resources must be loaded on demand and released promptly.
+- Compact cross-page MAIN/SI text context is allowed; image pages remain on-demand.
 - Zero LLM tokens by default; no automatic paid-model fallback.
-- Upstream chem-literature inputs are read-only.
+- Upstream `chem-literature` inputs are read-only.
+- Workers never write concurrently to SQLite.
 - Real annotated papers are required for scientific acceptance.
-- Do not claim calibrated QC while only provisional thresholds exist.
+- Provisional QC must be labeled `PROVISIONAL_UNCALIBRATED`.
+- P0 ambiguous same-color/crossing/marker-dependent raster curves may be routed to `NEEDS_REVIEW`.
+- Review patches must use base-hash validation and reject stale patches.
 - No public release or publication is authorized.
