@@ -176,6 +176,23 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                      json.dumps({"patch_id": patch_id, "original_hash": current_hash,
                                  "revised_hash": new_hash_preview}, ensure_ascii=False)),
                 )
+                con.execute(
+                    "UPDATE papers SET status='REVIEWED_ACCEPTED',updated_at=? WHERE paper_id=?",
+                    (datetime.now(timezone.utc).isoformat(), paper_id),
+                )
+            # Keep the paper bundle's artifact hashes consistent with the newly accepted result.
+            bundle_path = paper_root / "paper_bundle.json"
+            if bundle_path.is_file():
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                bundle["generated_at"] = datetime.now(timezone.utc).isoformat()
+                paths = bundle.get("canonical_artifacts", [])
+                refreshed = {}
+                for relative in paths:
+                    artifact_path = paper_root / relative
+                    if artifact_path.is_file():
+                        refreshed[relative] = sha256_file(artifact_path)
+                bundle["content_hashes"] = refreshed
+                atomic_write_json(bundle_path, bundle)
         except Exception:
             shutil.copy2(backup_digitization, target)
             for csv_path, backup_path in backups.items():
