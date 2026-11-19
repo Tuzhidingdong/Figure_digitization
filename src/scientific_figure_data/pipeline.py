@@ -344,7 +344,7 @@ def _extract_panel(
 
         def use_y_axis_candidates(axis_candidates):
             nonlocal y_axis_anchors
-            if relative_signal or len(y_axis_anchors) >= 2 or not axis_candidates:
+            if explicit_relative_signal or len(y_axis_anchors) >= 2 or not axis_candidates:
                 return
             requested_side = str(definition.get("y_axis_side") or "UNASSIGNED").upper()
             left_anchors = axis_candidates["y_left_anchors"]
@@ -364,8 +364,8 @@ def _extract_panel(
             if len(x_axis_anchors) < 2 and len(native_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = native_axis_evidence["x_anchors"]
             use_y_axis_candidates(native_axis_evidence)
-        if not explicit_relative_signal and family == "SPECTRUM" and len(y_axis_anchors) >= 2:
-            relative_signal = False
+        if not explicit_relative_signal and family == "SPECTRUM":
+            relative_signal = len(y_axis_anchors) < 2
 
         if ocr_evidence and plot_box_pixels and (
             len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
@@ -374,6 +374,16 @@ def _extract_panel(
             if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = ocr_axis_evidence["x_anchors"]
             use_y_axis_candidates(ocr_axis_evidence)
+
+        if ocr_evidence and plot_box_pixels and (
+            len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
+        ):
+            ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box_pixels))
+            if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
+                x_axis_anchors = ocr_axis_evidence["x_anchors"]
+            use_y_axis_candidates(ocr_axis_evidence)
+            if not explicit_relative_signal and family == "SPECTRUM":
+                relative_signal = len(y_axis_anchors) < 2
 
         if native_axis_evidence or ocr_axis_evidence:
             axis_text_evidence = {
@@ -526,11 +536,13 @@ def _extract_panel(
                 else "GEOMETRY_ONLY_NEEDS_REVIEW"
             )
             record.metadata = {"path_order": "PRESERVED", "data_family": family,
+                               "chart_family_classification": classification,
+                               "plot_detection": plot_detection, "color_detection": color_detection,
                                "axis_text_evidence": axis_text_evidence,
                                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                                "calibration_errors": calibration_errors}
-        elif image_path and color_rgb and family not in {"CV", "EIS", "NON_MONOTONIC_CURVE", "UNCLASSIFIED"}:
+        elif image_path and color_rgb and family not in {"CV", "EIS", "NON_MONOTONIC", "NON_MONOTONIC_CURVE"}:
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in color_rgb),
                 int(definition.get("color_tolerance", color_detection.get("color_tolerance", 24) if color_detection else 24)),
@@ -788,7 +800,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                     "render_scale": safe_scale,
                                     "page_width_pdf": page_width,
                                     "page_height_pdf": page_height,
-                                    "page_rotation_degrees": native_page.rotation_degrees,
+                                    "page_rotation_degrees": pdf_page.rotation_degrees,
                                 }
                         finally:
                             rendered.close()
@@ -814,8 +826,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 item.evidence[0]["extraction_channel"] = item.extraction_method
                 item.metadata.setdefault("qc_components", {
                     "panel_segmentation": "INVENTORIED_UNVALIDATED",
-                    "chart_family": "UNCLASSIFIED",
-                    "axis_calibration": "CALIBRATED" if "calibration" in item.metadata else "UNRESOLVED",
+                    "chart_family": item.metadata.get("chart_family_classification", {}).get("status", "UNCLASSIFIED"),
+                    "axis_calibration": "CALIBRATED" if (
+                        item.metadata.get("x_calibration") or item.metadata.get("y_calibration")
+                    ) else "UNRESOLVED",
                     "series_extraction": item.extraction_status,
                     "subject_link": "ASSIGNED_WITH_EVIDENCE" if any(
                         link.get("status") == "ASSIGNED_WITH_EVIDENCE" for link in item.subject_links
@@ -836,8 +850,14 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 "status": panel_status,
                 "segmentation_confidence": None,
                 "segmentation_confidence_status": "NOT_CALIBRATED",
-                "chart_family": "UNCLASSIFIED",
-                "chart_family_status": "NEEDS_REVIEW",
+                "chart_family": (
+                    extracted[0].metadata.get("chart_family_classification", {}).get("chart_family", "UNCLASSIFIED")
+                    if extracted else "UNCLASSIFIED"
+                ),
+                "chart_family_status": (
+                    extracted[0].metadata.get("chart_family_classification", {}).get("status", "NEEDS_REVIEW")
+                    if extracted else "NEEDS_REVIEW"
+                ),
                 "shared_legend_refs": figure["shared_legends"],
             })
 
