@@ -655,3 +655,128 @@ def test_rapidocr_uses_cpu_single_thread_and_reuses_engine(monkeypatch, tmp_path
         assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.use_cuda"] is False
     finally:
         ocr.reset_ocr_engine_for_tests()
+
+
+def _vector_path_object(object_index, points, *, color=(30, 90, 180, 255), closed=False):
+    segments = []
+    for index, point in enumerate(points):
+        segments.append({
+            "index": index,
+            "type": 2 if index == 0 else 0,
+            "type_name": "MOVE_TO" if index == 0 else "LINE_TO",
+            "point_pdf": list(point),
+            "closes_subpath": bool(closed and index == len(points) - 1),
+        })
+    return {
+        "object_index": object_index,
+        "object_type": "PATH",
+        "bounds_pdf": [
+            min(p[0] for p in points), min(p[1] for p in points),
+            max(p[0] for p in points), max(p[1] for p in points),
+        ],
+        "segments": segments,
+        "segment_count": len(segments),
+        "line_only_path": True,
+        "contains_closed_subpath": closed,
+        "path_style": {
+            "stroke_rgba": list(color),
+            "fill_rgba": None,
+            "stroke_width_pdf": 0.8,
+            "fill_mode": 0,
+            "stroke_enabled": True,
+        },
+    }
+
+
+def test_vector_path_candidates_reject_axes_and_keep_curve_order():
+    from scientific_figure_data.vector_paths import choose_vector_paths
+
+    curve_points = [
+        (10, 15), (20, 20), (30, 25), (40, 28),
+        (50, 32), (60, 40), (70, 50), (80, 60),
+    ]
+    native = {"objects": [
+        _vector_path_object(1, [(5, 5), (95, 5), (95, 95), (5, 95)], closed=True),
+        _vector_path_object(2, [(0, 10), (100, 10)]),  # horizontal axis/gridline
+        _vector_path_object(3, curve_points),
+    ]}
+    selected, result = choose_vector_paths(native, (0, 0, 100, 100))
+    assert result["status"] == "UNIQUE_LOW_AMBIGUITY_CANDIDATE"
+    assert [item.object_index for item in selected] == [3]
+    assert list(selected[0].points_pdf) == curve_points
+
+
+def test_vector_path_candidates_route_bezier_and_ambiguous_candidates_to_review():
+    from scientific_figure_data.vector_paths import choose_vector_paths
+
+    points = [(10 + index * 10, 15 + index * 5) for index in range(8)]
+    first = _vector_path_object(1, points)
+    second = _vector_path_object(2, [(x, y + 8) for x, y in points])
+    native = {"objects": [first, second]}
+    selected, result = choose_vector_paths(native, (0, 0, 100, 100))
+    assert not selected
+    assert result["status"] == "NEEDS_REVIEW"
+    assert result["reason"] == "MULTIPLE_VECTOR_CANDIDATES"
+
+    bezier = _vector_path_object(3, points)
+    bezier["segments"][3]["type_name"] = "BEZIER_TO"
+    native = {"objects": [bezier]}
+    selected, result = choose_vector_paths(native, (0, 0, 100, 100))
+    assert not selected
+    assert result["reason"] == "NO_VECTOR_CANDIDATE"
+
+
+def test_pdf_vector_path_is_mapped_into_crop_pixels_and_calibrated_in_original_order(tmp_path: Path):
+    from scientific_figure_data.pipeline import _extract_panel
+    from scientific_figure_data.vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
+
+    points_pdf = [
+        (10, 20), (20, 30), (30, 40), (40, 45),
+        (50, 50), (60, 55), (70, 60), (80, 70),
+    ]
+    native = {"objects": [_vector_path_object(7, points_pdf)]}
+    native_path = tmp_path / "native.json"
+    native_path.write_text(json.dumps(native), encoding="utf-8")
+    crop_mapping = {
+        "crop_left_pdf": 0.0, "crop_top_pdf": 100.0,
+        "render_scale": 2.0, "page_rotation_degrees": 0,
+    }
+    mapped = pdf_points_to_crop_pixels(
+        points_pdf, crop_left_pdf=0.0, crop_top_pdf=100.0, render_scale=2.0
+    )
+    assert mapped[0] == (20.0, 160.0)
+    assert mapped[-1] == (160.0, 60.0)
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "native-cv-trace",
+        "technique": "CV",
+        "domain": "battery",
+        "data_family": "CV",
+        "plot_bbox_pdf": [0, 0, 100, 100],
+        "vector_object_indices": [7],
+        "x_axis_anchors": [{"pixel": 20, "value": -1}, {"pixel": 160, "value": 1}],
+        "y_axis_anchors": [{"pixel": 160, "value": -10}, {"pixel": 60, "value": 10}],
+        "x_unit": "V",
+        "y_unit": "mA cm-2",
+    }
+    panel = {"technique": "CV", "domain": "battery"}
+    figure = {"technique": "CV", "domain": "battery"}
+    records = _extract_panel(
+        None, "paper-1", "Figure1", "a", panel, figure,
+        {"figures": {"Figure1": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), 4, {"artifact": "evidence/page_0004_native.json"},
+        [], "a" * 64, "b" * 64, native_path, crop_mapping,
+    )
+    assert len(records) == 1
+    record = records[0]
+    assert record.extraction_method == "PDFIUM_NATIVE_VECTOR_POLYLINE"
+    assert record.extraction_status == "EXTRACTED_PROVISIONAL"
+    assert [point.point_index for point in record.points] == list(range(8))
+    assert [point.pixel_x for point in record.points] == [point[0] for point in mapped]
+    assert record.points[0].x == -1.0
+    assert record.points[-1].x == 1.0
+    assert record.evidence[0]["source_pdf_sha256"] == "a" * 64
