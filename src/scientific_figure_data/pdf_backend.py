@@ -109,7 +109,7 @@ class PdfPageView:
         except Exception:
             native_text = ""
         summary = {
-            "backend": self.name,
+            "backend": "pypdfium2",
             "object_inventory_status": "UNAVAILABLE",
             "object_count": 0,
             "object_type_counts": {},
