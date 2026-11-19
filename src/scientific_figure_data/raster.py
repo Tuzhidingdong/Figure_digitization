@@ -11,8 +11,8 @@ def trace_monotonic_color(
     image_path: str,
     rgb: tuple[int, int, int],
     tolerance: int,
-    x_calibration: AxisCalibration,
-    y_calibration: AxisCalibration,
+    x_calibration: AxisCalibration | None,
+    y_calibration: AxisCalibration | None,
     *,
     min_pixels_per_column: int = 1,
     max_gap_columns: int = 3,
@@ -69,8 +69,8 @@ def trace_monotonic_color(
     for index, (x, py, _) in enumerate(columns):
         points.append(SeriesPoint(
             point_index=index,
-            x=map_pixel(x_calibration, x),
-            y=map_pixel(y_calibration, py),
+            x=map_pixel(x_calibration, x) if x_calibration else None,
+            y=map_pixel(y_calibration, py) if y_calibration else None,
             pixel_x=float(x), pixel_y=float(py),
         ))
     return points, {
@@ -82,6 +82,7 @@ def trace_monotonic_color(
         "max_gap_columns": max_gap,
         "path_constraint": "X_MONOTONIC_ONLY",
         "qc_status": "PROVISIONAL_UNCALIBRATED",
+        "geometry_only": x_calibration is None or y_calibration is None,
     }
 
 
