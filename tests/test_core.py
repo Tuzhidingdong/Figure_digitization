@@ -324,3 +324,95 @@ def test_catalog_streaming_query_has_no_fixed_10000_series_limit(tmp_path: Path)
     assert rows == 10025
     assert len(catalog.query_series({"paper_id": snapshot.paper_id}, limit=10000)) == 10000
     catalog.close()
+
+
+def test_end_to_end_cli_streaming_workflow_without_pdf_or_gpu(tmp_path: Path, capsys):
+    from scientific_figure_data.cli import main
+
+    input_root = tmp_path / "chem-literature"
+    paper = input_root / "paper-001"
+    paper.mkdir(parents=True)
+    inventory = paper / "figure_inventory.json"
+    inventory.write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "page": 1,
+            "caption": "Electrochemical response",
+            "shared_legends": ["Sample A"],
+            "panels": [{
+                "panel_id": "a",
+                "technique": "CV",
+                "domain": "battery",
+                "bbox": [0.1, 0.1, 0.9, 0.9],
+            }],
+        }]
+    }), encoding="utf-8")
+    (paper / "main_analysis.md").write_text(
+        "Sample A was measured in aqueous electrolyte.\n", encoding="utf-8"
+    )
+    original_hash = sha256_file(inventory)
+    output_root = tmp_path / "scientific-figure-data"
+
+    assert main(["scan", "--input-root", str(input_root), "--output-root", str(output_root)]) == 0
+    capsys.readouterr()
+    manifest_lines = (output_root / "corpus_manifest.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(manifest_lines) == 1
+    assert json.loads(manifest_lines[0])["paper_id"] == "paper-001"
+
+    assert main([
+        "run", "--all", "--input-root", str(input_root), "--output-root", str(output_root), "--dry-run"
+    ]) == 0
+    dry_run = json.loads(capsys.readouterr().out)
+    assert dry_run["planned_papers"] == 1
+
+    assert main([
+        "run", "--all", "--input-root", str(input_root), "--output-root", str(output_root),
+        "--workers", "1", "--memory-limit", "512", "--max-render-pixels", "1000000",
+    ]) == 0
+    run_report = json.loads(capsys.readouterr().out)
+    assert run_report["completed_with_review"] == 1
+    assert run_report["default_llm_tokens"] == 0
+
+    assert main(["status", "--output-root", str(output_root)]) == 0
+    assert "NEEDS_REVIEW" in capsys.readouterr().out
+
+    assert main(["query", "--output-root", str(output_root), "--technique", "CV"]) == 0
+    query_rows = json.loads(capsys.readouterr().out)
+    assert len(query_rows) == 1
+    assert query_rows[0]["series_id"] == "Figure1_a_unassigned"
+
+    export_dir = tmp_path / "ml-output"
+    assert main([
+        "export", "--output-root", str(output_root), "--out", str(export_dir),
+        "--technique", "CV", "--format", "csv",
+    ]) == 0
+    export_manifest = json.loads(capsys.readouterr().out)
+    assert export_manifest["series_count"] == 1
+    assert (export_dir / "dataset.csv").is_file()
+    assert (export_dir / "series_metadata.jsonl").is_file()
+
+    assert main(["index", "rebuild", "--output-root", str(output_root)]) == 0
+    assert json.loads(capsys.readouterr().out)["papers_indexed"] == 1
+    assert main([
+        "validate", "--output-root", str(output_root), "--input-root", str(input_root)
+    ]) == 0
+    validation = json.loads(capsys.readouterr().out)
+    assert validation["status"] == "OK"
+    assert sha256_file(inventory) == original_hash
+
+
+def test_scheduler_resume_reuses_completed_paper_stage(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import run_corpus
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-cache"
+    paper.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    output_root = tmp_path / "output"
+
+    first = run_corpus(input_root, output_root, discover_papers(input_root), workers=1)
+    assert first["completed_with_review"] == 1
+    second = run_corpus(input_root, output_root, discover_papers(input_root), workers=1)
+    assert second["cached"] == 1
+    assert second["completed_with_review"] == 1
