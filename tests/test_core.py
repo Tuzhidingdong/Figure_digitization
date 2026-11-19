@@ -289,9 +289,14 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
         rows = list(csv.DictReader(stream))
     first = next(row for row in rows if row["series_id"] == "series-a")
     assert first["input_fingerprint"] == snapshot.input_fingerprint
-    assert "Sample A" in first["subject_links_json"]
-    assert "electrolyte" in first["conditions_json"]
     assert first["qc_status"] == "PROVISIONAL_UNCALIBRATED"
+    metadata_rows = [
+        json.loads(line) for line in (output / "series_metadata.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    first_metadata = next(row for row in metadata_rows if row["series_id"] == "series-a")
+    assert any(link["canonical_name"] == "Sample A" for link in first_metadata["subject_links"])
+    assert any("electrolyte" in item["name"] for item in first_metadata["conditions"])
+    assert first_metadata["input_fingerprint"] == snapshot.input_fingerprint
     assert (output / "warnings.jsonl").is_file()
     assert manifest["streaming"]["point_rows_buffered"] == 1
 
