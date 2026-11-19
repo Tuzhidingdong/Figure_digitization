@@ -1273,3 +1273,92 @@ def test_pipeline_routes_multicolor_raster_curves_to_review_without_guessing(tmp
     assert not record.points
     assert record.extraction_status == "NEEDS_REVIEW"
     assert record.metadata["color_detection"]["reason"] == "MULTIPLE_CHROMATIC_FAMILIES"
+
+
+def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_pixels(
+    tmp_path: Path, monkeypatch
+):
+    from contextlib import contextmanager
+    from PIL import Image
+    import scientific_figure_data.pipeline as pipeline
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-pdf"
+    paper.mkdir(parents=True)
+    (paper / "article.pdf").write_bytes(b"%PDF-fake-for-backend-adapter")
+    (paper / "figure_inventory.json").write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "page": 1,
+            "caption": "Cyclic voltammetry",
+            "bbox": [0, 0, 1, 1],
+            "panels": [{"panel_id": "a", "technique": "CV", "domain": "battery",
+                        "bbox": [0, 0, 1, 1]}],
+        }]
+    }), encoding="utf-8")
+    points_pdf = [
+        (10, 20), (20, 30), (30, 40), (40, 45),
+        (50, 50), (60, 55), (70, 60), (80, 70),
+    ]
+    native_page = {
+        "backend": "pypdfium2", "native_text": "", "object_inventory_status": "OK",
+        "object_count": 1, "object_type_counts": {"PATH": 1},
+        "objects": [_vector_path_object(7, points_pdf)],
+    }
+
+    class FakePage:
+        size = (100.0, 100.0)
+        rotation_degrees = 0
+
+        def inspect_native_objects(self, **kwargs):
+            return native_page
+
+        def render(self, scale=1.5):
+            return Image.new("RGB", (round(100 * scale), round(100 * scale)), "white")
+
+    class FakeDocument:
+        def __len__(self):
+            return 1
+
+        @contextmanager
+        def page(self, number):
+            assert number == 1
+            yield FakePage()
+
+    class FakeBackend:
+        @contextmanager
+        def open(self, path):
+            assert path.name == "article.pdf"
+            yield FakeDocument()
+
+    monkeypatch.setattr(pipeline, "PdfiumBackend", FakeBackend)
+    output_root = tmp_path / "output"
+    definition = {
+        "series_id": "pdf-vector-curve",
+        "technique": "CV", "domain": "battery", "data_family": "CV",
+        "plot_bbox_pdf": [0, 0, 100, 100],
+        "vector_object_indices": [7],
+        "x_axis_anchors": [{"pixel": 15, "value": -1}, {"pixel": 120, "value": 1}],
+        "y_axis_anchors": [{"pixel": 120, "value": -10}, {"pixel": 45, "value": 10}],
+        "x_unit": "V", "y_unit": "mA cm-2",
+    }
+    override = {"figures": {"Figure1": {"panels": {"a": {"series": [definition]}}}}}
+    override_path = paper / "digitization_overrides.json"
+    override_path.write_text(json.dumps(override), encoding="utf-8")
+
+    result = pipeline.process_paper(input_root, Path("paper-pdf"), output_root)
+    assert result["status"] == "COMPLETED_WITH_REVIEW"
+    assert result["series_count"] == 1
+    record = result["series"][0]
+    assert record["extraction_method"] == "PDFIUM_NATIVE_VECTOR_POLYLINE"
+    mapping = record["metadata"]["crop_mapping"]
+    assert mapping["page_rotation_degrees"] == 0
+    assert mapping["render_scale"] == pytest.approx(1.5)
+    assert mapping["crop_left_pdf"] == pytest.approx(0)
+    assert mapping["crop_top_pdf"] == pytest.approx(100)
+    native_artifact = output_root / "papers" / "paper-pdf" / "evidence" / "page_0001_native.json"
+    assert native_artifact.is_file()
+    panel_image = output_root / "papers" / "paper-pdf" / "evidence" / "Figure1_a.png"
+    assert panel_image.is_file()
+    assert (output_root / "papers" / "paper-pdf" / "series" /
+            "Figure1__a" / "panel_series.csv").is_file()
