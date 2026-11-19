@@ -1,0 +1,5 @@
+name: pfas
+version: '1.0'
+inherits: [common_chemistry, aop]
+domain: pfas
+description: PFAS decomposition, defluorination, products, and fluorine balance.
