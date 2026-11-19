@@ -357,7 +357,7 @@ def _extract_panel(
                         "vector_selection": vector_selection,
                         "axis_text_evidence": axis_text_evidence,
                         "crop_mapping": crop_mapping,
-                        "x_calibration": calibration_to_dict(x_cal),
+                        "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                         "calibration_errors": calibration_errors,
                     }
@@ -366,8 +366,9 @@ def _extract_panel(
                         "reason": "VECTOR_PATH_CANDIDATES_REQUIRE_REVIEW",
                         "vector_selection": vector_selection,
                         "data_family": family,
-                        "x_calibration": calibration_to_dict(x_cal),
-                        "y_calibration": calibration_to_dict(y_cal),
+                        "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
+                        "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                        "calibration_errors": calibration_errors,
                     }
             except (OSError, KeyError, TypeError, ValueError) as exc:
                 record.metadata = {
@@ -436,7 +437,9 @@ def _extract_panel(
                 "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
                 "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
                 "data_family": family,
-                "x_calibration": calibration_to_dict(x_cal), "y_calibration": calibration_to_dict(y_cal),
+                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
+                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                "calibration_errors": calibration_errors,
             }
         if record.points:
             record.qc_status = "PROVISIONAL_UNCALIBRATED"
