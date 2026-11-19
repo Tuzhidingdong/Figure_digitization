@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
 import time
+import json
 import traceback
+from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
-from datetime import datetime, timezone
 from multiprocessing import get_context
 from pathlib import Path
+from typing import Iterable
 
 from .models import JobState, utc_now
 from .storage import connect_catalog, Catalog
@@ -18,6 +19,7 @@ def _worker_initializer():
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
     try:
         import cv2
         cv2.setNumThreads(1)
@@ -25,9 +27,9 @@ def _worker_initializer():
         pass
 
 
-def _process_paper_task(input_root: str, paper_relative: str, output_root: str) -> dict:
+def _process_paper_task(input_root: str, paper_relative: str, output_root: str, options: dict) -> dict:
     from .pipeline import process_paper
-    return process_paper(Path(input_root), Path(paper_relative), Path(output_root))
+    return process_paper(Path(input_root), Path(paper_relative), Path(output_root), options)
 
 
 class JobLedger:
@@ -51,8 +53,9 @@ class JobLedger:
             if row and row["state"] == JobState.RUNNING.value:
                 if row["lease_expires_at"] is None or row["lease_expires_at"] < time.time():
                     self.event(paper_id, "INTERRUPTED_RECOVERY", {"previous_state": "RUNNING"})
-                    self.con.execute("UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=? WHERE paper_id=?",
-                                     (JobState.RETRY_WAIT.value, utc_now(), paper_id))
+                    self.con.execute(
+                        "UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=? WHERE paper_id=?",
+                        (JobState.RETRY_WAIT.value, utc_now(), paper_id))
             self.con.execute(
                 """INSERT INTO jobs(paper_id,state,updated_at) VALUES(?,?,?)
                    ON CONFLICT(paper_id) DO NOTHING""",
@@ -65,23 +68,28 @@ class JobLedger:
             self.con.execute(
                 """UPDATE jobs SET state=?,attempt_count=attempt_count+1,heartbeat_at=?,
                    lease_expires_at=?,current_stage=?,last_error=NULL,updated_at=? WHERE paper_id=?""",
-                (JobState.RUNNING.value, now, now + self.lease_seconds, "PAPER_PROCESSING", utc_now(), paper_id),
+                (JobState.RUNNING.value, now, now + self.lease_seconds,
+                 "PAPER_PROCESSING", utc_now(), paper_id),
             )
             self.event(paper_id, "JOB_STARTED", {})
 
     def heartbeat(self, paper_id: str):
         now = time.time()
         with self.con:
-            self.con.execute("UPDATE jobs SET heartbeat_at=?,lease_expires_at=?,updated_at=? WHERE paper_id=?",
-                             (now, now + self.lease_seconds, utc_now(), paper_id))
+            self.con.execute(
+                "UPDATE jobs SET heartbeat_at=?,lease_expires_at=?,updated_at=? WHERE paper_id=?",
+                (now, now + self.lease_seconds, utc_now(), paper_id))
 
     def finish(self, paper_id: str, state: str, error: str | None = None):
         with self.con:
             self.con.execute(
                 "UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=?,last_error=? WHERE paper_id=?",
-                (state, utc_now(), error, paper_id),
-            )
+                (state, utc_now(), error, paper_id))
             self.event(paper_id, state, {"error": error} if error else {})
+
+    def attempt_count(self, paper_id: str) -> int:
+        row = self.con.execute("SELECT attempt_count FROM jobs WHERE paper_id=?", (paper_id,)).fetchone()
+        return int(row["attempt_count"]) if row else 0
 
     def status(self):
         return [dict(row) for row in self.con.execute(
@@ -89,87 +97,122 @@ class JobLedger:
         )]
 
 
-def run_corpus(input_root: Path, output_root: Path, paper_paths: list[Path],
+def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                workers: int = 1, max_attempts: int = 2, lease_seconds: int = 180,
-               dry_run: bool = False) -> dict:
+               dry_run: bool = False, options: dict | None = None) -> dict:
     if workers < 1 or workers > 4:
         raise ValueError("workers must be between 1 and 4; default is 1 for low-memory systems")
-    db_path = output_root / "catalog.sqlite"
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+    input_root = input_root.resolve()
+    output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    ledger = JobLedger(db_path, lease_seconds)
-    catalog = Catalog(db_path)
-    for paper in paper_paths:
-        ledger.prepare(paper.relative_to(input_root).as_posix())
-    if dry_run:
-        ledger.close()
-        catalog.close()
-        return {"planned_papers": len(paper_paths), "dry_run": True}
-
-    pending = [p for p in paper_paths]
-    results = {"completed": 0, "completed_with_review": 0, "failed": 0, "retried": 0}
+    ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
+    catalog = Catalog(output_root / "catalog.sqlite")
+    results = {"completed": 0, "completed_with_review": 0, "blocked_review_locked": 0,
+               "failed": 0, "retried": 0, "cached": 0}
+    source = iter(paper_paths)
+    retry_queue = deque()
+    source_exhausted = False
+    total_seen = 0
+    options = options or {}
     context = get_context("spawn")
-    executor = ProcessPoolExecutor(max_workers=workers, mp_context=context,
+
+    def new_executor():
+        return ProcessPoolExecutor(max_workers=workers, mp_context=context,
                                    initializer=_worker_initializer, max_tasks_per_child=5)
+
+    executor = new_executor()
     running = {}
-    cursor = 0
     try:
-        while cursor < len(pending) or running:
-            while cursor < len(pending) and len(running) < workers:
-                paper = pending[cursor]
-                cursor += 1
-                paper_id = paper.relative_to(input_root).as_posix()
+        while running or retry_queue or not source_exhausted:
+            while len(running) < workers:
+                if retry_queue:
+                    paper, paper_id = retry_queue.popleft()
+                elif not source_exhausted:
+                    try:
+                        paper = next(source)
+                    except StopIteration:
+                        source_exhausted = True
+                        break
+                    paper_id = paper.relative_to(input_root).as_posix()
+                    ledger.prepare(paper_id)
+                    total_seen += 1
+                else:
+                    break
                 ledger.start(paper_id)
-                future = executor.submit(_process_paper_task, str(input_root), paper_id, str(output_root))
-                running[future] = (paper_id, paper)
+                future = executor.submit(_process_paper_task, str(input_root), paper_id,
+                                         str(output_root), options)
+                running[future] = (paper, paper_id)
             if not running:
                 continue
-            done, _ = wait(running, timeout=5, return_when=FIRST_COMPLETED)
-            for future in list(running):
-                paper_id, paper = running[future]
-                if future not in done:
-                    ledger.heartbeat(paper_id)
-                    continue
-                running.pop(future)
+
+            done, _ = wait(tuple(running), timeout=3, return_when=FIRST_COMPLETED)
+            for future in tuple(done):
+                paper, paper_id = running.pop(future)
                 try:
                     result = future.result()
-                    snapshot_dict = result["snapshot"]
-                    from .models import PaperSnapshot, InputArtifact, SeriesRecord, SeriesPoint
-                    snapshot = PaperSnapshot(
-                        paper_id=snapshot_dict["paper_id"], source_dir=snapshot_dict["source_dir"],
-                        detected_upstream_version=snapshot_dict.get("detected_upstream_version"),
-                        adapter_version=snapshot_dict["adapter_version"], created_at=snapshot_dict["created_at"],
-                        artifacts=[InputArtifact(**a) for a in snapshot_dict.get("artifacts", [])],
-                        missing_roles=snapshot_dict.get("missing_roles", []),
-                        warnings=snapshot_dict.get("warnings", []),
-                        input_fingerprint=snapshot_dict["input_fingerprint"],
-                    )
-                    series = []
-                    for item in result.get("series", []):
-                        series.append(SeriesRecord(**{
-                            **item, "points": [SeriesPoint(**p) for p in item.get("points", [])]
-                        }))
-                    catalog.index_paper(snapshot, result.get("figures", []), result.get("panels", []),
-                                        series, result["status"], result.get("artifact_paths"))
-                    ledger.finish(paper_id, result["job_state"])
-                    results["completed_with_review" if result["job_state"] in {
-                        JobState.COMPLETED_WITH_REVIEW.value, JobState.NEEDS_REVIEW.value
-                    } else "completed"] += 1
-                except BrokenProcessPool as exc:
-                    error = f"WORKER_POOL_BROKEN: {exc}"
-                    ledger.finish(paper_id, JobState.RETRY_WAIT.value, error)
-                    results["retried"] += 1
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    executor = ProcessPoolExecutor(max_workers=workers, mp_context=context,
-                                                   initializer=_worker_initializer, max_tasks_per_child=5)
-                    # Requeue remaining paper including failed task, bounded by attempts.
-                    pending[cursor:cursor] = [paper]
-                    cursor = max(0, cursor - 0)
+                    if result.get("cached"):
+                        results["cached"] += 1
+                    else:
+                        from .models import PaperSnapshot, InputArtifact, SeriesRecord, SeriesPoint
+                        snapshot_data = result["snapshot"]
+                        snapshot = PaperSnapshot(
+                            paper_id=snapshot_data["paper_id"], source_dir=snapshot_data["source_dir"],
+                            detected_upstream_version=snapshot_data.get("detected_upstream_version"),
+                            adapter_version=snapshot_data["adapter_version"], created_at=snapshot_data["created_at"],
+                            artifacts=[InputArtifact(**a) for a in snapshot_data.get("artifacts", [])],
+                            missing_roles=snapshot_data.get("missing_roles", []),
+                            warnings=snapshot_data.get("warnings", []),
+                            input_fingerprint=snapshot_data["input_fingerprint"],
+                        )
+                        series = []
+                        for item in result.get("series", []):
+                            series.append(SeriesRecord(**{
+                                **item, "points": [SeriesPoint(**p) for p in item.get("points", [])]
+                            }))
+                        catalog.index_paper(snapshot, result.get("figures", []), result.get("panels", []),
+                                            series, result["status"], result.get("artifact_paths"))
+                    state = result.get("job_state", JobState.COMPLETED.value)
+                    ledger.finish(paper_id, state)
+                    if state == JobState.BLOCKED.value:
+                        results["blocked_review_locked"] += 1
+                    elif state in {JobState.NEEDS_REVIEW.value, JobState.COMPLETED_WITH_REVIEW.value}:
+                        results["completed_with_review"] += 1
+                    else:
+                        results["completed"] += 1
                 except Exception as exc:
-                    ledger.finish(paper_id, JobState.FAILED_PERMANENT.value,
-                                  f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=5)}")
-                    results["failed"] += 1
+                    error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=5)}"
+                    attempt = ledger.attempt_count(paper_id)
+                    retryable = isinstance(exc, (BrokenProcessPool, OSError, TimeoutError, MemoryError))
+                    if retryable and attempt < max_attempts:
+                        ledger.finish(paper_id, JobState.RETRY_WAIT.value, error)
+                        retry_queue.append((paper, paper_id))
+                        results["retried"] += 1
+                    else:
+                        ledger.finish(paper_id, JobState.FAILED_PERMANENT.value, error)
+                        results["failed"] += 1
+                    if isinstance(exc, BrokenProcessPool):
+                        # A broken executor cannot accept more tasks. Unfinished tasks are
+                        # requeued; completed canonical artifacts are reused on their retry.
+                        for pending_future, (pending_paper, pending_id) in tuple(running.items()):
+                            pending_future.cancel()
+                            ledger.finish(pending_id, JobState.RETRY_WAIT.value, "WORKER_POOL_BROKEN")
+                            if ledger.attempt_count(pending_id) < max_attempts:
+                                retry_queue.append((pending_paper, pending_id))
+                                results["retried"] += 1
+                            else:
+                                ledger.finish(pending_id, JobState.FAILED_PERMANENT.value,
+                                              "WORKER_POOL_BROKEN: retry limit reached")
+                                results["failed"] += 1
+                            running.pop(pending_future, None)
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor = new_executor()
+            for _, paper_id in running.values():
+                ledger.heartbeat(paper_id)
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
         ledger.close()
         catalog.close()
-    return {**results, "papers_submitted": len(paper_paths)}
+    return {**results, "papers_seen": total_seen, "workers": workers,
+            "default_llm_tokens": 0}
