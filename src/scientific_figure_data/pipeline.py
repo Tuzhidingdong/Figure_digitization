@@ -356,7 +356,10 @@ def _extract_panel(
         pixel_points = definition.get("pixel_points")
         family = str(definition.get("data_family", "")).upper()
         vector_selection = None
-        if (native_page_path and native_page_path.is_file() and plot_bbox_pdf
+        vector_requested = bool(vector_indices) or (
+            bool(plot_bbox_pdf) and not pixel_points and not definition.get("color_rgb")
+        )
+        if (vector_requested and native_page_path and native_page_path.is_file() and plot_bbox_pdf
                 and crop_mapping and crop_mapping.get("page_rotation_degrees", 0) == 0):
             try:
                 if native_payload is None:
@@ -423,7 +426,7 @@ def _extract_panel(
             if vector_selection and vector_selection.get("status") == "NEEDS_REVIEW":
                 results.append(record)
                 continue
-        elif vector_indices or plot_bbox_pdf:
+        elif vector_requested:
             record.metadata = {
                 "reason": "VECTOR_PATH_MAPPING_UNAVAILABLE",
                 "note": "Vector extraction requires an unrotated PDF page, explicit plot_bbox_pdf, crop geometry, and PDFium native path evidence.",
