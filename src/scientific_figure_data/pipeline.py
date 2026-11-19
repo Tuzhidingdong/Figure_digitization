@@ -93,6 +93,10 @@ def bundle_is_intact(paper_root: Path) -> bool:
         return False
     try:
         bundle = _json_file(bundle_path)
+        digitization = _json_file(paper_root / "digitization.json")
+        if (bundle.get("input_fingerprint") != digitization.get("input_fingerprint")
+                or bundle.get("stage_fingerprint") != digitization.get("stage_fingerprint")):
+            return False
         hashes = bundle.get("content_hashes", {})
         required = {
             "paper_manifest.json", "figure_inventory.json", "panel_layout.json",
@@ -235,6 +239,9 @@ def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = Fal
     if not bundle_path.is_file():
         return None
     bundle = _json_file(bundle_path)
+    if (bundle.get("input_fingerprint") != digitization.get("input_fingerprint")
+            or bundle.get("stage_fingerprint") != digitization.get("stage_fingerprint")):
+        return None
     for relative, expected_hash in bundle.get("content_hashes", {}).items():
         artifact = (paper_root / relative).resolve()
         try:
@@ -736,6 +743,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     "bundle_path": str(paper_output / "paper_bundle.json"),
                 }
                 return locked
+            # A broken or mismatched bundle must never cause accepted data to be
+            # silently recomputed. Stop and preserve the reviewed files for recovery.
+            return {
+                "cached": True,
+                "snapshot": snapshot.to_dict(),
+                "figures": [], "panels": [], "series": [],
+                "status": "BLOCKED_REVIEW_LOCKED",
+                "job_state": JobState.BLOCKED.value,
+                "reason": "REVIEWED_ARTIFACT_INTEGRITY_FAILURE",
+            }
     if existing.is_file() and (force_reviewed or not accepted or old.get("input_fingerprint") != snapshot.input_fingerprint
                                 or old.get("algorithm_version") != ALGORITHM_VERSION):
         version_key = snapshot.input_fingerprint[:12] + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
