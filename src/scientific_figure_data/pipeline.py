@@ -9,6 +9,7 @@ from typing import Any
 
 from .adapter import snapshot_paper
 from .calibration import calibration_to_dict, fit_linear_axis
+from .axis_text import extract_numeric_axis_anchors
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
@@ -256,8 +257,31 @@ def _extract_panel(
             "ARBITRARY_RELATIVE", "SERIES_RELATIVE_SIGNAL"
         }
         plot_box = definition.get("plot_box")
+        axis_text_evidence = None
+        x_axis_anchors = definition.get("x_axis_anchors", [])
+        y_axis_anchors = definition.get("y_axis_anchors", [])
+        if ocr_evidence and plot_box and (
+            len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
+        ):
+            axis_text_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box))
+            if len(x_axis_anchors) < 2 and len(axis_text_evidence["x_anchors"]) >= 2:
+                x_axis_anchors = axis_text_evidence["x_anchors"]
+            if not relative_signal and len(y_axis_anchors) < 2:
+                requested_side = str(definition.get("y_axis_side") or "UNASSIGNED").upper()
+                left_anchors = axis_text_evidence["y_left_anchors"]
+                right_anchors = axis_text_evidence["y_right_anchors"]
+                if requested_side == "LEFT" and len(left_anchors) >= 2:
+                    y_axis_anchors = left_anchors
+                elif requested_side == "RIGHT" and len(right_anchors) >= 2:
+                    y_axis_anchors = right_anchors
+                elif len(left_anchors) >= 2 and len(right_anchors) < 2:
+                    y_axis_anchors = left_anchors
+                    record.y_axis_side = "LEFT"
+                elif len(right_anchors) >= 2 and len(left_anchors) < 2:
+                    y_axis_anchors = right_anchors
+                    record.y_axis_side = "RIGHT"
         try:
-            x_cal = fit_linear_axis("x", definition.get("x_axis_anchors", []), definition.get("x_unit"))
+            x_cal = fit_linear_axis("x", x_axis_anchors, definition.get("x_unit"))
             if relative_signal:
                 if not plot_box or not image_path:
                     raise ValueError("Relative signal requires an explicit plot_box and panel image")
@@ -275,7 +299,7 @@ def _extract_panel(
                     status="SERIES_RELATIVE_SIGNAL",
                 )
             else:
-                y_cal = fit_linear_axis("y", definition.get("y_axis_anchors", []), definition.get("y_unit"))
+                y_cal = fit_linear_axis("y", y_axis_anchors, definition.get("y_unit"))
         except (ValueError, TypeError, ImportError):
             results.append(record)
             continue
@@ -311,6 +335,7 @@ def _extract_panel(
                         "vector_stroke_rgba": selected_paths[0].stroke_rgba,
                         "vector_stroke_width_pdf": selected_paths[0].stroke_width_pdf,
                         "vector_selection": vector_selection,
+                        "axis_text_evidence": axis_text_evidence,
                         "crop_mapping": crop_mapping,
                         "x_calibration": calibration_to_dict(x_cal),
                         "y_calibration": calibration_to_dict(y_cal),
@@ -353,6 +378,7 @@ def _extract_panel(
             record.extraction_method = "EXPLICIT_ORDERED_PIXEL_POLYLINE"
             record.extraction_status = "EXTRACTED_PROVISIONAL" if len(record.points) >= 2 else "NEEDS_REVIEW"
             record.metadata = {"path_order": "PRESERVED", "data_family": family,
+                               "axis_text_evidence": axis_text_evidence,
                                "x_calibration": calibration_to_dict(x_cal),
                                "y_calibration": calibration_to_dict(y_cal)}
         elif image_path and definition.get("color_rgb") and family not in {"CV", "EIS", "NON_MONOTONIC"}:
@@ -365,6 +391,7 @@ def _extract_panel(
             record.extraction_status = "EXTRACTED_PROVISIONAL" if record.points else "NEEDS_REVIEW"
             record.metadata = {"x_calibration": calibration_to_dict(x_cal),
                                "y_calibration": calibration_to_dict(y_cal), "raster_qc": qc,
+                               "axis_text_evidence": axis_text_evidence,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
         else:
             record.metadata = {
