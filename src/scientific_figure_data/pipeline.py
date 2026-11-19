@@ -419,7 +419,7 @@ def _extract_panel(
         color_rgb = definition.get("color_rgb")
         color_detection = None
         if (not color_rgb and image_path and plot_box_pixels
-                and family not in {"NON_MONOTONIC_CURVE", "CV", "EIS", "UNCLASSIFIED"}):
+                and family not in {"NON_MONOTONIC", "NON_MONOTONIC_CURVE", "CV", "EIS", "UNCLASSIFIED"}):
             try:
                 color_detection = detect_single_trace_color(image_path, plot_box_pixels)
                 if color_detection.get("status") == "UNIQUE_CHROMATIC_FAMILY":
