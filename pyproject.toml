@@ -33,4 +33,4 @@ line-length = 100
 target-version = "py311"
 
 [tool.setuptools.package-data]
-scientific_figure_data = ["configs/profiles/**/*.yaml"]
+scientific_figure_data = ["configs/*.yaml", "configs/profiles/**/*.yaml"]
