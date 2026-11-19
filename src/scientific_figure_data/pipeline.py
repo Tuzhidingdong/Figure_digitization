@@ -368,15 +368,7 @@ def _extract_panel(
             relative_signal = len(y_axis_anchors) < 2
 
         if ocr_evidence and plot_box_pixels and (
-            len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
-        ):
-            ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box_pixels))
-            if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
-                x_axis_anchors = ocr_axis_evidence["x_anchors"]
-            use_y_axis_candidates(ocr_axis_evidence)
-
-        if ocr_evidence and plot_box_pixels and (
-            len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
+            len(x_axis_anchors) < 2 or (not explicit_relative_signal and len(y_axis_anchors) < 2)
         ):
             ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box_pixels))
             if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
