@@ -252,8 +252,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "algorithm_version": "0.1.0",
         "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
     }
+    report_con = connect_catalog(output_root / "catalog.sqlite")
     try:
-        rows = ledger.con.execute(
+        rows = report_con.execute(
             "SELECT last_error FROM jobs WHERE state='FAILED_PERMANENT' AND last_error IS NOT NULL"
         ).fetchall()
         categories = {}
@@ -262,8 +263,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             category = first_line.split(":", 1)[0]
             categories[category] = categories.get(category, 0) + 1
         report["failure_reason_distribution"] = categories
-        report["job_state_counts"] = ledger.status()
-    except Exception:
-        report["failure_reason_distribution"] = {}
+        report["job_state_counts"] = [
+            dict(row) for row in report_con.execute(
+                "SELECT state,COUNT(*) AS count FROM jobs GROUP BY state ORDER BY state"
+            )
+        ]
+    finally:
+        report_con.close()
     atomic_write_json(output_root / "run_report.json", report)
     return report
