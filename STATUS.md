@@ -84,7 +84,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Normalized panel geometry, independent segmentation confidence, and revision of chart classification: AC-27, AC-29–AC-30.
 - Real backend comparison and final backend selection: AC-31–AC-32.
 - Dependency/license verification: AC-36.
-- General P0 extraction coverage: AC-37, AC-39, AC-42–AC-45.
+- General P0 extraction coverage: AC-37, AC-39, AC-42–AC-45. Vector path and OCR tick-axis primitives exist, but they require annotated real PDF testing; broad automatic chart-family and panel detection remain incomplete.
 - Different series linked automatically to different subjects: AC-48.
 - Full domain-specific comparability semantics: AC-55–AC-57.
 - Original/standardized measurement values and comprehensive unit interpretation: AC-60.
@@ -137,14 +137,17 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - CI run #45: 17 tests passed on each Windows Python 3.11/3.12/3.13 runner, including the end-to-end CLI and scheduler cache-reuse tests.
 - Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
 - Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
+- Added a conservative PDFium vector polyline candidate pipeline and PDF-to-panel crop coordinate transform. Only line-only unambiguous candidates are automatically selected; multiple candidate paths are sent to review.
+- Added OCR-based numeric tick candidates for X and left/right Y axes, requiring high confidence, margin location and monotonicity. These axes are provisional and require real-paper accuracy measurements.
+- Added unresolved-axis geometry preservation so a curve path remains queryable as pixels even when one physical axis is not safely calibrated.
 
 ## Current blockers / next engineering actions
 
-1. Re-run the current source on Windows CI after the run-49 PDFium test fix and optional backend-probe expansion.
+1. Run the current 30-test suite against the latest Windows code. CI #79 failures have been fixed locally in the repository; no pass claim is made until the next CI run completes.
 2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
 3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
 4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
-5. Improve P0 chart family/axis evidence extraction and vector/raster hybrid routing without extending unsupported automation claims.
+5. Improve P0 chart-family/axis evidence and Hybrid routing; automatically detect supported chart regions only where geometric and text evidence is sufficient, otherwise retain explicit review states.
 6. Run the PDF backend technical spike on 3–5 user-approved real PDFs using PDFium, PDFMiner, and pikepdf/QPDF, then record per-page time, Peak RSS, object/path coverage, and licensing decisions.
 7. Validate the P0 extraction path against user-approved annotated Battery, AOP, and PFAS papers; generate calibrated QC thresholds only from those annotations.
 8. Keep P1/P2 deferred until the P0 evidence chain and benchmark results are acceptable.
