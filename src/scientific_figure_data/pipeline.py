@@ -10,6 +10,7 @@ from typing import Any
 from .adapter import snapshot_paper
 from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
 from .axis_text import extract_native_numeric_axis_anchors, extract_numeric_axis_anchors
+from .chart_classifier import classify_chart_family
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
@@ -18,6 +19,7 @@ from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, Serie
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
+from .plot_region import detect_plot_box, detect_single_trace_color
 from .qc import load_thresholds
 from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
@@ -196,6 +198,39 @@ def _check_memory_budget(memory_limit_mb: int):
         return
 
 
+def _plot_box_pixels(image_path: Path | None, plot_box: Any) -> tuple[int, int, int, int] | None:
+    if image_path is None or not plot_box or len(plot_box) != 4:
+        return None
+    try:
+        from PIL import Image
+        with Image.open(image_path) as image:
+            width, height = image.size
+        return _normalize_bbox(plot_box, width, height)
+    except (ImportError, OSError, TypeError, ValueError):
+        return None
+
+
+def _plot_box_to_pdf(
+    plot_box_pixels: tuple[int, int, int, int] | None,
+    crop_mapping: dict | None,
+) -> tuple[float, float, float, float] | None:
+    if not plot_box_pixels or not crop_mapping or crop_mapping.get("page_rotation_degrees", 0) != 0:
+        return None
+    scale = float(crop_mapping.get("render_scale", 0))
+    if scale <= 0:
+        return None
+    left = float(crop_mapping["crop_left_pdf"])
+    top = float(crop_mapping["crop_top_pdf"])
+    x0, y0, x1, y1 = plot_box_pixels
+    return (
+        left + x0 / scale,
+        top - y1 / scale,
+        left + x1 / scale,
+        top - y0 / scale,
+    )
+
+
+
 def _extract_panel(
     image_path: Path | None, paper_id: str, figure_id: str, panel_id: str,
     panel: dict, figure: dict, overrides: dict, context: PaperContextIndex,
@@ -205,6 +240,14 @@ def _extract_panel(
     native_page_path: Path | None = None, crop_mapping: dict | None = None,
 ) -> list[SeriesRecord]:
     definitions = _series_overrides(overrides, figure_id, panel_id)
+    native_text_preview = str((native_page_evidence or {}).get("native_text_preview", ""))
+    base_technique = panel.get("technique") or figure.get("technique")
+    if not definitions:
+        definitions = [{
+            "series_id": f"{figure_id}_{panel_id}_unassigned", "label": None,
+            "technique": base_technique,
+            "domain": panel.get("domain") or figure.get("domain"),
+        }]
     evidence = {
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
         "source_image": image_path.name if image_path else None,
@@ -218,12 +261,6 @@ def _extract_panel(
         "native_page_evidence": native_page_evidence or {},
         "ocr_evidence": ocr_evidence or [],
     }
-    if not definitions:
-        definitions = [{
-            "series_id": f"{figure_id}_{panel_id}_unassigned", "label": None,
-            "technique": panel.get("technique") or figure.get("technique"),
-            "domain": panel.get("domain") or figure.get("domain"),
-        }]
     results: list[SeriesRecord] = []
     for index, definition in enumerate(definitions, 1):
         series_id = safe_id(str(definition.get("series_id") or f"{figure_id}_{panel_id}_series{index}"))
@@ -253,18 +290,47 @@ def _extract_panel(
                 link.get("evidence"), exact_match=bool(link.get("exact_match", False)),
             ))
         record.conditions = definition.get("conditions", [])
-        relative_signal = str(definition.get("y_signal_mode", "")).upper() in {
-            "ARBITRARY_RELATIVE", "SERIES_RELATIVE_SIGNAL"
-        }
+        classification = classify_chart_family(
+            definition.get("technique") or panel.get("technique") or figure.get("technique"),
+            definition.get("x_label") or panel.get("x_label"),
+            definition.get("y_label") or panel.get("y_label"),
+            figure.get("caption"), native_text_preview,
+        )
+        if not record.technique and classification.get("technique"):
+            record.technique = classification["technique"]
+        explicit_family = str(definition.get("data_family", "")).upper()
+        family = explicit_family or str(classification.get("chart_family", "UNCLASSIFIED")).upper()
+        record.metadata["chart_family_classification"] = classification
+
         plot_box = definition.get("plot_box")
+        plot_detection = None
+        if not plot_box and image_path:
+            try:
+                plot_detection = detect_plot_box(image_path)
+                if plot_detection.get("status") == "PROVISIONAL_PLOT_BOX":
+                    plot_box = plot_detection["pixel_bbox"]
+            except OptionalDependencyError:
+                plot_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
+        plot_box_pixels = _plot_box_pixels(image_path, plot_box)
+        if plot_box and image_path and plot_box_pixels is None:
+            plot_detection = {"status": "NEEDS_REVIEW", "reason": "INVALID_MANUAL_PLOT_BOX"}
+
+        plot_bbox_pdf = definition.get("plot_bbox_pdf")
+        if plot_bbox_pdf is None:
+            plot_bbox_pdf = _plot_box_to_pdf(plot_box_pixels, crop_mapping)
+        vector_indices = definition.get("vector_object_indices")
         axis_text_evidence = None
         native_axis_evidence = None
         ocr_axis_evidence = None
         native_payload = None
-        plot_bbox_pdf = definition.get("plot_bbox_pdf")
-        vector_indices = definition.get("vector_object_indices")
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+        explicit_relative_signal = str(definition.get("y_signal_mode", "")).upper() in {
+            "ARBITRARY_RELATIVE", "SERIES_RELATIVE_SIGNAL"
+        }
+        relative_signal = explicit_relative_signal or (
+            family == "SPECTRUM" and len(y_axis_anchors) < 2
+        )
 
         if (native_page_path and native_page_path.is_file() and plot_bbox_pdf and crop_mapping
                 and crop_mapping.get("page_rotation_degrees", 0) == 0):
@@ -298,11 +364,13 @@ def _extract_panel(
             if len(x_axis_anchors) < 2 and len(native_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = native_axis_evidence["x_anchors"]
             use_y_axis_candidates(native_axis_evidence)
+        if not explicit_relative_signal and family == "SPECTRUM" and len(y_axis_anchors) >= 2:
+            relative_signal = False
 
-        if ocr_evidence and plot_box and (
+        if ocr_evidence and plot_box_pixels and (
             len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
         ):
-            ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box))
+            ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box_pixels))
             if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = ocr_axis_evidence["x_anchors"]
             use_y_axis_candidates(ocr_axis_evidence)
@@ -330,17 +398,9 @@ def _extract_panel(
 
         if relative_signal:
             try:
-                if not plot_box or not image_path:
-                    raise ValueError("Relative signal requires an explicit plot_box and panel image")
-                from PIL import Image
-                with Image.open(image_path) as plot_image:
-                    image_width, image_height = plot_image.size
-                bx0, by0, bx1, by1 = [float(v) for v in plot_box]
-                if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
-                    bx0, bx1 = bx0 * image_width, bx1 * image_width
-                    by0, by1 = by0 * image_height, by1 * image_height
-                if bx1 <= bx0 or by1 <= by0:
-                    raise ValueError("Relative signal plot_box is invalid")
+                if not plot_box_pixels:
+                    raise ValueError("Relative signal requires a resolved plot box and panel image")
+                _, by0, _, by1 = plot_box_pixels
                 y_cal = AxisCalibration(
                     "y", None, -1.0 / (by1 - by0), by1 / (by1 - by0), [], 0.0,
                     status="SERIES_RELATIVE_SIGNAL",
@@ -354,10 +414,19 @@ def _extract_panel(
                 calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
 
         pixel_points = definition.get("pixel_points")
-        family = str(definition.get("data_family", "")).upper()
+        color_rgb = definition.get("color_rgb")
+        color_detection = None
+        if (not color_rgb and image_path and plot_box_pixels
+                and family not in {"NON_MONOTONIC_CURVE", "CV", "EIS", "UNCLASSIFIED"}):
+            try:
+                color_detection = detect_single_trace_color(image_path, plot_box_pixels)
+                if color_detection.get("status") == "UNIQUE_CHROMATIC_FAMILY":
+                    color_rgb = color_detection["color_rgb"]
+            except OptionalDependencyError:
+                color_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
         vector_selection = None
         vector_requested = bool(vector_indices) or (
-            bool(plot_bbox_pdf) and not pixel_points and not definition.get("color_rgb")
+            bool(plot_bbox_pdf) and not pixel_points and not color_rgb
         )
         if (vector_requested and native_page_path and native_page_path.is_file() and plot_bbox_pdf
                 and crop_mapping and crop_mapping.get("page_rotation_degrees", 0) == 0):
@@ -397,6 +466,8 @@ def _extract_panel(
                         "vector_stroke_rgba": selected_paths[0].stroke_rgba,
                         "vector_stroke_width_pdf": selected_paths[0].stroke_width_pdf,
                         "vector_selection": vector_selection,
+                        "plot_detection": plot_detection,
+                        "color_detection": color_detection,
                         "axis_text_evidence": axis_text_evidence,
                         "crop_mapping": crop_mapping,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
@@ -407,6 +478,7 @@ def _extract_panel(
                     record.metadata = {
                         "reason": "VECTOR_PATH_CANDIDATES_REQUIRE_REVIEW",
                         "vector_selection": vector_selection,
+                        "plot_detection": plot_detection,
                         "data_family": family,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
@@ -458,11 +530,11 @@ def _extract_panel(
                                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                                "calibration_errors": calibration_errors}
-        elif image_path and definition.get("color_rgb") and family not in {"CV", "EIS", "NON_MONOTONIC"}:
+        elif image_path and color_rgb and family not in {"CV", "EIS", "NON_MONOTONIC_CURVE", "UNCLASSIFIED"}:
             record.points, qc = trace_monotonic_color(
-                str(image_path), tuple(int(v) for v in definition["color_rgb"]),
-                int(definition.get("color_tolerance", 24)), x_cal, y_cal,
-                plot_box=tuple(plot_box) if relative_signal and plot_box else None,
+                str(image_path), tuple(int(v) for v in color_rgb),
+                int(definition.get("color_tolerance", color_detection.get("color_tolerance", 24) if color_detection else 24)),
+                x_cal, y_cal, plot_box=plot_box_pixels,
             )
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = (
@@ -473,12 +545,17 @@ def _extract_panel(
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
+                               "plot_detection": plot_detection, "color_detection": color_detection,
+                               "chart_family_classification": classification,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
         else:
             record.metadata = {
                 "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
                 "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
                 "data_family": family,
+                "plot_detection": plot_detection,
+                "color_detection": color_detection,
+                "chart_family_classification": classification,
                 "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                 "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                 "calibration_errors": calibration_errors,
