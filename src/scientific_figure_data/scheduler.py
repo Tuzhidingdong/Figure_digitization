@@ -120,7 +120,14 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     peak_rss_bytes = 0
     if dry_run:
         count = sum(1 for _ in paper_paths)
-        return {"planned_papers": count, "dry_run": True, "workers": workers}
+        already_cached = int((options or {}).get("resume_cached_skipped", 0))
+        return {
+            "planned_papers": count,
+            "resume_cached_skipped": already_cached,
+            "papers_seen": count + already_cached,
+            "dry_run": True,
+            "workers": workers,
+        }
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
     catalog = Catalog(output_root / "catalog.sqlite")
     results = {"completed": 0, "completed_with_review": 0, "blocked_review_locked": 0,
@@ -249,9 +256,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         ledger.close()
         catalog.close()
     elapsed = max(0.0, time.perf_counter() - started_at)
+    resume_cached_skipped = int(options.get("resume_cached_skipped", 0))
     report = {
         **results,
-        "papers_seen": total_seen + results["active_jobs_skipped"],
+        "cached": results["cached"] + resume_cached_skipped,
+        "resume_cached_skipped": resume_cached_skipped,
+        "papers_seen": total_seen + results["active_jobs_skipped"] + resume_cached_skipped,
         "workers": workers,
         "requested_workers": requested_workers,
         "max_open_pdfs": max_open_pdfs,
