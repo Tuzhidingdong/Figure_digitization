@@ -95,6 +95,7 @@ class SeriesRecord:
     y_label: str | None
     x_unit: str | None
     y_unit: str | None
+    measurement_id: str | None = None
     y_axis_side: str = "UNASSIGNED"
     extraction_method: str = "UNRESOLVED"
     extraction_status: str = "NEEDS_REVIEW"
