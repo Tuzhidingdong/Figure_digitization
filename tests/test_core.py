@@ -500,3 +500,40 @@ def test_backend_probe_without_pdfs_is_explicit_and_does_not_select_backend(tmp_
     assert "pikepdf" in report["candidate_modules"]
     assert "backend" not in report
     capsys.readouterr()
+
+
+def test_entity_and_analyte_queries_use_exact_normalized_aliases(tmp_path: Path):
+    snapshot = make_snapshot()
+    sample = make_series("sample-series", "measurement-sample", "electrolyte")
+    sample.subject_links = [{
+        "entity_id": "sample-a",
+        "canonical_name": "Sample A",
+        "entity_type": "material",
+        "aliases": ["SA"],
+        "role_in_series": "tested_material",
+        "status": "ASSIGNED_WITH_EVIDENCE",
+        "evidence": {"source": "legend", "page": 2},
+    }]
+    analyte = make_series("pfoa-series", "measurement-pfoa", "pH")
+    analyte.subject_links = [{
+        "entity_id": "pfoa",
+        "canonical_name": "Perfluorooctanoic acid",
+        "entity_type": "analyte",
+        "aliases": ["PFOA", "perfluorooctanoate"],
+        "role_in_series": "target_analyte",
+        "status": "ASSIGNED_WITH_EVIDENCE",
+        "evidence": {"source": "caption", "page": 3},
+    }]
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    catalog.index_paper(
+        snapshot,
+        [{"figure_id": "Figure1", "page": 2, "caption": "Test"}],
+        [{"figure_id": "Figure1", "panel_id": "a", "bbox": [0, 0, 1, 1]}],
+        [sample, analyte],
+        "COMPLETED_WITH_REVIEW",
+    )
+    assert [row["series_id"] for row in catalog.query_series({"entity": "SA"})] == ["sample-series"]
+    assert catalog.query_series({"entity": "Sample"}) == []
+    assert [row["series_id"] for row in catalog.query_series({"analyte": "PFOA"})] == ["pfoa-series"]
+    assert catalog.query_series({"analyte": "PFO"}) == []
+    catalog.close()
