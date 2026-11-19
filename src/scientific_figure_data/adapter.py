@@ -8,25 +8,48 @@ from typing import Iterator
 from .manifest import create_snapshot
 from .models import PaperSnapshot
 
+PAPER_MARKERS = {
+    "paper_manifest.json",
+    "manifest.json",
+    "evidence_index.json",
+    "figure_inventory.json",
+    "figures.json",
+    "figure_index.json",
+    "main_analysis.md",
+    "main_analysis.txt",
+    "si_analysis.md",
+    "si_analysis.txt",
+}
+
 
 def discover_papers(input_root: Path) -> Iterator[Path]:
-    """Yield paper candidates lazily and do not descend into a detected paper's assets."""
+    """Yield paper directories lazily without mistaking a corpus root for one paper.
+
+    A directory with an upstream manifest, Figure inventory, or extracted MAIN/SI
+    analysis is a strong paper boundary. A nested PDF-only directory is still treated
+    as an incomplete paper so the caller can report the missing upstream artifacts.
+    The corpus root is only treated as one paper when it has no child directories.
+    """
     root = input_root.resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Input root does not exist or is not a directory: {root}")
     for directory, dirnames, filenames in os.walk(root):
         dirnames.sort()
-        names = {name.lower() for name in filenames}
-        if any(name.endswith(".pdf") for name in names) or names.intersection({
-            "paper_manifest.json", "manifest.json", "figure_inventory.json",
-            "figures.json", "main_analysis.md", "si_analysis.md"
-        }):
+        names = {name.casefold() for name in filenames}
+        is_root = Path(directory).resolve() == root
+        has_marker = bool(names.intersection(PAPER_MARKERS))
+        has_pdf = any(name.endswith(".pdf") for name in names)
+
+        if has_marker or (has_pdf and not is_root) or (has_pdf and is_root and not dirnames):
             yield Path(directory)
+            # Do not descend into an already identified paper's images/PDF/SI assets.
             dirnames[:] = []
 
 
 def snapshot_paper(paper_dir: Path, input_root: Path) -> PaperSnapshot:
     relative_id = paper_dir.resolve().relative_to(input_root.resolve()).as_posix()
+    if relative_id == ".":
+        relative_id = "root-paper"
     return create_snapshot(paper_dir, input_root, relative_id)
 
 
