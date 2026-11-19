@@ -16,7 +16,7 @@ from .hashing import atomic_write_json
 from .models import JobState, PaperSnapshot, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
-from .storage import write_paper_artifacts
+from .storage import write_paper_artifacts, append_panel_series_csv
 
 
 ALGORITHM_VERSION = "0.1.0"
@@ -285,17 +285,19 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     "bundle_path": str(paper_output / "paper_bundle.json"),
                 }
                 return locked
-        elif accepted and force_reviewed:
-            version_dir = paper_output / "versions" / (
-                "pre-recompute-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
-            version_dir.mkdir(parents=True, exist_ok=True)
-            for name in ("digitization.json", "panel_series.csv"):
-                candidate = paper_output / name
-                if candidate.is_file():
-                    shutil.copy2(candidate, version_dir / candidate.name)
-            series_dir = paper_output / "series"
-            if series_dir.exists():
-                shutil.copytree(series_dir, version_dir / "series", dirs_exist_ok=True)
+    if existing.is_file() and (force_reviewed or not accepted or old.get("input_fingerprint") != snapshot.input_fingerprint
+                                or old.get("algorithm_version") != ALGORITHM_VERSION):
+        version_key = snapshot.input_fingerprint[:12] + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        version_dir = paper_output / "versions" / f"pre-recompute-{version_key}"
+        version_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("digitization.json", "paper_manifest.json", "figure_inventory.json", "panel_layout.json"):
+            candidate = paper_output / name
+            if candidate.is_file():
+                shutil.copy2(candidate, version_dir / candidate.name)
+        series_dir = paper_output / "series"
+        if series_dir.exists():
+            shutil.copytree(series_dir, version_dir / "series", dirs_exist_ok=True)
+            shutil.rmtree(series_dir)
 
     memory_limit_mb = int(options.get("memory_limit_mb", 2048))
     render_scale = float(options.get("render_scale", 1.5))
@@ -369,8 +371,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             _check_memory_budget(memory_limit_mb)
             extracted = _extract_panel(saved_crop, snapshot.paper_id, figure_id, panel_id,
                                        panel, figure, overrides, context, figure["page"])
-            series.extend(extracted)
+            append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             panel_status = "EXTRACTED" if any(s.points for s in extracted) else "NEEDS_REVIEW"
+            # Keep only compact per-series metadata in the paper worker; point batches are already persisted.
+            for item in extracted:
+                item.metadata.setdefault("points_count", len(item.points))
+                item.points.clear()
+            series.extend(extracted)
             review_needed = review_needed or panel_status == "NEEDS_REVIEW"
             panels.append({"figure_id": figure_id, "panel_id": panel_id,
                            "bbox": bbox, "status": panel_status,
