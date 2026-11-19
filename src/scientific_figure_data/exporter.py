@@ -13,8 +13,7 @@ from .storage import Catalog
 FIELDS = [
     "paper_id", "input_fingerprint", "series_id", "measurement_id", "figure_id", "panel_id",
     "technique", "domain", "series_label", "x_value", "x_label", "y_value",
-    "x_unit", "y_unit", "y_axis_side", "subject_links_json", "conditions_json",
-    "series_metadata_json", "qc_status", "review_state",
+    "x_unit", "y_unit", "y_axis_side", "qc_status", "review_state",
     "source_manifest", "source_digitization",
 ]
 
@@ -43,9 +42,6 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         "x_unit": record["x_unit"],
         "y_unit": record["y_unit"],
         "y_axis_side": record["y_axis_side"],
-        "subject_links_json": json.dumps(associations.get("subject_links", []), ensure_ascii=False),
-        "conditions_json": json.dumps(associations.get("conditions", []), ensure_ascii=False),
-        "series_metadata_json": record.get("metadata_json") or "{}",
         "qc_status": record["qc_status"],
         "review_state": record["review_state"],
         "source_manifest": f"papers/{record['paper_id']}/paper_manifest.json",
@@ -62,6 +58,7 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
 
     destination.mkdir(parents=True, exist_ok=True)
     data_path = destination / ("dataset.csv" if fmt == "csv" else "dataset.json")
+    series_metadata_path = destination / "series_metadata.jsonl"
     warning_path = destination / "warnings.jsonl"
     series_count = 0
     point_count = 0
@@ -80,7 +77,8 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
             warning_samples.append(warning)
         warning_stream.write(json.dumps(warning, ensure_ascii=False) + "\n")
 
-    with warning_path.open("w", encoding="utf-8") as warning_stream:
+    with warning_path.open("w", encoding="utf-8") as warning_stream, \
+         series_metadata_path.open("w", encoding="utf-8") as metadata_stream:
         if fmt == "csv":
             data_stream = data_path.open("w", newline="", encoding="utf-8")
         else:
@@ -108,6 +106,28 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                         add_warning(record["series_id"], "NOT_REVIEWED_ACCEPTED")
                     associations = catalog.series_associations(record["series_id"])
                     associations_map[record["series_id"]] = associations
+                    metadata_record = {
+                        "paper_id": record["paper_id"],
+                        "input_fingerprint": record.get("input_fingerprint"),
+                        "series_id": record["series_id"],
+                        "measurement_id": record.get("measurement_id"),
+                        "figure_id": record["figure_id"],
+                        "panel_id": record["panel_id"],
+                        "technique": record.get("technique"),
+                        "domain": record.get("domain"),
+                        "label": record.get("label"),
+                        "x_unit": record.get("x_unit"),
+                        "y_unit": record.get("y_unit"),
+                        "y_axis_side": record.get("y_axis_side"),
+                        "subject_links": associations.get("subject_links", []),
+                        "conditions": associations.get("conditions", []),
+                        "series_metadata": json.loads(record.get("metadata_json") or "{}"),
+                        "qc_status": record.get("qc_status"),
+                        "review_state": record.get("review_state"),
+                        "source_manifest": f"papers/{record['paper_id']}/paper_manifest.json",
+                        "source_digitization": f"papers/{record['paper_id']}/digitization.json",
+                    }
+                    metadata_stream.write(json.dumps(metadata_record, ensure_ascii=False) + "\n")
                     if not associations["subject_links"] or all(
                         link.get("link_status") != "ASSIGNED_WITH_EVIDENCE"
                         for link in associations["subject_links"]
@@ -156,6 +176,7 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
         "series_count": series_count,
         "point_count": point_count,
         "data_file": data_path.name,
+        "series_metadata_file": series_metadata_path.name,
         "warnings_file": warning_path.name,
         "warning_counts": warning_counts,
         "warning_sample_count": len(warning_samples),
