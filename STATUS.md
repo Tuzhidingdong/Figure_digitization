@@ -144,7 +144,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
 3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
 4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
-5. Improve P0 chart family/axis evidence extraction and vector/raster hybrid routing without extending unsupported automation claims.
+5. Continue P0 chart-family and hybrid routing: distinguish raster/vector/Hybrid per panel, test page coordinate transforms, and preserve unresolved-axis geometry rather than discarding curves.
 6. Run the PDF backend technical spike on 3–5 user-approved real PDFs using PDFium, PDFMiner, and pikepdf/QPDF, then record per-page time, Peak RSS, object/path coverage, and licensing decisions.
 7. Validate the P0 extraction path against user-approved annotated Battery, AOP, and PFAS papers; generate calibrated QC thresholds only from those annotations.
 8. Keep P1/P2 deferred until the P0 evidence chain and benchmark results are acceptable.
