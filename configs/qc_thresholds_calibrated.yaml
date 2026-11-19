@@ -1,0 +1,20 @@
+schema_version: '1.0'
+status: NOT_CALIBRATED
+notes: >
+  Template only. Do not use for extraction. Replace this file only after QC thresholds
+  have been estimated and validated against user-approved, manually annotated real-paper
+  figures. The runtime intentionally refuses this status.
+benchmark:
+  dataset_manifest: null
+  annotation_manifest: null
+  paper_count: 0
+  figure_count: 0
+  calibrated_at: null
+  calibration_method: null
+thresholds:
+  maximum_axis_anchor_rmse: null
+  minimum_trace_points: null
+  minimum_trace_pixel_fraction: null
+  maximum_overlay_distance: null
+  minimum_curve_coverage: null
+  additional_domain_rules: {}
