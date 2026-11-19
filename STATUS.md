@@ -112,9 +112,11 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 - Test source files have been committed.
 - The Windows CI workflow has been committed.
-- **No successful CI run is recorded in this STATUS update.**
+- Windows CI run #39 passed package install, compileall, Ruff, and all 15 tests on Python 3.11, 3.12, and 3.13.
+- Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
+- A further Pdfium native-text lifetime test was added after run #45 and still needs a fresh CI run.
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
-- Synthetic tests, even when they pass, will not count as real-paper scientific acceptance.
+- Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
 
 ## Engineering log
 
@@ -129,12 +131,14 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Changed catalog rebuild and ML export to stream point rows in bounded batches rather than accumulating a full paper or corpus point matrix in memory.
 - Added cache artifact-hash validation and cleanup of incomplete panel CSV outputs left by interrupted workers.
 - Updated the implementation to attach source PDF SHA256, input fingerprint, algorithm version, extraction channel, and component QC states to series evidence.
-- Regression tests: 15 currently pass on each Python 3.11/3.12/3.13 runner for the CI run #39 source snapshot. Additional later commits are awaiting the refreshed CI run.
+- CI run #39: 15 tests passed on each Windows Python 3.11/3.12/3.13 runner.
+- CI run #45: 17 tests passed on each Windows Python 3.11/3.12/3.13 runner, including the end-to-end CLI and scheduler cache-reuse tests.
+- Post-run-45: added one isolated PDFium native-text test to assert TextPage lifetime; pending CI.
 
 ## Current blockers / next engineering actions
 
 1. Resolve any static, import, package-build, or test failures reported by Windows CI; do not mark tests passed without the actual run result.
-2. Finish end-to-end CLI smoke tests over a small synthetic upstream directory: scan → dry-run → run → status/report → query → export → index rebuild → validate.
+2. The small synthetic CLI end-to-end path has passed on all three Windows Python versions: scan → dry-run → run → status → query → export → index rebuild → validate.
 3. Add regression tests for worker crash/lease recovery, reviewed-result locks, stale input changes, cache invalidation, source immutability, and low-memory/disk-pressure behavior.
 4. Finish review helper editing for point paths and axis anchors, and verify patch provenance in the UI workflow.
 5. Improve P0 chart family/axis evidence extraction and vector/raster hybrid routing without extending unsupported automation claims.
