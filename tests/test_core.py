@@ -260,3 +260,62 @@ def test_cli_exposes_query_export_and_review_apply():
     assert export.command == "export" and export.reviewed_only
     review = parser.parse_args(["review", "apply", "--output-root", "out", "--patch", "patch.json"])
     assert review.review_command == "apply"
+
+
+def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path: Path):
+    from scientific_figure_data.exporter import export_dataset
+
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    with catalog.con:
+        catalog.con.execute(
+            "INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json) VALUES(?,?,?,?,?,?)",
+            ("sample-a", "Sample A", "material", "battery", '["A"]', '{"source":"legend"}'),
+        )
+        catalog.con.execute(
+            "INSERT INTO series_subject_links(series_id,entity_id,role_in_series,evidence_json,link_status) VALUES(?,?,?,?,?)",
+            ("series-a", "sample-a", "tested_material", '{"source":"legend","page":2}', "ASSIGNED_WITH_EVIDENCE"),
+        )
+    output = tmp_path / "ml-export"
+    manifest = export_dataset(
+        catalog, tmp_path, output, {"paper_id": snapshot.paper_id, "technique": "CV"},
+        include_review_required=True, fmt="csv", series_batch_size=1,
+    )
+    catalog.close()
+    assert manifest["series_count"] == 2
+    assert manifest["point_count"] == 4
+    import csv
+    with (output / "dataset.csv").open("r", newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    first = next(row for row in rows if row["series_id"] == "series-a")
+    assert first["input_fingerprint"] == snapshot.input_fingerprint
+    assert "Sample A" in first["subject_links_json"]
+    assert "electrolyte" in first["conditions_json"]
+    assert first["qc_status"] == "PROVISIONAL_UNCALIBRATED"
+    assert (output / "warnings.jsonl").is_file()
+    assert manifest["streaming"]["point_rows_buffered"] == 1
+
+
+def test_catalog_streaming_query_has_no_fixed_10000_series_limit(tmp_path: Path):
+    snapshot = make_snapshot()
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    with catalog.con:
+        catalog.register_paper(snapshot, "COMPLETED")
+        for index in range(10025):
+            series_id = f"series-{index:05d}"
+            catalog.con.execute(
+                """INSERT INTO series(series_id,paper_id,figure_id,panel_id,measurement_id,technique,domain,
+                   label,x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (series_id, snapshot.paper_id, "Figure1", "a", f"m-{index}", "CV", "battery",
+                 series_id, "V", "mA", "LEFT", "NEEDS_REVIEW", "PROVISIONAL_UNCALIBRATED",
+                 "NEEDS_REVIEW", "{}"),
+            )
+            catalog.con.execute(
+                "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
+                (f"m-{index}", snapshot.paper_id, "Figure1", "CV", "battery", "{}"),
+            )
+    rows = sum(1 for _ in catalog.iter_query_series({"paper_id": snapshot.paper_id}, batch_size=127))
+    assert rows == 10025
+    assert len(catalog.query_series({"paper_id": snapshot.paper_id}, limit=10000)) == 10000
+    catalog.close()
