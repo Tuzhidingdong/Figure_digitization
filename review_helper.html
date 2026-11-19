@@ -30,10 +30,17 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <input id="technique"></label>
 <label>Domain
 <input id="domain"></label>
+<label>Replacement ordered points (JSON; edit only when correcting a trace)
+<textarea id="pointsJson" rows="8" spellcheck="false"></textarea></label>
+<label>Reviewer
+<input id="reviewer" placeholder="Reviewer identifier"></label>
 <button id="addChange">Add correction</button>
 </div>
 <div>
 <p id="seriesInfo" class="muted"></p>
+<p id="panelInfo" class="muted"></p>
+<pre id="calibrationInfo" class="muted"></pre>
+<pre id="qcInfo" class="muted"></pre>
 <canvas id="plot" width="900" height="520"></canvas>
 </div>
 </div>
@@ -44,7 +51,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  let fileMap = new Map(), digitization = null, originalHash = null, seriesById = new Map(), csvByPanel = new Map(), changes = [];
+  let fileMap = new Map(), digitization = null, panelLayout = null, originalHash = null, seriesById = new Map(), csvByPanel = new Map(), changes = [];
   const parseCSV = text => {
     const lines = text.replace(/\r/g,"").split("\n").filter(Boolean);
     if (!lines.length) return [];
@@ -68,6 +75,8 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     const item=entries.find(([p])=>p.endsWith("digitization.json"));
     if(!item) throw new Error("digitization.json not found in selected folder");
     const [digitizationPath,digitizationFile]=item;
+    const layoutEntry=entries.find(([p])=>p.endsWith("panel_layout.json"));
+    panelLayout=layoutEntry?JSON.parse(await layoutEntry[1].text()):{panels:[]};
     const bytes=await digitizationFile.arrayBuffer();
     originalHash=await sha256(bytes);
     digitization=JSON.parse(new TextDecoder().decode(bytes));
@@ -88,24 +97,50 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     return pair?pair[1].filter(row=>row.series_id===series.series_id):[];
   }
   function draw(series){
-    const canvas=$("plot"),ctx=canvas.getContext("2d");ctx.clearRect(0,0,canvas.width,canvas.height);
+    const canvas=$("plot"),ctx=canvas.getContext("2d");
     const expected=series.figure_id+"_"+series.panel_id+".png";
     const imageEntry=[...fileMap.entries()].find(([p])=>p.endsWith(expected));
-    const drawPoints=()=>{
+    const drawPoints=(scale)=>{
       const points=panelRows(series).filter(p=>p.pixel_x!==""&&p.pixel_y!=="");
       if(points.length<2)return;
       ctx.strokeStyle="#d22";ctx.lineWidth=2;ctx.beginPath();
-      points.forEach((p,i)=>{const x=Number(p.pixel_x),y=Number(p.pixel_y);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
+      points.forEach((p,i)=>{const x=Number(p.pixel_x)*scale,y=Number(p.pixel_y)*scale;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
       ctx.stroke();
     };
-    if(imageEntry){const url=URL.createObjectURL(imageEntry[1]);const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);drawPoints();};img.src=url;}
-    else {ctx.fillStyle="#333";ctx.fillText("Source panel crop not found in selected folder",20,30);drawPoints();}
+    if(imageEntry){
+      const url=URL.createObjectURL(imageEntry[1]);const img=new Image();
+      img.onload=()=>{
+        const scale=Math.min(1,1000/Math.max(img.naturalWidth,img.naturalHeight));
+        canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        URL.revokeObjectURL(url);drawPoints(scale);
+      };img.src=url;
+    } else {
+      canvas.width=900;canvas.height=520;ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle="#333";ctx.fillText("Source panel crop not found in selected folder",20,30);drawPoints(1);
+    }
   }
   function selectSeries(id){
     const series=seriesById.get(id);if(!series)return;
     $("label").value=series.label||"";$("axisSide").value=series.y_axis_side||"UNASSIGNED";
     $("technique").value=series.technique||"";$("domain").value=series.domain||"";
     $("seriesInfo").textContent=series.paper_id+" / "+series.figure_id+" / "+series.panel_id+" · "+series.extraction_status+" · "+series.qc_status;
+    const panel=(panelLayout.panels||[]).find(p=>p.figure_id===series.figure_id&&p.panel_id===series.panel_id)||{};
+    $("panelInfo").textContent="Panel bbox: "+JSON.stringify(panel.normalized_bbox||panel.bbox||null)+" · shared legend refs: "+JSON.stringify(panel.shared_legend_refs||[]);
+    $("calibrationInfo").textContent="X calibration: "+JSON.stringify(series.metadata?.x_calibration?.anchors||[])+"\nY calibration: "+JSON.stringify(series.metadata?.y_calibration?.anchors||[]);
+    $("qcInfo").textContent="QC components: "+JSON.stringify(series.metadata?.qc_components||{})+"\nExtraction metadata: "+JSON.stringify(series.metadata||{});
+    $("pointsJson").value=JSON.stringify(panelRows(series).map(p=>({
+      point_index:Number(p.point_index),
+      x:p.x_label? p.x_label:(p.x_value===""?null:Number(p.x_value)),
+      y:p.y_value===""?null:Number(p.y_value),
+      pixel_x:p.pixel_x===""?null:Number(p.pixel_x),
+      pixel_y:p.pixel_y===""?null:Number(p.pixel_y),
+      y_err_low:p.y_err_low===""?null:Number(p.y_err_low),
+      y_err_high:p.y_err_high===""?null:Number(p.y_err_high),
+      err_type:p.err_type||"UNKNOWN"
+    })),null,2);
     draw(series);
   }
   $("folder").addEventListener("change",async e=>{
@@ -116,6 +151,11 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     const s=currentSeries();if(!s)return;
     const set={label:$("label").value,y_axis_side:$("axisSide").value,
                technique:$("technique").value||null,domain:$("domain").value||null};
+    const pointsText=$("pointsJson").value.trim();
+    if(pointsText){
+      try{set.points=JSON.parse(pointsText);if(!Array.isArray(set.points))throw new Error("Points JSON must be an array");}
+      catch(err){$("patchStatus").textContent="Invalid points JSON: "+String(err);return;}
+    }
     changes=changes.filter(c=>c.series_id!==s.series_id);changes.push({series_id:s.series_id,set});
     $("changeCount").textContent=String(changes.length);
     $("patchStatus").textContent="Correction staged for "+s.series_id;
@@ -124,7 +164,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     if(!digitization||!changes.length){$("patchStatus").textContent="No corrections to export.";return;}
     const patch={schema_version:"1.0",patch_id:"review-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,8),
       paper_id:digitization.paper_id,target_artifact:"digitization.json",original_result_hash:originalHash,
-      created_at:new Date().toISOString(),reviewer:"",changes};
+      created_at:new Date().toISOString(),reviewer:$("reviewer").value.trim(),changes};
     const blob=new Blob([JSON.stringify(patch,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=patch.patch_id+".json";a.click();URL.revokeObjectURL(url);
     $("patchStatus").textContent="Patch exported. Apply it with: sfd review apply --output-root OUTPUT_ROOT --patch PATCH_PATH";
