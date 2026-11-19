@@ -186,9 +186,10 @@ def _run(args) -> int:
                 selected_states = {row["paper_id"] for row in con.execute(
                     f"SELECT paper_id FROM jobs WHERE state IN ({placeholders})", states
                 )}
+                # Include all RUNNING jobs. JobLedger.prepare() skips active leases
+                # and recovers expired/orphaned leases deterministically.
                 selected_states.update(row["paper_id"] for row in con.execute(
-                    "SELECT paper_id FROM jobs WHERE state='RUNNING' AND (lease_expires_at IS NULL OR lease_expires_at < ?)",
-                    (time.time(),)
+                    "SELECT paper_id FROM jobs WHERE state='RUNNING'"
                 ))
             else:
                 states = ("RETRY_WAIT", "FAILED_PERMANENT")
