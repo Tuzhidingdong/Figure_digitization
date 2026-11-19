@@ -127,7 +127,7 @@ def write_paper_artifacts(
         "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
         "generated_at": utc_now(), "status": status,
-        "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+        "qc_threshold_status": extra.get("qc_threshold_status", "PROVISIONAL_UNCALIBRATED"),
         "series": [{**{k: v for k, v in asdict(s).items() if k != "points"},
                     "points_count": len(s.points) or int(s.metadata.get("points_count", 0))} for s in series],
         "extra": extra,
