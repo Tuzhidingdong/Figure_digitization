@@ -14,7 +14,7 @@ dependencies = ["psutil>=5.9", "PyYAML>=6.0"]
 
 [project.optional-dependencies]
 pdf = ["pypdfium2>=4.30"]
-images = ["Pillow>=10", "numpy>=1.26", "opencv-python-headless>=4.9"]
+images = ["Pillow>=10", "numpy>=1.26"]
 ocr = ["rapidocr>=3.10", "onnxruntime>=1.16"]
 pdf-spike = ["pdfminer.six>=20240706", "pikepdf>=9.0"]
 dev = ["pytest>=8", "ruff>=0.6"]
