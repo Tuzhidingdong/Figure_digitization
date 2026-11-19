@@ -9,7 +9,7 @@ TECHNIQUE_RULES = (
     ("EIS", ("electrochemical impedance", "nyquist", "z''", "z′′", "z'' vs", "imaginary impedance")),
     ("XRD", ("2theta", "2 theta", "2θ", "diffraction angle", "x-ray diffraction")),
     ("Raman", ("raman shift", "raman spectra", "raman modes")),
-    ("FTIR", ("ftir", "infrared spectra", "wavenumber")),
+    ("FTIR", ("ftir", "infrared spectra")),
     ("XPS", ("binding energy", "xps", "photoelectron")),
     ("GCD", ("charge-discharge", "charge/discharge", "galvanostatic", "discharge time")),
     ("GITT", ("gitt", "intermittent titration")),
