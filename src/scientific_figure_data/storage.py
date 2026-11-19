@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS entities(
  entity_id TEXT PRIMARY KEY, canonical_name TEXT NOT NULL, entity_type TEXT,
  domain TEXT, aliases_json TEXT NOT NULL DEFAULT '[]', evidence_json TEXT NOT NULL DEFAULT '[]'
 );
+CREATE TABLE IF NOT EXISTS entity_aliases(
+ entity_id TEXT NOT NULL, alias TEXT NOT NULL, alias_norm TEXT NOT NULL,
+ PRIMARY KEY(entity_id,alias_norm)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_alias_norm ON entity_aliases(alias_norm);
 CREATE TABLE IF NOT EXISTS entity_relationships(
  parent_entity_id TEXT NOT NULL, child_entity_id TEXT NOT NULL, relationship TEXT NOT NULL,
  evidence_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(parent_entity_id,child_entity_id,relationship)
@@ -287,6 +292,13 @@ class Catalog:
                  json.dumps(link.get("evidence", {}), ensure_ascii=False),
                  link.get("status", "UNASSIGNED")),
             )
+            import unicodedata
+            aliases = {canonical, *(str(alias) for alias in link.get("aliases", []) if alias)}
+            self.con.executemany(
+                "INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_norm) VALUES(?,?,?)",
+                [(entity_id, alias, unicodedata.normalize("NFKC", alias).casefold())
+                 for alias in aliases],
+            )
         for relationship in item.metadata.get("entity_relationships", []):
             if not all(relationship.get(key) for key in ("parent_entity_id", "child_entity_id", "relationship")):
                 continue
@@ -321,16 +333,25 @@ class Catalog:
             sql += " AND EXISTS (SELECT 1 FROM series_subject_links l WHERE l.series_id=s.series_id AND l.entity_id=?)"
             args.append(entity_id)
         elif entity_name:
-            sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l JOIN entities e ON e.entity_id=l.entity_id
-                      WHERE l.series_id=s.series_id AND (lower(e.canonical_name)=lower(?) OR lower(e.aliases_json) LIKE ?))"""
-            args.extend([entity_name, f"%{entity_name.casefold()}%"])
+            import unicodedata
+            normalized_entity = unicodedata.normalize("NFKC", entity_name.strip()).casefold()
+            sql += """ AND EXISTS (
+                      SELECT 1 FROM series_subject_links l
+                      JOIN entity_aliases a ON a.entity_id=l.entity_id
+                      WHERE l.series_id=s.series_id AND a.alias_norm=?
+                      )"""
+            args.append(normalized_entity)
         analyte = filters.get("analyte")
         if analyte:
-            sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l JOIN entities e ON e.entity_id=l.entity_id
+            import unicodedata
+            normalized_analyte = unicodedata.normalize("NFKC", analyte.strip()).casefold()
+            sql += """ AND EXISTS (SELECT 1 FROM series_subject_links l
+                      JOIN entities e ON e.entity_id=l.entity_id
+                      JOIN entity_aliases a ON a.entity_id=e.entity_id
                       WHERE l.series_id=s.series_id AND
                       (lower(e.entity_type)='analyte' OR lower(l.role_in_series)='target_analyte')
-                      AND (lower(e.canonical_name)=lower(?) OR lower(e.aliases_json) LIKE ?))"""
-            args.extend([analyte, f"%{analyte.casefold()}%"])
+                      AND a.alias_norm=?)"""
+            args.append(normalized_analyte)
         role = filters.get("series_role")
         if role:
             sql += " AND EXISTS (SELECT 1 FROM series_subject_links l WHERE l.series_id=s.series_id AND l.role_in_series=?)"
