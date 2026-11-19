@@ -19,6 +19,7 @@ from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
 from .qc import load_thresholds
 from .storage import write_paper_artifacts, append_panel_series_csv
+from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
 ALGORITHM_VERSION = "0.1.0"
@@ -200,6 +201,7 @@ def _extract_panel(
     pdf_page: int | None, native_page_evidence: dict | None = None,
     ocr_evidence: list[dict] | None = None,
     source_pdf_sha256: str | None = None, input_fingerprint: str | None = None,
+    native_page_path: Path | None = None, crop_mapping: dict | None = None,
 ) -> list[SeriesRecord]:
     definitions = _series_overrides(overrides, figure_id, panel_id)
     evidence = {
@@ -280,6 +282,70 @@ def _extract_panel(
 
         pixel_points = definition.get("pixel_points")
         family = str(definition.get("data_family", "")).upper()
+        vector_indices = definition.get("vector_object_indices")
+        plot_bbox_pdf = definition.get("plot_bbox_pdf")
+        vector_selection = None
+        if (native_page_path and native_page_path.is_file() and plot_bbox_pdf
+                and crop_mapping and crop_mapping.get("page_rotation_degrees", 0) == 0):
+            try:
+                native_payload = _json_file(native_page_path)
+                selected_paths, vector_selection = choose_vector_paths(
+                    native_payload, tuple(float(value) for value in plot_bbox_pdf),
+                    [int(value) for value in vector_indices] if vector_indices else None,
+                )
+                if selected_paths and len(selected_paths) == 1:
+                    clean_points = pdf_points_to_crop_pixels(
+                        selected_paths[0].points_pdf,
+                        crop_left_pdf=float(crop_mapping["crop_left_pdf"]),
+                        crop_top_pdf=float(crop_mapping["crop_top_pdf"]),
+                        render_scale=float(crop_mapping["render_scale"]),
+                    )
+                    record.points = map_explicit_polyline(clean_points, x_cal, y_cal)
+                    record.extraction_method = "PDFIUM_NATIVE_VECTOR_POLYLINE"
+                    record.extraction_status = "EXTRACTED_PROVISIONAL" if len(record.points) >= 2 else "NEEDS_REVIEW"
+                    record.metadata = {
+                        "path_order": "PRESERVED",
+                        "data_family": family,
+                        "vector_object_index": selected_paths[0].object_index,
+                        "vector_bbox_pdf": list(selected_paths[0].bbox_pdf),
+                        "vector_stroke_rgba": selected_paths[0].stroke_rgba,
+                        "vector_stroke_width_pdf": selected_paths[0].stroke_width_pdf,
+                        "vector_selection": vector_selection,
+                        "crop_mapping": crop_mapping,
+                        "x_calibration": calibration_to_dict(x_cal),
+                        "y_calibration": calibration_to_dict(y_cal),
+                    }
+                else:
+                    record.metadata = {
+                        "reason": "VECTOR_PATH_CANDIDATES_REQUIRE_REVIEW",
+                        "vector_selection": vector_selection,
+                        "data_family": family,
+                        "x_calibration": calibration_to_dict(x_cal),
+                        "y_calibration": calibration_to_dict(y_cal),
+                    }
+            except (OSError, KeyError, TypeError, ValueError) as exc:
+                record.metadata = {
+                    "reason": "VECTOR_PATH_SELECTION_ERROR",
+                    "detail": f"{type(exc).__name__}: {exc}",
+                    "data_family": family,
+                }
+            if record.points:
+                record.qc_status = "PROVISIONAL_UNCALIBRATED"
+                record.review_state = "NEEDS_REVIEW"
+                results.append(record)
+                continue
+            if vector_selection and vector_selection.get("status") == "NEEDS_REVIEW":
+                results.append(record)
+                continue
+        elif vector_indices or plot_bbox_pdf:
+            record.metadata = {
+                "reason": "VECTOR_PATH_MAPPING_UNAVAILABLE",
+                "note": "Vector extraction requires an unrotated PDF page, explicit plot_bbox_pdf, crop geometry, and PDFium native path evidence.",
+                "vector_object_indices": vector_indices,
+                "plot_bbox_pdf": plot_bbox_pdf,
+            }
+            results.append(record)
+            continue
         if isinstance(pixel_points, list) and len(pixel_points) >= 2:
             clean_points = [(float(p[0]), float(p[1])) for p in pixel_points
                             if isinstance(p, (list, tuple)) and len(p) == 2]
@@ -502,6 +568,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_specific_image = bool(panel.get("image_path"))
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
+            crop_mapping = None
             if panel_path and not panel_specific_image and bbox:
                 if _within_evidence_budget(paper_output, temp_disk_limit_mb):
                     saved_crop = _crop_local_image(
@@ -526,6 +593,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                 saved_crop.parent.mkdir(parents=True, exist_ok=True)
                                 crop.save(saved_crop, format="PNG")
                                 crop.close()
+                                crop_mapping = {
+                                    "crop_left_pdf": coords[0] / safe_scale,
+                                    "crop_top_pdf": page_height - coords[1] / safe_scale,
+                                    "crop_right_pdf": coords[2] / safe_scale,
+                                    "crop_bottom_pdf": page_height - coords[3] / safe_scale,
+                                    "render_scale": safe_scale,
+                                    "page_width_pdf": page_width,
+                                    "page_height_pdf": page_height,
+                                    "page_rotation_degrees": native_page.rotation_degrees,
+                                }
                         finally:
                             rendered.close()
             _check_memory_budget(memory_limit_mb)
@@ -533,11 +610,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             if options.get("ocr") and saved_crop:
                 from .ocr import run_ocr
                 ocr_evidence = run_ocr(saved_crop)
+            native_summary = native_evidence_by_page.get(int(figure["page"])) if figure["page"] else None
+            native_file_path = (
+                paper_output / native_summary["artifact"]
+                if native_summary and native_summary.get("artifact") else None
+            )
             extracted = _extract_panel(
                 saved_crop, snapshot.paper_id, figure_id, panel_id, panel, figure,
                 overrides, context, figure["page"],
-                native_evidence_by_page.get(int(figure["page"])) if figure["page"] else None,
-                ocr_evidence, pdf_sha256, snapshot.input_fingerprint,
+                native_summary, ocr_evidence, pdf_sha256, snapshot.input_fingerprint,
+                native_file_path, crop_mapping,
             )
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             panel_status = "EXTRACTED" if any(s.points for s in extracted) else "NEEDS_REVIEW"
