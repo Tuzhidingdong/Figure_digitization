@@ -561,7 +561,7 @@ The offline review helper exports a review patch JSON.
 
 The system must support importing and applying this patch through a controlled CLI operation.
 
-Command: review apply --patch <file>
+Command: review apply --patch PATCH_PATH
 
 The patch must contain at least:
 
@@ -1342,9 +1342,9 @@ The local server must bind only to 127.0.0.1 and must not expose a LAN-accessibl
 
 **Review patch application**
 
-CLI: review apply --patch <file>
+CLI: review apply --patch PATCH_PATH
 
-Optional safety operation: review apply --patch <file> --dry-run
+Optional safety operation: review apply --patch PATCH_PATH --dry-run
 
 Required behavior:
 
@@ -1400,8 +1400,8 @@ It must include a manifest that records the export schema, input selection, comp
 **Review**
 
 - review
-- review apply --patch <file>
-- review apply --patch <file> --dry-run
+- review apply --patch PATCH_PATH
+- review apply --patch PATCH_PATH --dry-run
 
 **Catalog**
 
@@ -1592,7 +1592,7 @@ A P0 feature may be functionally implemented while remaining scientifically prov
 - [ ] AC-83 [P0]: Review patches retain reviewer information, timestamps, original hashes, revised content, and review history where available.
 - [ ] AC-84 [P0]: Any local review server binds only to 127.0.0.1.
 - [ ] AC-85 [P0]: Review operations never silently overwrite accepted results.
-- [ ] AC-86 [P0]: review apply --patch <file> verifies the patch schema, target identifiers, and original_result_hash; a matching patch creates a new REVIEWED_ACCEPTED version and updates SQLite through the single writer.
+- [ ] AC-86 [P0]: review apply --patch PATCH_PATH verifies the patch schema, target identifiers, and original_result_hash; a matching patch creates a new REVIEWED_ACCEPTED version and updates SQLite through the single writer.
 - [ ] AC-87 [P0]: A stale patch is rejected with PATCH_CONFLICT_STALE_BASE, preserved for inspection, and does not overwrite the current digitization result.
 - [ ] AC-88 [P0]: Reapplying an already applied patch is detected and does not create duplicate corrections.
 
