@@ -1362,3 +1362,138 @@ def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_
     assert panel_image.is_file()
     assert (output_root / "papers" / "paper-pdf" / "series" /
             "Figure1__a" / "panel_series.csv").is_file()
+
+
+def test_same_color_multiple_bands_are_rejected_by_raster_tracer(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.calibration import fit_linear_axis
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    image = Image.new("RGB", (120, 70), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((5, 15, 115, 15), fill=(200, 30, 40), width=2)
+    draw.line((5, 48, 115, 48), fill=(200, 30, 40), width=2)
+    image_path = tmp_path / "same-color-two-curves.png"
+    image.save(image_path)
+    x_cal = fit_linear_axis("x", [{"pixel": 0, "value": 0}, {"pixel": 120, "value": 12}], "s")
+    y_cal = fit_linear_axis("y", [{"pixel": 60, "value": 0}, {"pixel": 0, "value": 6}], "V")
+    points, qc = trace_monotonic_color(
+        str(image_path), (200, 30, 40), 5, x_cal, y_cal, plot_box=(0, 0, 120, 70)
+    )
+    assert points == []
+    assert qc["status"] == "NEEDS_REVIEW"
+    assert qc["reason"] == "MULTIPLE_SAME_COLOR_BANDS"
+
+
+def test_cli_resume_processes_first_time_then_skips_unchanged_and_reprocesses_changed(
+    tmp_path: Path, capsys
+):
+    from scientific_figure_data.cli import main
+
+    input_root = tmp_path / "chem-literature"
+    paper = input_root / "nested" / "paper-001"
+    paper.mkdir(parents=True)
+    inventory = paper / "figure_inventory.json"
+    inventory.write_text('{"figures":[]}', encoding="utf-8")
+    output_root = tmp_path / "output"
+
+    # First --resume with no prior catalog is an initial corpus run.
+    assert main([
+        "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["completed_with_review"] == 1
+    assert first["papers_seen"] == 1
+    assert first["resume_cached_skipped"] == 0
+
+    # An unchanged completed paper is excluded before a worker is started.
+    assert main([
+        "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["completed"] == 0
+    assert second["completed_with_review"] == 0
+    assert second["resume_cached_skipped"] == 1
+    assert second["papers_seen"] == 1
+
+    # Any changed upstream artifact invalidates that paper's stage fingerprint.
+    analysis = paper / "main_analysis.md"
+    analysis.write_text("A newly extracted MAIN/SI context line.\n", encoding="utf-8")
+    assert main([
+        "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    third = json.loads(capsys.readouterr().out)
+    assert third["completed_with_review"] == 1
+    assert third["resume_cached_skipped"] == 0
+    assert third["papers_seen"] == 1
+
+
+def test_cli_resume_reprocesses_a_corrupted_bundle_artifact(tmp_path: Path, capsys):
+    from scientific_figure_data.cli import main
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-corrupt"
+    paper.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "panels": [{"panel_id": "a", "technique": "GCD", "domain": "battery"}],
+        }]
+    }), encoding="utf-8")
+    output_root = tmp_path / "output"
+    assert main([
+        "run", "--all", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    capsys.readouterr()
+
+    point_file = output_root / "papers" / "paper-corrupt" / "series" / "Figure1__a" / "panel_series.csv"
+    point_file.parent.mkdir(parents=True, exist_ok=True)
+    point_file.write_text("tampered\n", encoding="utf-8")
+    assert main([
+        "run", "--resume", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 0
+    resumed = json.loads(capsys.readouterr().out)
+    assert resumed["completed_with_review"] == 1
+    assert resumed["resume_cached_skipped"] == 0
+
+
+def test_reviewed_bundle_integrity_failure_blocks_and_force_recompute_creates_version(
+    tmp_path: Path
+):
+    from scientific_figure_data.pipeline import process_paper
+
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    input_root = tmp_path / "input"
+    source_paper = input_root / snapshot.paper_id
+    source_paper.mkdir(parents=True)
+    (source_paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+
+    digitization_path = paper_root / "digitization.json"
+    digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
+    digitization["series"][0]["review_state"] = "REVIEWED_ACCEPTED"
+    digitization["series"][0]["extraction_status"] = "REVIEWED_ACCEPTED"
+    digitization_path.write_text(json.dumps(digitization, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    bundle_path = paper_root / "paper_bundle.json"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["content_hashes"]["digitization.json"] = sha256_file(digitization_path)
+    bundle_path.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    panel_csv = paper_root / "series" / "Figure1__a" / "panel_series.csv"
+    panel_csv.write_text("tampered point data\n", encoding="utf-8")
+    accepted_digitization_hash = sha256_file(digitization_path)
+    corrupted_csv_hash = sha256_file(panel_csv)
+
+    blocked = process_paper(input_root, Path(snapshot.paper_id), tmp_path)
+    assert blocked["job_state"] == "BLOCKED"
+    assert blocked["reason"] == "REVIEWED_ARTIFACT_INTEGRITY_FAILURE"
+    assert sha256_file(digitization_path) == accepted_digitization_hash
+    assert sha256_file(panel_csv) == corrupted_csv_hash
+
+    forced = process_paper(
+        input_root, Path(snapshot.paper_id), tmp_path,
+        options={"force_recompute_reviewed": True},
+    )
+    assert forced["cached"] is False
+    backups = list((paper_root / "versions").glob("pre-recompute-*"))
+    assert backups
+    assert any((backup / "digitization.json").is_file() for backup in backups)
