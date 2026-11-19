@@ -12,7 +12,7 @@ Automated digitization is conservative. A chart is not assigned guessed axes, un
 
 ## Install
 
-Python 3.10 or newer is required.
+Python 3.11 or newer is required.
 
     python -m pip install -e .
     # Optional PDF rendering:
