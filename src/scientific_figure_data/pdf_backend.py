@@ -92,38 +92,63 @@ class PdfPageView:
         self, *, max_objects: int = 20000, max_total_path_segments: int = 30000,
         max_segments_per_path: int = 2000,
     ) -> dict:
-        """Inventory page text, image, form, and vector-path objects.
+        """Inventory native objects and bounded vector geometry for one PDF page.
 
-        Paths are recorded as geometry evidence only. This routine does not assume that
-        every PDFium path is a scientific data curve or that text-as-path is not glyph art.
+        Textpage ownership is explicit because PDFium text objects returned by
+        get_objects() need the associated PdfTextPage in order to extract text.
+        Paths are geometry evidence only, never automatically classified as plotted curves.
         """
         try:
             raw = importlib.import_module("pypdfium2.raw")
         except ImportError:
             raw = None
+
+        textpage = self._page.get_textpage()
+        try:
+            native_text = textpage.get_text_range()
+        except Exception:
+            native_text = ""
         summary = {
             "backend": self.name,
             "object_inventory_status": "UNAVAILABLE",
             "object_count": 0,
             "object_type_counts": {},
             "objects": [],
-            "native_text": self.text_page(),
+            "native_text": native_text,
             "path_geometry_complete": False,
             "truncation": None,
+            "coordinate_system": "PDF_PAGE_SPACE",
         }
         if raw is None or not hasattr(self._page, "get_objects"):
+            close = getattr(textpage, "close", None)
+            if callable(close):
+                close()
             return summary
+
+        type_names = {}
+        for constant_name, label in (
+            ("FPDF_PAGEOBJ_TEXT", "TEXT"),
+            ("FPDF_PAGEOBJ_PATH", "PATH"),
+            ("FPDF_PAGEOBJ_IMAGE", "IMAGE"),
+            ("FPDF_PAGEOBJ_SHADING", "SHADING"),
+            ("FPDF_PAGEOBJ_FORM", "FORM"),
+        ):
+            value = getattr(raw, constant_name, None)
+            if value is not None:
+                type_names[int(value)] = label
+        if not type_names:
+            type_names = dict(self.TYPE_NAMES)
 
         total_segments = 0
         objects = []
         try:
-            iterator = self._page.get_objects(max_depth=20)
+            iterator = self._page.get_objects(max_depth=20, textpage=textpage)
             for object_index, obj in enumerate(iterator):
                 if object_index >= max_objects:
                     summary["truncation"] = "MAX_OBJECTS"
                     break
                 obj_type = int(getattr(obj, "type", -1))
-                type_name = self.TYPE_NAMES.get(obj_type, f"UNKNOWN_{obj_type}")
+                type_name = type_names.get(obj_type, f"UNKNOWN_{obj_type}")
                 counts = summary["object_type_counts"]
                 counts[type_name] = counts.get(type_name, 0) + 1
                 row = {
@@ -131,6 +156,7 @@ class PdfPageView:
                     "object_type": type_name,
                     "form_level": int(getattr(obj, "level", 0) or 0),
                     "bounds_pdf": None,
+                    "path_matrix": None,
                 }
                 try:
                     row["bounds_pdf"] = [float(v) for v in obj.get_bounds()]
@@ -139,19 +165,33 @@ class PdfPageView:
                 if type_name == "TEXT":
                     try:
                         row["text"] = obj.extract()
-                    except Exception:
-                        row["text"] = None
+                        row["font_size"] = float(obj.get_font_size())
+                        font = obj.get_font()
+                        if font is not None:
+                            try:
+                                row["font_name"] = font.get_base_name()
+                            finally:
+                                close_font = getattr(font, "close", None)
+                                if callable(close_font):
+                                    close_font()
+                    except Exception as exc:
+                        row["text_extract_error"] = f"{type(exc).__name__}: {exc}"
                 elif type_name == "IMAGE":
                     try:
                         row["pixel_size"] = list(obj.get_px_size())
                     except Exception:
                         row["pixel_size"] = None
+                    try:
+                        row["matrix"] = list(obj.get_matrix().get())
+                    except Exception:
+                        pass
                 elif type_name == "PATH":
                     row["segments"] = []
                     try:
+                        matrix = obj.get_matrix()
+                        row["path_matrix"] = [float(v) for v in matrix.get()]
                         count = int(raw.FPDFPath_CountSegments(obj))
                         row["segment_count"] = count
-                        matrix = obj.get_matrix()
                         take = min(max(0, count), max_segments_per_path,
                                    max(0, max_total_path_segments - total_segments))
                         for segment_index in range(take):
@@ -163,7 +203,6 @@ class PdfPageView:
                             ok = raw.FPDFPathSegment_GetPoint(segment, ctypes.byref(x), ctypes.byref(y))
                             segment_type = int(raw.FPDFPathSegment_GetType(segment))
                             if ok:
-                                # Apply each object's transformation matrix before storing page-space points.
                                 page_x, page_y = matrix.on_point(float(x.value), float(y.value))
                                 point = [float(page_x), float(page_y)]
                             else:
@@ -178,12 +217,21 @@ class PdfPageView:
                             row["segments_truncated"] = True
                     except Exception as exc:
                         row["path_extract_error"] = f"{type(exc).__name__}: {exc}"
+                else:
+                    try:
+                        row["matrix"] = [float(v) for v in obj.get_matrix().get()]
+                    except Exception:
+                        pass
                 objects.append(row)
         except Exception as exc:
             summary["object_inventory_status"] = "PARTIAL_ERROR"
             summary["object_inventory_error"] = f"{type(exc).__name__}: {exc}"
         else:
             summary["object_inventory_status"] = "OK"
+        finally:
+            close = getattr(textpage, "close", None)
+            if callable(close):
+                close()
         summary["objects"] = objects
         summary["object_count"] = len(objects)
         summary["path_segment_count"] = total_segments
