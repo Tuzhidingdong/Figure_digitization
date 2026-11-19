@@ -780,3 +780,82 @@ def test_pdf_vector_path_is_mapped_into_crop_pixels_and_calibrated_in_original_o
     assert record.points[0].x == -1.0
     assert record.points[-1].x == 1.0
     assert record.evidence[0]["source_pdf_sha256"] == "a" * 64
+
+
+def test_numeric_axis_text_requires_margin_position_confidence_and_monotonicity():
+    from scientific_figure_data.axis_text import extract_numeric_axis_anchors
+
+    def row(text, cx, cy, confidence=0.98):
+        return {
+            "text": text,
+            "confidence": confidence,
+            "polygon": [[cx - 3, cy - 3], [cx + 3, cy - 3],
+                        [cx + 3, cy + 3], [cx - 3, cy + 3]],
+        }
+
+    rows = [
+        row("0", 30, 130), row("5", 100, 130), row("10", 170, 130),
+        row("0", 20, 120), row("5", 20, 70), row("10", 20, 20),
+        row("999", 90, 60),  # inside-plot number; must not become an axis tick
+        row("15", 100, 132, confidence=0.40),  # low confidence
+        row("Voltage", 100, 150),
+    ]
+    parsed = extract_numeric_axis_anchors(rows, (30, 20, 170, 120))
+    assert [item["value"] for item in parsed["x_anchors"]] == [0.0, 5.0, 10.0]
+    assert [item["value"] for item in parsed["y_left_anchors"]] == [10.0, 5.0, 0.0]
+    assert not parsed["y_right_anchors"]
+    assert parsed["status"] == "NUMERIC_TICKS_CANDIDATES_FOUND"
+
+
+def test_numeric_axis_text_rejects_non_monotonic_tick_candidates():
+    from scientific_figure_data.axis_text import extract_numeric_axis_anchors
+
+    rows = []
+    for text, x in (("0", 30), ("10", 90), ("5", 150)):
+        rows.append({
+            "text": text,
+            "confidence": 0.99,
+            "polygon": [[x - 2, 125], [x + 2, 125], [x + 2, 130], [x - 2, 130]],
+        })
+    parsed = extract_numeric_axis_anchors(rows, (20, 20, 160, 120))
+    assert parsed["x_anchors"] == []
+    assert parsed["status"] == "NO_CONFIDENT_NUMERIC_TICKS"
+
+
+def test_ocr_axis_anchors_feed_calibration_without_llm(tmp_path: Path):
+    from scientific_figure_data.pipeline import _extract_panel
+
+    def row(text, cx, cy):
+        return {
+            "text": text, "confidence": 0.99,
+            "polygon": [[cx - 3, cy - 3], [cx + 3, cy - 3],
+                        [cx + 3, cy + 3], [cx - 3, cy + 3]],
+        }
+
+    ocr_rows = [
+        row("0", 30, 130), row("5", 100, 130), row("10", 170, 130),
+        row("0", 20, 120), row("5", 20, 70), row("10", 20, 20),
+    ]
+
+    class EmptyContext:
+        def search(self, kind, text=""):
+            return []
+
+    definition = {
+        "series_id": "ocr-axis-series",
+        "technique": "GCD", "domain": "battery",
+        "plot_box": [30, 20, 170, 120],
+        "pixel_points": [[30, 120], [100, 70], [170, 20]],
+        "x_unit": "min", "y_unit": "V",
+    }
+    records = _extract_panel(
+        None, "paper-1", "Figure2", "a",
+        {"technique": "GCD", "domain": "battery"},
+        {"technique": "GCD", "domain": "battery"},
+        {"figures": {"Figure2": {"panels": {"a": {"series": [definition]}}}}},
+        EmptyContext(), 5, None, ocr_rows, "c" * 64, "d" * 64,
+    )
+    assert records[0].extraction_status == "EXTRACTED_PROVISIONAL"
+    assert records[0].metadata["x_calibration"]["anchors"][0]["value"] == 0.0
+    assert records[0].metadata["y_calibration"]["anchors"][0]["value"] == 10.0
+    assert records[0].metadata["axis_text_evidence"]["provisional"] is True
