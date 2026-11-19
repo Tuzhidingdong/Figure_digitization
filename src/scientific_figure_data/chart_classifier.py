@@ -15,8 +15,10 @@ TECHNIQUE_RULES = (
     ("GITT", ("gitt", "intermittent titration")),
 )
 
-SPECTRAL_TECHNIQUES = {"XRD", "Raman", "FTIR", "XPS"}
+SPECTRAL_TECHNIQUES = {"XRD", "RAMAN", "FTIR", "XPS"}
 NON_MONOTONIC_TECHNIQUES = {"CV", "EIS"}
+CANONICAL_TECHNIQUES = {"RAMAN": "Raman", "XRD": "XRD", "FTIR": "FTIR", "XPS": "XPS",
+                        "CV": "CV", "EIS": "EIS", "GCD": "GCD", "GITT": "GITT"}
 
 
 def _normalize(value: str | None) -> str:
@@ -40,9 +42,10 @@ def classify_chart_family(
     context = " ".join(_normalize(value) for value in (caption, native_text, x_label, y_label) if value)
     if explicit:
         normalized_technique = explicit.upper()
+        canonical_technique = CANONICAL_TECHNIQUES.get(normalized_technique, explicit)
         if normalized_technique in NON_MONOTONIC_TECHNIQUES:
             return {
-                "technique": normalized_technique,
+                "technique": canonical_technique,
                 "chart_family": "NON_MONOTONIC_CURVE",
                 "status": "CLASSIFIED_FROM_UPSTREAM_METADATA",
                 "confidence": 1.0,
@@ -50,7 +53,7 @@ def classify_chart_family(
             }
         if normalized_technique in SPECTRAL_TECHNIQUES:
             return {
-                "technique": normalized_technique,
+                "technique": canonical_technique,
                 "chart_family": "SPECTRUM",
                 "y_signal_mode": "SERIES_RELATIVE_SIGNAL",
                 "status": "CLASSIFIED_FROM_UPSTREAM_METADATA",
@@ -59,7 +62,7 @@ def classify_chart_family(
             }
         if normalized_technique in {"GCD", "GITT"}:
             return {
-                "technique": normalized_technique,
+                "technique": canonical_technique,
                 "chart_family": "TIME_SERIES",
                 "status": "CLASSIFIED_FROM_UPSTREAM_METADATA",
                 "confidence": 1.0,
