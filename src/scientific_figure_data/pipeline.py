@@ -180,11 +180,17 @@ def _extract_panel(
     panel: dict, figure: dict, overrides: dict, context: PaperContextIndex,
     pdf_page: int | None, native_page_evidence: dict | None = None,
     ocr_evidence: list[dict] | None = None,
+    source_pdf_sha256: str | None = None, input_fingerprint: str | None = None,
 ) -> list[SeriesRecord]:
     definitions = _series_overrides(overrides, figure_id, panel_id)
     evidence = {
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
         "source_image": image_path.name if image_path else None,
+        "source_image_sha256": sha256_file(image_path) if image_path and image_path.is_file() else None,
+        "source_pdf_sha256": source_pdf_sha256,
+        "paper_input_fingerprint": input_fingerprint,
+        "extraction_channel": "UNRESOLVED",
+        "algorithm_version": ALGORITHM_VERSION,
         "context_reference_candidates": context.search("reference_electrode"),
         "context_statistics_candidates": context.search("statistics"),
         "native_page_evidence": native_page_evidence or {},
@@ -405,11 +411,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     )
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
     pdf_path = None
+    pdf_sha256 = None
     for artifact in snapshot.artifacts:
         if artifact.role == "main_pdf":
             candidate = input_root / artifact.path
             if candidate.is_file():
                 pdf_path = candidate
+                pdf_sha256 = artifact.sha256
                 break
 
     figures: list[dict] = []
@@ -510,19 +518,40 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 saved_crop, snapshot.paper_id, figure_id, panel_id, panel, figure,
                 overrides, context, figure["page"],
                 native_evidence_by_page.get(int(figure["page"])) if figure["page"] else None,
-                ocr_evidence,
+                ocr_evidence, pdf_sha256, snapshot.input_fingerprint,
             )
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             panel_status = "EXTRACTED" if any(s.points for s in extracted) else "NEEDS_REVIEW"
+            for item in extracted:
+                item.evidence[0]["extraction_channel"] = item.extraction_method
+                item.metadata.setdefault("qc_components", {
+                    "panel_segmentation": "INVENTORIED_UNVALIDATED",
+                    "chart_family": "UNCLASSIFIED",
+                    "axis_calibration": "CALIBRATED" if "calibration" in item.metadata else "UNRESOLVED",
+                    "series_extraction": item.extraction_status,
+                    "subject_link": "ASSIGNED_WITH_EVIDENCE" if any(
+                        link.get("status") == "ASSIGNED_WITH_EVIDENCE" for link in item.subject_links
+                    ) else "UNASSIGNED",
+                    "condition_interpretation": "EVIDENCE_ATTACHED" if item.conditions else "UNKNOWN",
+                    "unit_interpretation": "RAW_UNIT_RETAINED" if item.x_unit or item.y_unit else "UNKNOWN",
+                })
             # Keep only compact per-series metadata in the paper worker; point batches are already persisted.
             for item in extracted:
                 item.metadata.setdefault("points_count", len(item.points))
                 item.points.clear()
             series.extend(extracted)
             review_needed = review_needed or panel_status == "NEEDS_REVIEW"
-            panels.append({"figure_id": figure_id, "panel_id": panel_id,
-                           "bbox": bbox, "status": panel_status,
-                           "shared_legend_refs": figure["shared_legends"]})
+            panels.append({
+                "figure_id": figure_id, "panel_id": panel_id,
+                "bbox": bbox, "normalized_bbox": bbox if isinstance(bbox, (list, tuple)) and
+                    all(isinstance(value, (int, float)) and 0 <= value <= 1 for value in bbox) else None,
+                "status": panel_status,
+                "segmentation_confidence": None,
+                "segmentation_confidence_status": "NOT_CALIBRATED",
+                "chart_family": "UNCLASSIFIED",
+                "chart_family_status": "NEEDS_REVIEW",
+                "shared_legend_refs": figure["shared_legends"],
+            })
 
     if not figures:
         status = "NEEDS_REVIEW"
