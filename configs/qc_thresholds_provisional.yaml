@@ -1,0 +1,8 @@
+schema_version: '1.0'
+status: PROVISIONAL_UNCALIBRATED
+notes: Engineering defaults only; not calibrated against annotated real papers.
+minimum_calibration_anchors: 2
+minimum_trace_points: 8
+minimum_trace_pixel_fraction: 0.15
+allow_automatic_same_color_crossing: false
+allow_automatic_marker_disambiguation: false
