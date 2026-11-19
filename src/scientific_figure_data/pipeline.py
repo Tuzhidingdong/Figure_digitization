@@ -12,7 +12,7 @@ from .calibration import calibration_to_dict, fit_linear_axis
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
-from .hashing import atomic_write_json
+from .hashing import atomic_write_json, sha256_file
 from .models import JobState, PaperSnapshot, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
@@ -157,7 +157,8 @@ def _check_memory_budget(memory_limit_mb: int):
 def _extract_panel(
     image_path: Path | None, paper_id: str, figure_id: str, panel_id: str,
     panel: dict, figure: dict, overrides: dict, context: PaperContextIndex,
-    pdf_page: int | None,
+    pdf_page: int | None, native_page_evidence: dict | None = None,
+    ocr_evidence: list[dict] | None = None,
 ) -> list[SeriesRecord]:
     definitions = _series_overrides(overrides, figure_id, panel_id)
     evidence = {
@@ -165,6 +166,8 @@ def _extract_panel(
         "source_image": image_path.name if image_path else None,
         "context_reference_candidates": context.search("reference_electrode"),
         "context_statistics_candidates": context.search("statistics"),
+        "native_page_evidence": native_page_evidence or {},
+        "ocr_evidence": ocr_evidence or [],
     }
     if not definitions:
         definitions = [{
@@ -329,6 +332,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     series: list[SeriesRecord] = []
     review_needed = False
     backend = None
+    native_evidence_by_page: dict[int, dict] = {}
     for figure_index, source_figure in enumerate(figures_raw, 1):
         if not isinstance(source_figure, dict):
             continue
@@ -343,6 +347,34 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         if isinstance(figure["shared_legends"], str):
             figure["shared_legends"] = [{"text": figure["shared_legends"], "scope": "FIGURE"}]
         figures.append(figure)
+        if pdf_path and figure["page"]:
+            page_number_int = int(figure["page"])
+            if page_number_int not in native_evidence_by_page:
+                try:
+                    if backend is None:
+                        backend = PdfiumBackend()
+                    with backend.open(pdf_path) as doc:
+                        with doc.page(page_number_int) as native_page:
+                            native_payload = native_page.inspect_native_objects(
+                                max_objects=5000, max_total_path_segments=12000,
+                                max_segments_per_path=1500,
+                            )
+                    native_path = paper_output / "evidence" / f"page_{page_number_int:04d}_native.json"
+                    atomic_write_json(native_path, native_payload)
+                    native_evidence_by_page[page_number_int] = {
+                        "artifact": native_path.relative_to(paper_output).as_posix(),
+                        "sha256": sha256_file(native_path),
+                        "object_inventory_status": native_payload.get("object_inventory_status"),
+                        "object_count": native_payload.get("object_count"),
+                        "object_type_counts": native_payload.get("object_type_counts", {}),
+                        "path_segment_count": native_payload.get("path_segment_count", 0),
+                        "native_text_preview": native_payload.get("native_text", "")[:3000],
+                    }
+                except Exception as exc:
+                    native_evidence_by_page[page_number_int] = {
+                        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
         for panel_index, source_panel in enumerate(_figure_panels(source_figure), 1):
             panel = dict(source_panel)
             panel_id = safe_id(str(panel.get("panel_id") or panel.get("id") or panel.get("label") or panel_index))
@@ -376,8 +408,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         finally:
                             rendered.close()
             _check_memory_budget(memory_limit_mb)
-            extracted = _extract_panel(saved_crop, snapshot.paper_id, figure_id, panel_id,
-                                       panel, figure, overrides, context, figure["page"])
+            ocr_evidence = []
+            if options.get("ocr") and saved_crop:
+                from .ocr import run_ocr
+                ocr_evidence = run_ocr(saved_crop)
+            extracted = _extract_panel(
+                saved_crop, snapshot.paper_id, figure_id, panel_id, panel, figure,
+                overrides, context, figure["page"],
+                native_evidence_by_page.get(int(figure["page"])) if figure["page"] else None,
+                ocr_evidence,
+            )
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             panel_status = "EXTRACTED" if any(s.points for s in extracted) else "NEEDS_REVIEW"
             # Keep only compact per-series metadata in the paper worker; point batches are already persisted.
@@ -401,6 +441,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         extra={"context_index_fingerprint": context.fingerprint,
                "figure_inventory_source": inventory_path.name if inventory_path else None,
                "pdf_source": pdf_path.name if pdf_path else None,
+               "native_page_evidence": native_evidence_by_page,
                "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
                "llm_tokens": 0},
     )
