@@ -408,13 +408,21 @@ def test_scheduler_resume_reuses_completed_paper_stage(tmp_path: Path):
     from scientific_figure_data.scheduler import run_corpus
 
     input_root = tmp_path / "input"
-    paper = input_root / "paper-cache"
+    paper = input_root / "nested" / "paper-cache"
     paper.mkdir(parents=True)
     (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
     output_root = tmp_path / "output"
 
     first = run_corpus(input_root, output_root, discover_papers(input_root), workers=1)
     assert first["completed_with_review"] == 1
+    canonical_id = "nested__paper-cache"
+    con = connect_catalog(output_root / "catalog.sqlite")
+    job = con.execute("SELECT paper_id,state FROM jobs").fetchone()
+    indexed = con.execute("SELECT paper_id FROM papers").fetchone()
+    assert job["paper_id"] == canonical_id
+    assert indexed["paper_id"] == canonical_id
+    con.close()
+
     second = run_corpus(input_root, output_root, discover_papers(input_root), workers=1)
     assert second["cached"] == 1
     assert second["completed_with_review"] == 1
@@ -1107,3 +1115,12 @@ def test_adapter_allows_a_single_pdf_paper_at_the_root(tmp_path: Path):
     assert discovered == [root]
     snapshot = snapshot_paper(root, root)
     assert snapshot.paper_id == "root-paper"
+
+
+def test_canonical_paper_id_is_stable_and_windows_safe():
+    from scientific_figure_data.manifest import storage_paper_id
+
+    assert storage_paper_id("nested/paper-001") == "nested__paper-001"
+    assert storage_paper_id("nested\\paper-001") == "nested__paper-001"
+    assert storage_paper_id("NUL") == "_NUL"
+    assert storage_paper_id("a" * 140).startswith("a" * 100 + "_")
