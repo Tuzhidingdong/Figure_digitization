@@ -160,6 +160,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         series_index = {item["series_id"]: item for item in document.get("series", [])}
         csv_updates: dict[Path, dict[str, list[dict]]] = {}
         csv_axis_updates: dict[Path, dict[str, dict[str, Any]]] = {}
+        point_sync_by_panel: dict[Path, set[str]] = {}
         for change in patch["changes"]:
             series_id = change["series_id"]
             if series_id not in series_index:
@@ -181,6 +182,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     if not csv_path.is_file():
                         raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
                     csv_updates.setdefault(csv_path, {})[series_id] = value
+                    point_sync_by_panel.setdefault(csv_path, set()).add(series_id)
                 elif key in {"x_axis_anchors", "y_axis_anchors"}:
                     continue
                 else:
@@ -189,6 +191,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                 if not csv_path.is_file():
                     raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
                 csv_axis_updates.setdefault(csv_path, {})[series_id] = axis_transforms
+                point_sync_by_panel.setdefault(csv_path, set()).add(series_id)
             item["extraction_status"] = "REVIEWED_ACCEPTED"
             item["review_state"] = "REVIEWED_ACCEPTED"
             item.setdefault("metadata", {})["review_patch_id"] = patch_id
@@ -207,7 +210,7 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         if bundle_path.is_file():
             shutil.copy2(bundle_path, bundle_backup)
         backups = {}
-        for csv_path in csv_updates:
+        for csv_path in set(csv_updates) | set(csv_axis_updates):
             backup_path = version_dir / (csv_path.parent.name + ".before.csv")
             shutil.copy2(csv_path, backup_path)
             backups[csv_path] = backup_path
@@ -241,25 +244,51 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                         if key in values:
                             assignments.append(f"{key}=?")
                             args.append(values[key])
+                    series_metadata = series_index[sid].get("metadata", {})
+                    assignments.append("metadata_json=?")
+                    args.append(json.dumps(series_metadata, ensure_ascii=False))
                     args.append(sid)
                     con.execute(f"UPDATE series SET {', '.join(assignments)} WHERE series_id=?", args)
-                    if "points" in values:
-                        con.execute("DELETE FROM series_points WHERE series_id=?", (sid,))
-                        def point_values():
-                            for point in values["points"]:
-                                x_value = point.get("x")
-                                yield (
-                                    sid, int(point["point_index"]),
-                                    x_value if isinstance(x_value, (int, float)) else None,
-                                    x_value if isinstance(x_value, str) else None,
-                                    point.get("y"), point.get("pixel_x"), point.get("pixel_y"),
-                                    point.get("y_err_low"), point.get("y_err_high"),
-                                    point.get("err_type", "UNKNOWN"),
+
+                # Rebuild all affected SQLite point rows from the final canonical Panel CSV.
+                # Stream each panel once and cap executemany batches to bound memory.
+                for csv_path, affected_ids in point_sync_by_panel.items():
+                    placeholders = ",".join("?" for _ in affected_ids)
+                    ids = sorted(affected_ids)
+                    con.execute(
+                        f"DELETE FROM series_points WHERE series_id IN ({placeholders})", ids
+                    )
+                    batch = []
+                    with csv_path.open("r", newline="", encoding="utf-8") as point_stream:
+                        for row in csv.DictReader(point_stream):
+                            sid = row.get("series_id")
+                            if sid not in affected_ids:
+                                continue
+                            x_value = _float_or_none(row.get("x_value"))
+                            y_value = _float_or_none(row.get("y_value"))
+                            batch.append((
+                                sid, int(row["point_index"]),
+                                x_value, row.get("x_label") or None,
+                                y_value, _float_or_none(row.get("pixel_x")),
+                                _float_or_none(row.get("pixel_y")),
+                                _float_or_none(row.get("y_err_low")),
+                                _float_or_none(row.get("y_err_high")),
+                                row.get("err_type") or "UNKNOWN",
+                            ))
+                            if len(batch) >= 1000:
+                                con.executemany(
+                                    """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,
+                                       pixel_x,pixel_y,y_err_low,y_err_high,err_type)
+                                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                                    batch,
                                 )
+                                batch.clear()
+                    if batch:
                         con.executemany(
                             """INSERT INTO series_points(series_id,point_index,x_value,x_label,y_value,
-                               pixel_x,pixel_y,y_err_low,y_err_high,err_type) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                            point_values(),
+                               pixel_x,pixel_y,y_err_low,y_err_high,err_type)
+                               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            batch,
                         )
                 con.execute(
                     "INSERT INTO applied_patches VALUES(?,?,?,?,?)",
