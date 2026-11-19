@@ -57,3 +57,13 @@ def load_profile(name: str, profile_root: Path | None = None, _seen: set[str] | 
     combined["profile_name"] = key
     combined["profile_root"] = str(directory)
     return combined
+
+
+def profile_registry_fingerprint(profile_root: Path | None = None) -> str:
+    from .hashing import sha256_file, sha256_json
+    root = profile_root or PROFILE_ROOT
+    files = []
+    if root.is_dir():
+        for path in sorted(root.glob("**/*.yaml")):
+            files.append((path.relative_to(root).as_posix(), sha256_file(path)))
+    return sha256_json(files)
