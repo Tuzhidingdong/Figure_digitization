@@ -23,7 +23,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install package and test tools
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,images]"
       - name: Compile source and tests
         run: python -m compileall -q src tests
       - name: Check imports and undefined names
