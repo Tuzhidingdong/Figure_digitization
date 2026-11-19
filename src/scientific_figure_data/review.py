@@ -127,6 +127,10 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         version_dir.mkdir(parents=True, exist_ok=True)
         backup_digitization = version_dir / "digitization.before.json"
         shutil.copy2(target, backup_digitization)
+        bundle_path = paper_root / "paper_bundle.json"
+        bundle_backup = version_dir / "paper_bundle.before.json"
+        if bundle_path.is_file():
+            shutil.copy2(bundle_path, bundle_backup)
         backups = {}
         for csv_path in csv_updates:
             backup_path = version_dir / (csv_path.parent.name + ".before.csv")
@@ -137,6 +141,18 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                 _write_csv_atomic(csv_path, rows)
             atomic_write_json(target, document)
             new_hash_preview = sha256_file(target)
+            # Refresh canonical hashes before committing the SQLite transaction so files and
+            # index can be rolled back together if any later write fails.
+            if bundle_path.is_file():
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                bundle["generated_at"] = datetime.now(timezone.utc).isoformat()
+                refreshed = {}
+                for relative in bundle.get("canonical_artifacts", []):
+                    artifact_path = paper_root / relative
+                    if artifact_path.is_file():
+                        refreshed[relative] = sha256_file(artifact_path)
+                bundle["content_hashes"] = refreshed
+                atomic_write_json(bundle_path, bundle)
             with con:
                 for change in patch["changes"]:
                     values = change["set"]
@@ -180,23 +196,12 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     "UPDATE papers SET status='REVIEWED_ACCEPTED',updated_at=? WHERE paper_id=?",
                     (datetime.now(timezone.utc).isoformat(), paper_id),
                 )
-            # Keep the paper bundle's artifact hashes consistent with the newly accepted result.
-            bundle_path = paper_root / "paper_bundle.json"
-            if bundle_path.is_file():
-                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-                bundle["generated_at"] = datetime.now(timezone.utc).isoformat()
-                paths = bundle.get("canonical_artifacts", [])
-                refreshed = {}
-                for relative in paths:
-                    artifact_path = paper_root / relative
-                    if artifact_path.is_file():
-                        refreshed[relative] = sha256_file(artifact_path)
-                bundle["content_hashes"] = refreshed
-                atomic_write_json(bundle_path, bundle)
         except Exception:
             shutil.copy2(backup_digitization, target)
             for csv_path, backup_path in backups.items():
                 shutil.copy2(backup_path, csv_path)
+            if bundle_backup.is_file():
+                shutil.copy2(bundle_backup, bundle_path)
             raise
         return {"status": "REVIEWED_ACCEPTED", "patch_id": patch_id,
                 "original_hash": current_hash, "revised_hash": new_hash_preview,
