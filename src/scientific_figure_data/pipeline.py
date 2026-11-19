@@ -39,18 +39,37 @@ def _paper_relative_artifact(artifact_path: str, paper_relative: str) -> str:
 
 
 def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Path | None]:
-    for artifact in snapshot.artifacts:
-        if artifact.role == "figure_inventory":
-            rel = _paper_relative_artifact(artifact.path, snapshot.source_dir)
-            path = paper_dir / rel
-            if path.is_file():
-                data = _json_file(path)
-                if isinstance(data, list):
-                    return data, path
-                if isinstance(data, dict):
-                    figures = data.get("figures") or data.get("items") or data.get("figure_inventory") or []
-                    if isinstance(figures, list):
-                        return figures, path
+    preferred = {"figure_inventory": 0, "evidence_index": 1}
+    candidates = sorted(
+        (artifact for artifact in snapshot.artifacts
+         if artifact.role in preferred and Path(artifact.path).suffix.lower() == ".json"),
+        key=lambda item: (preferred[item.role], item.path.casefold()),
+    )
+    for artifact in candidates:
+        rel = _paper_relative_artifact(artifact.path, snapshot.source_dir)
+        path = paper_dir / rel
+        if not path.is_file():
+            continue
+        try:
+            data = _json_file(path)
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, list):
+            figures = data
+        elif isinstance(data, dict):
+            figures = None
+            for key in ("figures", "items", "figure_inventory", "figure_index"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    figures = value
+                    break
+                if isinstance(value, dict) and isinstance(value.get("figures"), list):
+                    figures = value["figures"]
+                    break
+        else:
+            figures = None
+        if figures is not None:
+            return figures, path
     return [], None
 
 
