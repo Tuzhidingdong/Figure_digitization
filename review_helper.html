@@ -30,6 +30,10 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <input id="technique"></label>
 <label>Domain
 <input id="domain"></label>
+<label>X-axis numeric anchors (JSON: [{ "pixel": 0, "value": 0 }, ...])
+<textarea id="xAnchorsJson" rows="4" spellcheck="false"></textarea></label>
+<label>Y-axis numeric anchors (JSON: [{ "pixel": 0, "value": 0 }, ...])
+<textarea id="yAnchorsJson" rows="4" spellcheck="false"></textarea></label>
 <label>Replacement ordered points (JSON; edit only when correcting a trace)
 <textarea id="pointsJson" rows="8" spellcheck="false"></textarea></label>
 <label>Reviewer
@@ -136,6 +140,10 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     $("panelInfo").textContent="Panel bbox: "+JSON.stringify(panel.normalized_bbox||panel.bbox||null)+" · shared legend refs: "+JSON.stringify(panel.shared_legend_refs||[]);
     $("calibrationInfo").textContent="X calibration: "+JSON.stringify(series.metadata?.x_calibration?.anchors||[])+"\nY calibration: "+JSON.stringify(series.metadata?.y_calibration?.anchors||[]);
     $("qcInfo").textContent="QC components: "+JSON.stringify(series.metadata?.qc_components||{})+"\nExtraction metadata: "+JSON.stringify(series.metadata||{});
+    const xAnchors=series.metadata?.x_axis_anchors||series.metadata?.x_calibration?.anchors||[];
+    const yAnchors=series.metadata?.y_axis_anchors||series.metadata?.y_calibration?.anchors||[];
+    $("xAnchorsJson").value=JSON.stringify(xAnchors,null,2);
+    $("yAnchorsJson").value=JSON.stringify(yAnchors,null,2);
     $("pointsJson").value=JSON.stringify(currentPanelRows.map(p=>({
       point_index:Number(p.point_index),
       x:p.x_label? p.x_label:(p.x_value===""?null:Number(p.x_value)),
@@ -156,6 +164,13 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     const s=currentSeries();if(!s)return;
     const set={label:$("label").value,y_axis_side:$("axisSide").value,
                technique:$("technique").value||null,domain:$("domain").value||null};
+    for(const [field,elementId] of [["x_axis_anchors","xAnchorsJson"],["y_axis_anchors","yAnchorsJson"]]){
+      const anchorText=$(elementId).value.trim();
+      if(anchorText){
+        try{set[field]=JSON.parse(anchorText);if(!Array.isArray(set[field]))throw new Error(field+" must be an array");}
+        catch(err){$("patchStatus").textContent="Invalid "+field+": "+String(err);return;}
+      }
+    }
     const pointsText=$("pointsJson").value.trim();
     if(pointsText){
       try{set.points=JSON.parse(pointsText);if(!Array.isArray(set.points))throw new Error("Points JSON must be an array");}
