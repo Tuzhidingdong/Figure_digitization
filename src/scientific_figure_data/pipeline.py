@@ -12,7 +12,7 @@ from .calibration import calibration_to_dict, fit_linear_axis
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
-from .hashing import atomic_write_json, sha256_file
+from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import JobState, PaperSnapshot, SeriesRecord, safe_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
@@ -108,7 +108,8 @@ def _series_overrides(overrides: dict, figure_id: str, panel_id: str) -> list[di
     return series if isinstance(series, list) else []
 
 
-def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = False) -> dict | None:
+def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = False,
+                   expected_stage_fingerprint: str | None = None) -> dict | None:
     digitization_path = paper_root / "digitization.json"
     manifest_path = paper_root / "paper_manifest.json"
     figures_path = paper_root / "figure_inventory.json"
@@ -116,14 +117,17 @@ def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = Fal
     if not all(p.is_file() for p in (digitization_path, manifest_path, figures_path, panels_path)):
         return None
     digitization = _json_file(digitization_path)
-    if not locked and digitization.get("input_fingerprint") != snapshot.input_fingerprint:
-        return None
+    if not locked:
+        if digitization.get("input_fingerprint") != snapshot.input_fingerprint:
+            return None
+        if expected_stage_fingerprint and digitization.get("stage_fingerprint") != expected_stage_fingerprint:
+            return None
     figures = _json_file(figures_path).get("figures", [])
     panels = _json_file(panels_path).get("panels", [])
     series = []
     accepted_fields = {
         "series_id", "paper_id", "figure_id", "panel_id", "technique", "domain", "label",
-        "x_label", "y_label", "x_unit", "y_unit", "y_axis_side", "extraction_method",
+        "x_label", "y_label", "x_unit", "y_unit", "measurement_id", "y_axis_side", "extraction_method",
         "extraction_status", "qc_status", "review_state", "subject_links", "conditions",
         "evidence", "metadata",
     }
@@ -276,13 +280,21 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     paper_output = output_root / "papers" / snapshot.paper_id
     existing = paper_output / "digitization.json"
     force_reviewed = bool(options.get("force_recompute_reviewed", False))
+    overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
+    stage_fingerprint = sha256_json({
+        "input_fingerprint": snapshot.input_fingerprint,
+        "algorithm_version": ALGORITHM_VERSION,
+        "overrides": overrides,
+        "profile_config_version": "profile-config-v1",
+    })
     if existing.is_file():
         old = _json_file(existing)
         accepted = any(s.get("review_state") == "REVIEWED_ACCEPTED" for s in old.get("series", []))
         unchanged = (old.get("input_fingerprint") == snapshot.input_fingerprint
-                     and old.get("algorithm_version") == ALGORITHM_VERSION)
+                     and old.get("algorithm_version") == ALGORITHM_VERSION
+                     and old.get("stage_fingerprint") == stage_fingerprint)
         if unchanged and not force_reviewed:
-            cached = _cached_result(paper_output, snapshot)
+            cached = _cached_result(paper_output, snapshot, expected_stage_fingerprint=stage_fingerprint)
             if cached:
                 cached["artifact_paths"] = {
                     "manifest_path": str(paper_output / "paper_manifest.json"),
@@ -320,7 +332,6 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         memory_budget_bytes=int(options.get("context_memory_budget", 500_000)),
     )
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
-    overrides = _load_overrides(paper_dir, output_root, snapshot.paper_id)
     pdf_path = None
     for artifact in snapshot.artifacts:
         if artifact.role == "main_pdf":
@@ -444,6 +455,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "figure_inventory_source": inventory_path.name if inventory_path else None,
                "pdf_source": pdf_path.name if pdf_path else None,
                "native_page_evidence": native_evidence_by_page,
+               "stage_fingerprint": stage_fingerprint,
                "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
                "llm_tokens": 0},
     )
