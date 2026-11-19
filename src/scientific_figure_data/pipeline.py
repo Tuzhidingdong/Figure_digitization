@@ -9,7 +9,7 @@ from typing import Any
 
 from .adapter import snapshot_paper
 from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
-from .axis_text import extract_numeric_axis_anchors
+from .axis_text import extract_native_numeric_axis_anchors, extract_numeric_axis_anchors
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
@@ -258,28 +258,68 @@ def _extract_panel(
         }
         plot_box = definition.get("plot_box")
         axis_text_evidence = None
+        native_axis_evidence = None
+        ocr_axis_evidence = None
+        native_payload = None
+        plot_bbox_pdf = definition.get("plot_bbox_pdf")
+        vector_indices = definition.get("vector_object_indices")
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+
+        if (native_page_path and native_page_path.is_file() and plot_bbox_pdf and crop_mapping
+                and crop_mapping.get("page_rotation_degrees", 0) == 0):
+            try:
+                native_payload = _json_file(native_page_path)
+                native_axis_evidence = extract_native_numeric_axis_anchors(
+                    native_payload, tuple(float(value) for value in plot_bbox_pdf), crop_mapping
+                )
+            except (OSError, KeyError, TypeError, ValueError):
+                native_axis_evidence = None
+
+        def use_y_axis_candidates(axis_candidates):
+            nonlocal y_axis_anchors
+            if relative_signal or len(y_axis_anchors) >= 2 or not axis_candidates:
+                return
+            requested_side = str(definition.get("y_axis_side") or "UNASSIGNED").upper()
+            left_anchors = axis_candidates["y_left_anchors"]
+            right_anchors = axis_candidates["y_right_anchors"]
+            if requested_side == "LEFT" and len(left_anchors) >= 2:
+                y_axis_anchors = left_anchors
+            elif requested_side == "RIGHT" and len(right_anchors) >= 2:
+                y_axis_anchors = right_anchors
+            elif len(left_anchors) >= 2 and len(right_anchors) < 2:
+                y_axis_anchors = left_anchors
+                record.y_axis_side = "LEFT"
+            elif len(right_anchors) >= 2 and len(left_anchors) < 2:
+                y_axis_anchors = right_anchors
+                record.y_axis_side = "RIGHT"
+
+        if native_axis_evidence:
+            if len(x_axis_anchors) < 2 and len(native_axis_evidence["x_anchors"]) >= 2:
+                x_axis_anchors = native_axis_evidence["x_anchors"]
+            use_y_axis_candidates(native_axis_evidence)
+
         if ocr_evidence and plot_box and (
             len(x_axis_anchors) < 2 or (not relative_signal and len(y_axis_anchors) < 2)
         ):
-            axis_text_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box))
-            if len(x_axis_anchors) < 2 and len(axis_text_evidence["x_anchors"]) >= 2:
-                x_axis_anchors = axis_text_evidence["x_anchors"]
-            if not relative_signal and len(y_axis_anchors) < 2:
-                requested_side = str(definition.get("y_axis_side") or "UNASSIGNED").upper()
-                left_anchors = axis_text_evidence["y_left_anchors"]
-                right_anchors = axis_text_evidence["y_right_anchors"]
-                if requested_side == "LEFT" and len(left_anchors) >= 2:
-                    y_axis_anchors = left_anchors
-                elif requested_side == "RIGHT" and len(right_anchors) >= 2:
-                    y_axis_anchors = right_anchors
-                elif len(left_anchors) >= 2 and len(right_anchors) < 2:
-                    y_axis_anchors = left_anchors
-                    record.y_axis_side = "LEFT"
-                elif len(right_anchors) >= 2 and len(left_anchors) < 2:
-                    y_axis_anchors = right_anchors
-                    record.y_axis_side = "RIGHT"
+            ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box))
+            if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
+                x_axis_anchors = ocr_axis_evidence["x_anchors"]
+            use_y_axis_candidates(ocr_axis_evidence)
+
+        if native_axis_evidence or ocr_axis_evidence:
+            axis_text_evidence = {
+                "native": native_axis_evidence,
+                "ocr": ocr_axis_evidence,
+                "source": (
+                    "PDF_NATIVE_TEXT" if native_axis_evidence and (
+                        native_axis_evidence["x_anchors"] or native_axis_evidence["y_left_anchors"]
+                        or native_axis_evidence["y_right_anchors"]
+                    ) else "OCR" if ocr_axis_evidence else "NONE"
+                ),
+                "provisional": True,
+            }
+
         x_cal = None
         y_cal = None
         calibration_errors = {}
@@ -315,13 +355,12 @@ def _extract_panel(
 
         pixel_points = definition.get("pixel_points")
         family = str(definition.get("data_family", "")).upper()
-        vector_indices = definition.get("vector_object_indices")
-        plot_bbox_pdf = definition.get("plot_bbox_pdf")
         vector_selection = None
         if (native_page_path and native_page_path.is_file() and plot_bbox_pdf
                 and crop_mapping and crop_mapping.get("page_rotation_degrees", 0) == 0):
             try:
-                native_payload = _json_file(native_page_path)
+                if native_payload is None:
+                    native_payload = _json_file(native_page_path)
                 selected_paths, vector_selection = choose_vector_paths(
                     native_payload, tuple(float(value) for value in plot_bbox_pdf),
                     [int(value) for value in vector_indices] if vector_indices else None,
