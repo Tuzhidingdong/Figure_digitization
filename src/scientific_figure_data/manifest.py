@@ -82,6 +82,13 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
             ))
     present = {item.role for item in artifacts}
     missing = [role for role in ("main_pdf", "figure_inventory") if role not in present]
+    warnings = []
+    for role in ("main_pdf", "figure_inventory", "evidence_index"):
+        count = sum(1 for item in artifacts if item.role == role)
+        if count > 1:
+            warnings.append(f"Multiple {role} candidates detected ({count}); deterministic first-candidate routing applies.")
+    if "figure_inventory" not in present and "evidence_index" in present:
+        warnings.append("No standalone figure inventory; downstream adapter will inspect evidence-index manifests for embedded figures.")
     upstream_version = _detect_upstream_version(paper_dir, artifacts)
     payload = {
         "paper_id": paper_id, "source_dir": paper_dir.relative_to(corpus_root).as_posix(),
@@ -103,6 +110,6 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
         detected_upstream_version=upstream_version,
         adapter_version=ADAPTER_VERSION, created_at=utc_now(),
         artifacts=artifacts, missing_roles=missing,
-        warnings=[] if upstream_version else ["Upstream version marker not detected; artifact discovery adapter used."],
+        warnings=warnings + ([] if upstream_version else ["Upstream version marker not detected; artifact discovery adapter used."]),
         input_fingerprint=sha256_json(payload),
     )
