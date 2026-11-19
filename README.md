@@ -19,6 +19,8 @@ Python 3.11 or newer is required.
     python -m pip install -e ".[pdf]"
     # Optional image algorithms:
     python -m pip install -e ".[images]"
+    # Optional PDF backend comparison spike:
+    python -m pip install -e ".[pdf-spike]"
     # Development:
     python -m pip install -e ".[dev]"
 
