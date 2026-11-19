@@ -59,11 +59,32 @@ def trace_monotonic_color(
     if max_gap > max_gap_columns:
         return [], {"status": "NEEDS_REVIEW", "reason": "DISCONTINUOUS_OR_DASHED_TRACE",
                     "matched_columns": len(columns), "max_gap_columns": max_gap}
-    # Detect multiple vertically separated bands in a column; their median would be unsafe.
+    # Detect multiple vertically separated bands in a column. Same-color traces
+    # must not be collapsed to a median when two branches/curves occupy one X column.
     for x in range(x0, x1):
         ys = np.flatnonzero(mask[y0:y1, x]) + y0
+        if len(ys) < 4:
+            continue
+        clusters = []
+        current = [int(ys[0])]
+        for y_value in ys[1:]:
+            y_integer = int(y_value)
+            if y_integer - current[-1] <= 3:
+                current.append(y_integer)
+            else:
+                clusters.append(current)
+                current = [y_integer]
+        clusters.append(current)
+        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
+        if len(substantial) >= 2:
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "MULTIPLE_SAME_COLOR_BANDS",
+                "ambiguous_column": x,
+                "band_centers": [float(np.mean(cluster)) for cluster in substantial],
+            }
         if len(ys) > 12 and (int(ys.max()) - int(ys.min())) > 10:
-            return [], {"status": "NEEDS_REVIEW", "reason": "MULTIPLE_OR_THICK_BANDS",
+            return [], {"status": "NEEDS_REVIEW", "reason": "THICK_OR_AMBIGUOUS_TRACE",
                         "ambiguous_column": x}
     points = []
     for index, (x, py, _) in enumerate(columns):
