@@ -221,14 +221,8 @@ def _probe_pikepdf(path: Path) -> dict:
                 counts = Counter()
                 # Parsing is performed one page at a time; no corpus-wide stream list is retained.
                 instructions = pikepdf.parse_content_stream(page)
-                for instruction in instructions:
-                    if hasattr(instruction, "operator"):
-                        operator = str(instruction.operator)
-                    elif isinstance(instruction, tuple) and len(instruction) >= 2:
-                        operator = str(instruction[1])
-                    else:
-                        counts["unclassified_instructions"] += 1
-                        continue
+                for operands, operator_value in instructions:
+                    operator = str(operator_value)
                     counts[f"operator:{operator}"] += 1
                     if operator in path_ops:
                         counts["path_construction_ops"] += 1
