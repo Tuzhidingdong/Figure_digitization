@@ -486,3 +486,17 @@ def test_pdfium_native_object_inventory_passes_and_closes_textpage(monkeypatch):
     assert result["objects"][0]["text"] == "0 1 2 3"
     assert result["objects"][0]["font_size"] == 7.0
     assert result["objects"][0]["bounds_pdf"] == [10.0, 20.0, 110.0, 120.0]
+
+
+def test_backend_probe_without_pdfs_is_explicit_and_does_not_select_backend(tmp_path: Path, monkeypatch, capsys):
+    from scientific_figure_data.backend_probe import main
+
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 0
+    report = json.loads((tmp_path / "backend_probe_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "NO_INPUT_PDFS"
+    assert "pypdfium2" in report["candidate_modules"]
+    assert "pdfminer" in report["candidate_modules"]
+    assert "pikepdf" in report["candidate_modules"]
+    assert "backend" not in report
+    capsys.readouterr()
