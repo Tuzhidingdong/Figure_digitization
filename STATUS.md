@@ -33,10 +33,10 @@ The requirements baseline has been committed. No application code, extraction al
 
 ## Acceptance tracking
 
-- P0 criteria: AC-01–AC-98, subject to each criterion's precise scope and dependencies in the frozen Task Plan.
+- P0 criteria: AC-01–AC-50 and AC-52–AC-98, subject to their stated prerequisites and evidence requirements.
 - P1 criteria: AC-51, AC-99, AC-100.
 - P2 criteria: AC-101.
-- Release criteria: AC-06, AC-16, AC-36, AC-68, AC-94, AC-102.
+- Release criteria: AC-06, AC-16, AC-36, AC-68, AC-94, AC-102 (some are also P0 implementation criteria).
 
 No acceptance criterion is marked implemented or validated at baseline.
 
