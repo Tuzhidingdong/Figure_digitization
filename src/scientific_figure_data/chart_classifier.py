@@ -8,7 +8,7 @@ TECHNIQUE_RULES = (
     ("CV", ("cyclic voltammetry", "cyclic voltammogram", "current density", "potential", "scan rate")),
     ("EIS", ("electrochemical impedance", "nyquist", "z''", "z′′", "z'' vs", "imaginary impedance")),
     ("XRD", ("2theta", "2 theta", "2θ", "diffraction angle", "x-ray diffraction")),
-    ("Raman", ("raman shift", "raman spectra", "cm-1", "cm⁻¹")),
+    ("Raman", ("raman shift", "raman spectra", "raman modes")),
     ("FTIR", ("ftir", "infrared spectra", "wavenumber")),
     ("XPS", ("binding energy", "xps", "photoelectron")),
     ("GCD", ("charge-discharge", "charge/discharge", "galvanostatic", "discharge time")),
@@ -81,14 +81,14 @@ def classify_chart_family(
                     for tech, terms in matches if tech == candidate for term in terms]
         if candidate in NON_MONOTONIC_TECHNIQUES:
             family = "NON_MONOTONIC_CURVE"
-        elif candidate in SPECTRAL_TECHNIQUES:
+        elif candidate.upper() in SPECTRAL_TECHNIQUES:
             family = "SPECTRUM"
         else:
             family = "TIME_SERIES"
         return {
             "technique": candidate,
             "chart_family": family,
-            "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if candidate in SPECTRAL_TECHNIQUES else None,
+            "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if candidate.upper() in SPECTRAL_TECHNIQUES else None,
             "status": "PROVISIONAL_TEXT_CLASSIFICATION",
             "confidence": 0.85,
             "evidence": evidence,
