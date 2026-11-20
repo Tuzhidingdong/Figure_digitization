@@ -236,6 +236,12 @@ def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
     assert result["snapshot"]["external_sources"][0]["status"] == "HASH_VERIFIED"
     assert result["snapshot"]["external_sources"][0]["sha256"] == before[3]
     assert result["job_state"] in {"NEEDS_REVIEW", "COMPLETED", "COMPLETED_WITH_REVIEW"}
+    assert result["figures"][0]["source_bbox"] == [20.0, 200.0, 570.0, 240.0]
+    assert result["figures"][0]["source_bbox_role"] == "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED"
+    assert result["panels"][0]["bbox"] is None
+    assert result["panels"][0]["bbox_provenance"] == "NOT_PROVIDED"
+    assert result["panels"][0]["segmentation_provenance"] == "SINGLE_PANEL_FALLBACK"
+    assert result["panels"][0]["segmentation_status"] == "WHOLE_FIGURE_NOT_SEGMENTED"
     assert after == before
 
 

@@ -1189,7 +1189,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 "bbox_coordinate_space": bbox_coordinate_space,
                 "bbox_provenance": panel.get(
                     "bbox_provenance",
-                    "UPSTREAM_PANEL_BOUNDARY" if bbox is not None else "NOT_PROVIDED",
+                    (
+                        "FIGURE_BBOX_FALLBACK"
+                        if panel.get("segmentation_provenance") == "SINGLE_PANEL_FALLBACK" and bbox is not None
+                        else "UPSTREAM_PANEL_BOUNDARY" if bbox is not None else "NOT_PROVIDED"
+                    ),
                 ),
                 "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
                 "segmentation_status": panel.get("segmentation_status", "UNSPECIFIED"),
