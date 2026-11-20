@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS series_points(
 CREATE TABLE IF NOT EXISTS series_subject_links(
  series_id TEXT NOT NULL, entity_id TEXT NOT NULL, role_in_series TEXT NOT NULL,
  evidence_json TEXT NOT NULL DEFAULT '{}', link_status TEXT NOT NULL DEFAULT 'UNASSIGNED',
+ identity_scope TEXT NOT NULL DEFAULT 'PAPER',
  PRIMARY KEY(series_id, entity_id, role_in_series)
 );
 CREATE TABLE IF NOT EXISTS observations(
@@ -111,6 +112,11 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     ):
         if name not in job_columns:
             con.execute(f"ALTER TABLE jobs ADD COLUMN {name} {declaration}")
+    link_columns = {row[1] for row in con.execute("PRAGMA table_info(series_subject_links)").fetchall()}
+    if "identity_scope" not in link_columns:
+        con.execute(
+            "ALTER TABLE series_subject_links ADD COLUMN identity_scope TEXT NOT NULL DEFAULT 'PAPER'"
+        )
     # Migrate entity aliases for catalogs created before the exact-alias index existed.
     import unicodedata
     for entity in con.execute(
@@ -285,17 +291,20 @@ class Catalog:
                 self.con.executemany("INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)", batch)
 
     def _insert_series(self, item: SeriesRecord):
+        from .models import namespaced_id
+
+        local_measurement_id = str(item.measurement_id or f"measurement:{item.series_id}")
+        measurement_id = namespaced_id(item.paper_id, local_measurement_id)
         self.con.execute(
             """INSERT INTO series(series_id,paper_id,figure_id,panel_id,measurement_id,technique,domain,label,
                x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (item.series_id, item.paper_id, item.figure_id, item.panel_id,
-             item.measurement_id or f"measurement:{item.series_id}", item.technique,
+             measurement_id, item.technique,
              item.domain, item.label, item.x_unit, item.y_unit, item.y_axis_side,
              item.extraction_status, item.qc_status, item.review_state,
              json.dumps(item.metadata, ensure_ascii=False)),
         )
-        measurement_id = str(item.measurement_id or f"measurement:{item.series_id}")
         self.con.execute(
             "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
             (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
@@ -310,8 +319,28 @@ class Catalog:
                   p.y_err_low, p.y_err_high, p.err_type) for p in item.points],
             )
         for link in item.subject_links:
-            entity_id = str(link.get("entity_id") or "UNKNOWN")
+            source_entity_id = str(link.get("entity_id") or "").strip()
+            identity_scope = str(link.get("identity_scope") or "PAPER").upper()
+            if not source_entity_id or source_entity_id == "UNKNOWN":
+                continue
+            if identity_scope == "GLOBAL":
+                entity_id = source_entity_id
+            else:
+                identity_scope = "PAPER"
+                entity_id = namespaced_id(item.paper_id, source_entity_id)
             canonical = str(link.get("canonical_name") or link.get("entity_name") or entity_id)
+            existing = self.con.execute(
+                "SELECT canonical_name,entity_type FROM entities WHERE entity_id=?",
+                (entity_id,),
+            ).fetchone()
+            if existing and (
+                str(existing["canonical_name"]) != canonical
+                or (existing["entity_type"] or None) != (link.get("entity_type") or None)
+            ):
+                raise ValueError(
+                    f"Entity identity conflict for {entity_id!r}: existing canonical/type "
+                    f"does not match incoming {canonical!r}/{link.get('entity_type')!r}"
+                )
             self.con.execute(
                 """INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json)
                    VALUES(?,?,?,?,?,?) ON CONFLICT(entity_id) DO NOTHING""",
@@ -320,10 +349,12 @@ class Catalog:
                  json.dumps(link.get("evidence", {}), ensure_ascii=False)),
             )
             self.con.execute(
-                "INSERT OR REPLACE INTO series_subject_links VALUES(?,?,?,?,?)",
+                """INSERT OR REPLACE INTO series_subject_links
+                   (series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope)
+                   VALUES(?,?,?,?,?,?)""",
                 (item.series_id, entity_id, link.get("role_in_series", "unknown"),
                  json.dumps(link.get("evidence", {}), ensure_ascii=False),
-                 link.get("status", "UNASSIGNED")),
+                 link.get("status", "UNASSIGNED"), identity_scope),
             )
             import unicodedata
             aliases = {canonical, *(str(alias) for alias in link.get("aliases", []) if alias)}
@@ -337,11 +368,17 @@ class Catalog:
                 continue
             self.con.execute(
                 "INSERT OR REPLACE INTO entity_relationships VALUES(?,?,?,?)",
-                (relationship["parent_entity_id"], relationship["child_entity_id"],
-                 relationship["relationship"], json.dumps(relationship.get("evidence", {}), ensure_ascii=False)),
+                (
+                    (relationship["parent_entity_id"] if relationship.get("identity_scope") == "GLOBAL"
+                     else namespaced_id(item.paper_id, relationship["parent_entity_id"])),
+                    (relationship["child_entity_id"] if relationship.get("identity_scope") == "GLOBAL"
+                     else namespaced_id(item.paper_id, relationship["child_entity_id"])),
+                    relationship["relationship"], json.dumps(relationship.get("evidence", {}), ensure_ascii=False)
+                ),
             )
         for index, condition in enumerate(item.conditions):
-            condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
+            local_condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
+            condition_id = namespaced_id(item.paper_id, local_condition_id)
             self.con.execute(
                 "INSERT OR REPLACE INTO conditions VALUES(?,?,?,?,?,?)",
                 (condition_id, item.paper_id, measurement_id, str(condition.get("name", "unknown")),
