@@ -167,20 +167,51 @@ def domain_semantic_warnings(
 
 
 def preserve_censored_value(raw_value: str) -> dict:
+    """Preserve censored scalar values without converting them to numeric zero.
+
+    Explicit numeric LOD/LOQ limits are retained when written next to the
+    comparator. The original source string is always kept verbatim.
+    """
     import re
-    censored = re.fullmatch(r"\s*(<|<=|>|>=)\s*(LOD|LOQ)\s*", raw_value, re.I)
-    if censored:
-        return {"raw": raw_value, "comparator": censored.group(1),
-                "limit_type": censored.group(2).upper(), "numeric_value": None,
-                "status": "CENSORED_VALUE"}
-    match = re.fullmatch(r"\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*(.*)", raw_value)
-    if match:
-        return {"raw": raw_value, "comparator": match.group(1),
-                "limit_value": float(match.group(2)), "unit": match.group(3).strip(),
-                "numeric_value": None, "status": "CENSORED_VALUE"}
-    return {"raw": raw_value, "status": "UNPARSED_RAW_VALUE"}
 
+    if not isinstance(raw_value, str):
+        return {"raw": raw_value, "numeric_value": None, "status": "UNPARSED_RAW_VALUE"}
 
+    normalized = raw_value.replace("≤", "<=").replace("≥", ">=")
+    comparator = r"(?P<comparator><=|>=|<|>)"
+    number = r"(?P<limit_value>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+    limit = re.fullmatch(
+        rf"\s*{comparator}\s*(?P<limit_type>LOD|LOQ)"
+        rf"(?:\s*(?:=|:)\s*{number}\s*(?P<unit>.*))?\s*",
+        normalized, re.I,
+    )
+    if limit:
+        value = limit.group("limit_value")
+        return {
+            "raw": raw_value,
+            "comparator": limit.group("comparator"),
+            "limit_type": limit.group("limit_type").upper(),
+            "limit_value": float(value) if value is not None else None,
+            "unit": (limit.group("unit") or "").strip() or None,
+            "numeric_value": None,
+            "status": "CENSORED_VALUE",
+        }
+
+    numeric_limit = re.fullmatch(
+        rf"\s*{comparator}\s*{number}\s*(?P<unit>.*)\s*",
+        normalized,
+    )
+    if numeric_limit:
+        return {
+            "raw": raw_value,
+            "comparator": numeric_limit.group("comparator"),
+            "limit_value": float(numeric_limit.group("limit_value")),
+            "unit": (numeric_limit.group("unit") or "").strip() or None,
+            "numeric_value": None,
+            "status": "CENSORED_VALUE",
+        }
+
+    return {"raw": raw_value, "numeric_value": None, "status": "UNPARSED_RAW_VALUE"}
 
 def standardize_measurement_value(value: float, original_unit: str | None,
                                   target_unit: str | None) -> dict:
