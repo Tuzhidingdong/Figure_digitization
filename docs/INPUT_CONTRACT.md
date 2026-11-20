@@ -4,7 +4,7 @@ The adapter treats the input root as immutable. All downstream files are written
 
 ## Discovery
 
-A directory is considered a paper candidate when it contains a PDF or a recognized upstream artifact such as paper_manifest.json, manifest.json, figure_inventory.json, figures.json, main_analysis.md, or si_analysis.md.
+A directory is considered a paper candidate when it contains a PDF or a recognized upstream artifact such as paper_manifest.json, manifest.json, evidence_index.json, figure_inventory.json, figures.json, main_analysis.md, or si_analysis.md. For the current Chem-Literature layout, use runs/preprocessed as the input root: the adapter discovers each <paper_id>/01_preprocessing package independently.
 
 Recognized roles include:
 
@@ -73,3 +73,12 @@ An override is evidence/configuration, not a claim that values have been indepen
 ## Cross-page text context
 
 The context index reads upstream main_analysis.md, si_analysis.md, and extracted_tables text/CSV files line-by-line. Each matched alias, reference-electrode mention, and statistics phrase stores its source path, line number, and snippet. It does not render PDF pages.
+
+
+## Chem-Literature 1.1 source-package compatibility
+
+The current upstream preprocessor writes each package to runs/preprocessed/<paper_id>/01_preprocessing/. The package contains evidence_index.json, main_analysis.md, si_analysis.md, extracted_tables/, extracted_figures/, and supporting evidence. The upstream evidence index stores the original MAIN PDF in inventory.main_pdf.path (normally an absolute path outside the preprocessing package) with its SHA256.
+
+The downstream adapter resolves that explicit reference read-only. It opens the referenced PDF only when the file exists, has a PDF signature, and matches the upstream SHA256; a mismatch or missing file is reported and the PDF is not used. The local absolute path is runtime-only and is not serialized into the downstream manifest. When the referenced file is outside the selected input root, the manifest records only the JSON-pointer reference, integrity state, size, and content hash. The referenced file's content hash participates in the paper fingerprint.
+
+MAIN figure crops are linked from evidence_index.json media_assets to figures by exact figure_id and doc_type, and the asset SHA256 is checked before use. A linked upstream crop is treated as an already-cropped figure image; its figure caption bbox is not applied as a second crop. SI page composites and embedded images are not guessed into individual figure identities when the upstream package does not provide a unique association; those figures remain for review. SI page numbers are never applied to the MAIN PDF.
