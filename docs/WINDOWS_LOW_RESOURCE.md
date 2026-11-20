@@ -20,3 +20,14 @@ The worker initializer clamps common native thread pools to one thread. The defa
 For the lowest memory mode, process sequentially, use a render scale of 1.0 or lower, keep caches small, and leave OCR disabled. A corrupted PDF or native backend crash should fail/isolate one paper and permit the run to continue or resume. If free disk or available RAM falls below its configured threshold, no additional paper is started; already running papers are allowed to finish, and `run_report.json` records `paused_for_resource_pressure`, the reason, and observed disk/memory values. After freeing disk space, rerun with `--resume`. This guard does not replace the per-paper evidence/context budget or worker memory limit. The report also records parent/worker CPU seconds, average CPU cores, sampled peak RSS, and per-paper evidence/context-index footprint; it does not claim full OS temporary-directory accounting.
 
 The input and output root trees must be disjoint: do not use the same directory, do not put output inside input, and do not put input inside output. The command rejects each overlapping layout before it writes. The upstream tree is read-only by contract.
+
+
+## Target Windows resource measurement
+
+The hosted Windows CI matrix is a software regression check, not a substitute for a measurement on the target 8 GB / 4-core computer. The repository provides a local sampler:
+
+    powershell -ExecutionPolicy Bypass -File scripts/measure_windows_resource.ps1 -InputRoot "D:\\chem-literature-outputs" -OutputRoot "D:\\figure-data-output"
+
+The script runs the default one-worker pipeline with conservative rendering, samples the sfd parent/child process tree, records peak sampled working set, CPU time/utilization, available physical memory, free disk space, output-directory growth, and embeds the pipeline run_report.json. Add -Resume to measure a resume run. The source root is checked to be disjoint from the output root.
+
+It writes a timestamped JSON result plus stdout/stderr logs inside the output directory. The sampler is local-only: it does not upload papers, artifacts, or metrics. RSS and directory-size observations are sampled and can miss very short-lived spikes; the embedded pipeline report supplies additional per-paper evidence/context/output footprint fields. Keep the actual benchmark corpus small and representative for the first run, and retain its input manifest and machine specification with the result.
