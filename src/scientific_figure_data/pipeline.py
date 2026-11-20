@@ -20,7 +20,7 @@ from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
 from .plot_region import detect_plot_box, detect_single_trace_color
-from .qc import load_thresholds
+from .qc import build_series_qc_report, load_thresholds
 from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
@@ -1008,19 +1008,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             )
             for item in extracted:
                 item.evidence[0]["extraction_channel"] = item.extraction_method
-                item.metadata.setdefault("qc_components", {
-                    "panel_segmentation": "INVENTORIED_UNVALIDATED",
-                    "chart_family": item.metadata.get("chart_family_classification", {}).get("status", "UNCLASSIFIED"),
-                    "axis_calibration": "CALIBRATED" if (
-                        item.metadata.get("x_calibration") or item.metadata.get("y_calibration")
-                    ) else "UNRESOLVED",
-                    "series_extraction": item.extraction_status,
-                    "subject_link": "ASSIGNED_WITH_EVIDENCE" if any(
-                        link.get("status") == "ASSIGNED_WITH_EVIDENCE" for link in item.subject_links
-                    ) else "UNASSIGNED",
-                    "condition_interpretation": "EVIDENCE_ATTACHED" if item.conditions else "UNKNOWN",
-                    "unit_interpretation": "RAW_UNIT_RETAINED" if item.x_unit or item.y_unit else "UNKNOWN",
-                })
+                qc_panel_context = {
+                    "bbox": bbox,
+                    "status": panel_status,
+                    "segmentation_confidence": None,
+                    "segmentation_confidence_status": "NOT_CALIBRATED",
+                    "shared_legend_refs": figure["shared_legends"],
+                }
+                qc_report = build_series_qc_report(item, qc_panel_context, thresholds)
+                item.metadata["qc_report"] = qc_report
+                item.metadata["qc_components"] = qc_report["components"]
             # Keep only compact per-series metadata in the paper worker; point batches are already persisted.
             for item in extracted:
                 item.metadata.setdefault("points_count", len(item.points))

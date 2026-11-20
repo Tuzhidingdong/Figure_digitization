@@ -2282,3 +2282,90 @@ def test_scheduler_rejects_overlapping_input_output_roots(tmp_path: Path, relati
 
     assert source_file.is_file()
     assert sha256_file(source_file) == source_hash
+
+
+
+def test_series_qc_report_keeps_independent_provisional_dimensions():
+    from scientific_figure_data.qc import build_series_qc_report
+
+    series = make_series("qc-series", "qc-measurement", "electrolyte")
+    series.points = [
+        SeriesPoint(0, 0.0, 0.0, 10.0, 20.0),
+        SeriesPoint(1, 1.0, 0.5, 20.0, 15.0),
+        SeriesPoint(2, 0.5, 1.0, 15.0, 10.0),
+    ]
+    series.y_axis_side = "UNASSIGNED"
+    series.metadata = {
+        "data_family": "CV",
+        "x_calibration": {
+            "status": "CALIBRATED_NUMERIC", "anchors": [{"pixel": 10, "value": 0}, {"pixel": 20, "value": 1}],
+            "rmse": 0.02, "unit": "V",
+        },
+        "y_calibration": {"status": "SERIES_RELATIVE_SIGNAL", "anchors": [], "rmse": 0.0, "unit": None},
+        "raster_qc": {"matched_columns": 20, "matched_pixel_fraction": 0.2, "max_gap_columns": 1},
+        "chart_family_classification": {"status": "DETERMINISTIC_PRECLASSIFIED"},
+    }
+    series.subject_links = [{
+        "status": "ASSIGNED_WITH_EVIDENCE", "entity_id": "paper-1__sample-a",
+        "evidence": {"source": "figure legend", "page": 2},
+    }]
+    series.conditions = [{"name": "electrolyte", "value": "1 M"}]
+
+    report = build_series_qc_report(
+        series,
+        {"bbox": [0.1, 0.1, 0.9, 0.9], "shared_legend_refs": [{"text": "Sample A", "scope": "FIGURE"}]},
+        {
+            "status": "PROVISIONAL_UNCALIBRATED",
+            "minimum_calibration_anchors": 2,
+            "minimum_trace_points": 8,
+            "minimum_trace_pixel_fraction": 0.15,
+        },
+    )
+
+    assert report["status"] == "PROVISIONAL_UNCALIBRATED"
+    assert report["assessment_mode"] == "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE"
+    assert report["axes"]["x"]["status"] == "CALIBRATION_EVIDENCE_PRESENT"
+    assert report["axes"]["y"]["status"] == "RELATIVE_SIGNAL"
+    assert report["trace_metrics"]["x_direction_changes"] == 1
+    assert report["trace_metrics"]["path_constraint"] == "ORDERED_NON_MONOTONIC_ALLOWED"
+    assert report["components"]["subject_link"] == "ASSIGNED_WITH_EVIDENCE"
+    assert report["components"]["condition_interpretation"] == "EVIDENCE_ATTACHED"
+    assert report["components"]["legend_association"] == "EVIDENCE_ATTACHED"
+    assert report["aggregate_score"] is None
+    assert report["scientific_acceptance"] == "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+
+
+def test_pipeline_persists_qc_dimensions_for_extracted_series(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-qc"
+    paper.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "panels": [{
+                "panel_id": "a", "technique": "CV", "domain": "battery",
+                "pixel_points": [[10, 20], [20, 10], [15, 5]],
+                "x_axis_anchors": [{"pixel": 10, "value": 0}, {"pixel": 20, "value": 1}],
+                "y_axis_anchors": [{"pixel": 20, "value": 0}, {"pixel": 5, "value": 1}],
+                "shared_legend_refs": [{"text": "Sample A", "scope": "PANEL"}],
+                "subject_links": [{
+                    "entity_id": "sample-a", "canonical_name": "Sample A",
+                    "role_in_series": "tested_material",
+                    "evidence": {"source": "panel legend", "page": 1},
+                }],
+                "conditions": [{"name": "electrolyte", "value": "1 M",
+                                "evidence": {"source": "panel caption", "page": 1}}],
+            }],
+        }]
+    }), encoding="utf-8")
+
+    result = process_paper(input_root, Path("paper-qc"), tmp_path / "output",
+                           {"memory_limit_mb": 0})
+    assert result["series_count"] == 1
+    metadata = result["series"][0]["metadata"]
+    assert metadata["qc_report"]["status"] == "PROVISIONAL_UNCALIBRATED"
+    assert metadata["qc_report"]["aggregate_score"] is None
+    assert metadata["qc_report"]["trace_metrics"]["point_count"] == 3
+    assert metadata["qc_components"]["subject_link"] == "ASSIGNED_WITH_EVIDENCE"
