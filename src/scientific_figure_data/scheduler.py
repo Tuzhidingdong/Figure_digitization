@@ -19,11 +19,16 @@ from .storage import connect_catalog, Catalog
 from .hashing import atomic_write_json, sha256_json
 
 
-def _worker_initializer():
+def _worker_initializer(temp_directory: str | None = None):
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    if temp_directory:
+        for variable in ("TMP", "TEMP", "TMPDIR"):
+            os.environ[variable] = temp_directory
+        import tempfile
+        tempfile.tempdir = temp_directory
     try:
         import cv2
         cv2.setNumThreads(1)
@@ -57,6 +62,31 @@ def _free_memory_bytes() -> int | None:
         return int(psutil.virtual_memory().available)
     except (ImportError, OSError):
         return None
+
+
+def _directory_file_bytes(root: Path) -> int:
+    """Measure regular-file bytes under an application-owned directory without following links."""
+    if not root.is_dir():
+        return 0
+    total = 0
+    pending = [root]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            total += int(entry.stat(follow_symlinks=False).st_size)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total
 
 
 class JobLedger:
@@ -185,6 +215,22 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             "skipped_by_selection": int((options or {}).get("skipped_by_selection", 0)),
             "skipped_papers": int((options or {}).get("skipped_by_selection", 0)) + already_cached,
         }
+    import tempfile
+    temp_parent = output_root / ".sfd-runtime-tmp"
+    temp_parent.mkdir(parents=True, exist_ok=True)
+    run_temp_directory = Path(tempfile.mkdtemp(prefix=f"run-{os.getpid()}-", dir=temp_parent))
+    original_tempdir = tempfile.tempdir
+    original_temp_env = {name: os.environ.get(name) for name in ("TMP", "TEMP", "TMPDIR")}
+    for name in ("TMP", "TEMP", "TMPDIR"):
+        os.environ[name] = str(run_temp_directory)
+    tempfile.tempdir = str(run_temp_directory)
+    temp_limit_mb = max(0, int(options.get("temp_disk_limit_mb", 2048)))
+    temp_limit_bytes = temp_limit_mb * 1024 * 1024
+    peak_sfd_temp_bytes = 0
+    sfd_temp_bytes_before_cleanup = 0
+    sfd_temp_cleanup_succeeded = False
+    run_temp_relative = run_temp_directory.relative_to(output_root).as_posix()
+
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
     catalog = Catalog(output_root / "catalog.sqlite")
     results = {"completed": 0, "completed_with_review": 0, "blocked_review_locked": 0,
@@ -196,17 +242,28 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     context = get_context("spawn")
 
     def new_executor():
-        return ProcessPoolExecutor(max_workers=workers, mp_context=context,
-                                   initializer=_worker_initializer, max_tasks_per_child=5)
+        return ProcessPoolExecutor(
+            max_workers=workers, mp_context=context,
+            initializer=_worker_initializer, initargs=(str(run_temp_directory),),
+            max_tasks_per_child=5,
+        )
 
     executor_generation = 1
-    executor = new_executor()
+    executor = None
     running = {}
     try:
+        executor = new_executor()
         while running or retry_queue or not source_exhausted:
             if resource_paused and not running:
                 break
             while len(running) < workers:
+                temp_bytes_now = _directory_file_bytes(run_temp_directory)
+                peak_sfd_temp_bytes = max(peak_sfd_temp_bytes, temp_bytes_now)
+                if temp_limit_bytes and temp_bytes_now > temp_limit_bytes:
+                    resource_paused = True
+                    source_exhausted = True
+                    resource_pause_reason = f"SFD_TEMP_DISK_LIMIT_EXCEEDED_{temp_limit_mb}_MB"
+                    break
                 if min_free_memory_mb > 0:
                     available_memory = _free_memory_bytes()
                     if available_memory is not None:
@@ -357,6 +414,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         executor = new_executor()
             for _, paper_id, _ in running.values():
                 ledger.heartbeat(paper_id)
+            peak_sfd_temp_bytes = max(
+                peak_sfd_temp_bytes, _directory_file_bytes(run_temp_directory)
+            )
             try:
                 import psutil
                 process = psutil.Process()
@@ -370,9 +430,29 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             except ImportError:
                 pass
     finally:
-        executor.shutdown(wait=True, cancel_futures=True)
-        ledger.close()
-        catalog.close()
+        try:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+        finally:
+            sfd_temp_bytes_before_cleanup = _directory_file_bytes(run_temp_directory)
+            peak_sfd_temp_bytes = max(peak_sfd_temp_bytes, sfd_temp_bytes_before_cleanup)
+            try:
+                shutil.rmtree(run_temp_directory)
+                sfd_temp_cleanup_succeeded = True
+            except OSError:
+                sfd_temp_cleanup_succeeded = not run_temp_directory.exists()
+            try:
+                temp_parent.rmdir()
+            except OSError:
+                pass
+            for name, value in original_temp_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+            tempfile.tempdir = original_tempdir
+            ledger.close()
+            catalog.close()
     elapsed = max(0.0, time.perf_counter() - started_at)
     resume_cached_skipped = int(options.get("resume_cached_skipped", 0))
     from .pipeline import ALGORITHM_VERSION, algorithm_implementation_fingerprint
@@ -402,8 +482,19 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "disk_usage_measurement_scope": (
             "Paper-output footprint is measured after each returned paper and includes its "
             "canonical JSON, series CSVs, evidence, context index and version directories. "
-            "Evidence/context subtotals are reported separately. This is not OS temporary-directory "
-            "peak usage and excludes transient renderer/native-library memory and temp files."
+            "Evidence/context subtotals are reported separately. The peak SFD run-scoped "
+            "TEMP/TMP/TMPDIR footprint is measured separately; this is not OS temporary-directory "
+            "peak usage for unrelated applications and excludes transient renderer/native-library memory."
+        ),
+        "sfd_temp_directory_relative": run_temp_relative,
+        "sfd_temp_peak_bytes": peak_sfd_temp_bytes,
+        "sfd_temp_bytes_before_cleanup": sfd_temp_bytes_before_cleanup,
+        "sfd_temp_limit_mb": temp_limit_mb,
+        "sfd_temp_cleanup_succeeded": sfd_temp_cleanup_succeeded,
+        "sfd_temp_measurement_scope": (
+            "Run-local scratch directory supplied as TMP, TEMP and TMPDIR to the scheduler and "
+            "spawned workers. File-byte peak sampled during scheduling and before cleanup; "
+            "other applications' global temporary folders are excluded."
         ),
         "cached": results["cached"] + resume_cached_skipped,
         "resume_cached_skipped": resume_cached_skipped,
