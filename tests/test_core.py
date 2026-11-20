@@ -1120,9 +1120,12 @@ def test_adapter_allows_a_single_pdf_paper_at_the_root(tmp_path: Path):
 def test_canonical_paper_id_is_stable_and_windows_safe():
     from scientific_figure_data.manifest import storage_paper_id
 
-    assert storage_paper_id("nested/paper-001") == "nested__paper-001"
-    assert storage_paper_id("nested\\paper-001") == "nested__paper-001"
-    assert storage_paper_id("NUL") == "_NUL"
+    nested_posix = storage_paper_id("nested/paper-001")
+    nested_windows = storage_paper_id("nested\\paper-001")
+    assert nested_posix == nested_windows
+    assert nested_posix != storage_paper_id("nested__paper-001")
+    assert storage_paper_id("a:b") != storage_paper_id("a_b")
+    assert storage_paper_id("NUL").startswith("NUL_")
     assert storage_paper_id("a" * 140).startswith("a" * 100 + "_")
 
 
