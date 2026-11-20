@@ -2049,3 +2049,38 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
+
+
+
+def test_scheduler_pauses_dispatch_when_available_memory_is_low(monkeypatch, tmp_path: Path):
+    import scientific_figure_data.scheduler as scheduler
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-memory-pressure"
+    paper.mkdir(parents=True)
+    output_root = tmp_path / "output"
+
+    class MustNotStartExecutor:
+        def __init__(self, **kwargs):
+            pass
+
+        def submit(self, *args, **kwargs):
+            raise AssertionError("No worker may start below the configured memory threshold")
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            return None
+
+    monkeypatch.setattr(scheduler, "ProcessPoolExecutor", MustNotStartExecutor)
+    monkeypatch.setattr(scheduler, "_free_memory_bytes", lambda: 10)
+    monkeypatch.setattr(scheduler, "_free_disk_bytes", lambda path: 10**12)
+    report = scheduler.run_corpus(
+        input_root, output_root, [paper], workers=1, max_attempts=1,
+        lease_seconds=30,
+        options={"min_free_memory_mb": 1, "min_free_disk_mb": 0},
+    )
+
+    assert report["paused_for_resource_pressure"] is True
+    assert report["resource_pressure_reason"] == "FREE_MEMORY_BELOW_1_MB"
+    assert report["minimum_free_memory_bytes_observed"] == 10
+    assert report["failed"] == 0
+    assert report["papers_seen"] == 0

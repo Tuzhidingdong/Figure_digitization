@@ -42,6 +42,14 @@ def _free_disk_bytes(path: Path) -> int | None:
         return None
 
 
+def _free_memory_bytes() -> int | None:
+    try:
+        import psutil
+        return int(psutil.virtual_memory().available)
+    except (ImportError, OSError):
+        return None
+
+
 class JobLedger:
     def __init__(self, db_path: Path, lease_seconds: int = 180):
         self.con = connect_catalog(db_path)
@@ -128,8 +136,11 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     peak_rss_bytes = 0
     options = options or {}
     min_free_disk_mb = max(0, int(options.get("min_free_disk_mb", 256)))
+    min_free_memory_mb = max(0, int(options.get("min_free_memory_mb", 512)))
     free_disk_start = _free_disk_bytes(output_root)
     minimum_free_disk_bytes_observed = free_disk_start
+    free_memory_start = _free_memory_bytes()
+    minimum_free_memory_bytes_observed = free_memory_start
     resource_paused = False
     resource_pause_reason = None
     if dry_run:
@@ -167,6 +178,22 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             if resource_paused and not running:
                 break
             while len(running) < workers:
+                if min_free_memory_mb > 0:
+                    available_memory = _free_memory_bytes()
+                    if available_memory is not None:
+                        minimum_free_memory_bytes_observed = (
+                            available_memory if minimum_free_memory_bytes_observed is None
+                            else min(minimum_free_memory_bytes_observed, available_memory)
+                        )
+                    memory_threshold = min_free_memory_mb * 1024 * 1024
+                    if available_memory is None or available_memory < memory_threshold:
+                        resource_paused = True
+                        source_exhausted = True
+                        resource_pause_reason = (
+                            "MEMORY_USAGE_UNAVAILABLE" if available_memory is None
+                            else f"FREE_MEMORY_BELOW_{min_free_memory_mb}_MB"
+                        )
+                        break
                 if min_free_disk_mb > 0:
                     free_bytes = _free_disk_bytes(output_root)
                     if free_bytes is not None:
@@ -324,6 +351,10 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "throughput_papers_per_minute": round((total_seen / elapsed) * 60, 3) if elapsed else 0.0,
         "peak_parent_and_worker_rss_bytes": peak_rss_bytes or None,
         "min_free_disk_mb": min_free_disk_mb,
+        "min_free_memory_mb": min_free_memory_mb,
+        "free_memory_bytes_at_start": free_memory_start,
+        "minimum_free_memory_bytes_observed": minimum_free_memory_bytes_observed,
+        "free_memory_bytes_at_end": _free_memory_bytes(),
         "free_disk_bytes_at_start": free_disk_start,
         "minimum_free_disk_bytes_observed": minimum_free_disk_bytes_observed,
         "free_disk_bytes_at_end": _free_disk_bytes(output_root),
