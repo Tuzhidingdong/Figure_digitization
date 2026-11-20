@@ -159,3 +159,18 @@ def safe_id(value: str) -> str:
     import re
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip()).strip("-.")
     return cleaned[:120] or "unnamed"
+
+
+def namespaced_id(namespace: str, value: str, max_length: int = 120) -> str:
+    """Create a stable globally scoped identifier without silent normalization collisions."""
+    import re
+    from .hashing import sha256_json
+
+    if max_length < 20:
+        raise ValueError("max_length must be at least 20")
+    raw = f"{namespace}__{value}"
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw.strip()).strip("-.") or "unnamed"
+    if cleaned == raw and len(cleaned) <= max_length:
+        return cleaned
+    digest = sha256_json(raw)[:12]
+    return f"{cleaned[:max_length - 13]}_{digest}"

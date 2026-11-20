@@ -2220,3 +2220,38 @@ def test_snapshot_detects_nested_upstream_version_directly_from_artifact_path(tm
         if item.path.endswith("metadata/nested/manifest.json")
     )
     assert versioned_artifact.role == "evidence_index"
+
+
+
+def test_series_ids_are_globally_unique_across_papers_with_same_figure_panel(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import run_corpus
+
+    input_root = tmp_path / "corpus"
+    for paper_name in ("paper-A", "paper-B"):
+        paper = input_root / paper_name
+        paper.mkdir(parents=True)
+        (paper / "figure_inventory.json").write_text(json.dumps({
+            "figures": [{
+                "figure_id": "Figure1",
+                "panels": [{"panel_id": "a", "technique": "CV", "domain": "battery"}],
+            }]
+        }), encoding="utf-8")
+
+    output_root = tmp_path / "output"
+    report = run_corpus(
+        input_root, output_root, discover_papers(input_root), workers=1,
+        max_attempts=1, lease_seconds=30, options={"memory_limit_mb": 0},
+    )
+
+    catalog = Catalog(output_root / "catalog.sqlite")
+    rows = catalog.con.execute(
+        "SELECT series_id,paper_id,figure_id,panel_id FROM series ORDER BY paper_id"
+    ).fetchall()
+    assert len(rows) == 2
+    assert len({row["series_id"] for row in rows}) == 2
+    assert {row["paper_id"] for row in rows} == {"paper-A", "paper-B"}
+    assert all(row["figure_id"] == "Figure1" and row["panel_id"] == "a" for row in rows)
+    assert report["failed"] == 0
+    assert report["completed_with_review"] == 2
+    catalog.close()

@@ -15,7 +15,7 @@ from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
-from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id
+from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
@@ -357,7 +357,8 @@ def _extract_panel(
     }
     results: list[SeriesRecord] = []
     for index, definition in enumerate(definitions, 1):
-        series_id = safe_id(str(definition.get("series_id") or f"{figure_id}_{panel_id}_series{index}"))
+        local_series_id = str(definition.get("series_id") or f"{figure_id}_{panel_id}_series{index}")
+        series_id = namespaced_id(paper_id, local_series_id)
         record = SeriesRecord(
             series_id=series_id, paper_id=paper_id, figure_id=figure_id, panel_id=panel_id,
             technique=definition.get("technique") or panel.get("technique") or figure.get("technique"),
