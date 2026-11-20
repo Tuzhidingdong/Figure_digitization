@@ -44,8 +44,10 @@ def _process_paper_task(input_root: str, paper_relative: str, output_root: str,
         Path(input_root), Path(paper_relative), Path(output_root), options,
         input_snapshot=input_snapshot,
     )
+    import tempfile
     result["_worker_pid"] = os.getpid()
     result["_worker_cpu_seconds"] = max(0.0, time.process_time() - cpu_started)
+    result["_worker_temp_directory"] = tempfile.gettempdir()
     return result
 
 
@@ -229,6 +231,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     peak_sfd_temp_bytes = 0
     sfd_temp_bytes_before_cleanup = 0
     sfd_temp_cleanup_succeeded = False
+    sfd_worker_temp_isolation_verified = None
     run_temp_relative = run_temp_directory.relative_to(output_root).as_posix()
 
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
@@ -339,6 +342,13 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 paper, paper_id, worker_slot = running.pop(future)
                 try:
                     result = future.result()
+                    worker_temp = result.get("_worker_temp_directory")
+                    if worker_temp:
+                        matched = Path(worker_temp).resolve() == run_temp_directory.resolve()
+                        sfd_worker_temp_isolation_verified = (
+                            matched if sfd_worker_temp_isolation_verified is None
+                            else sfd_worker_temp_isolation_verified and matched
+                        )
                     completed_worker_cpu_seconds += max(0.0, float(result.get("_worker_cpu_seconds", 0.0)))
                     usage = result.get("resource_usage") or {}
                     evidence_bytes = max(0, int(usage.get("evidence_bytes", 0)))
@@ -491,6 +501,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "sfd_temp_bytes_before_cleanup": sfd_temp_bytes_before_cleanup,
         "sfd_temp_limit_mb": temp_limit_mb,
         "sfd_temp_cleanup_succeeded": sfd_temp_cleanup_succeeded,
+        "sfd_worker_temp_isolation_verified": sfd_worker_temp_isolation_verified,
         "sfd_temp_measurement_scope": (
             "Run-local scratch directory supplied as TMP, TEMP and TMPDIR to the scheduler and "
             "spawned workers. File-byte peak sampled during scheduling and before cleanup; "
