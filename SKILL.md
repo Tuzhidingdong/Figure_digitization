@@ -80,6 +80,8 @@ Keep --workers 1 on a normal office workstation. Increase workers only after mea
 
 The export manifest must keep review/QC flags and warn about incompatible or unresolved units, reference scales, metric bases, or conditions. Never merge scientifically incomparable series automatically.
 
+Dimensional standardization is opt-in per series through `standardization.x_target_unit` and/or `standardization.y_target_unit` in the downstream digitization override. Only exact conversions in the deterministic unit-factor table may populate standardized export columns. Preserve all original values/units, report separate per-axis statuses and method/evidence IDs, and leave unsupported conversions unresolved. Do not infer target units or harmonize records automatically. Reference-electrode scale conversions are not dimensional conversions and must remain separate.
+
 ### 5. Review and apply corrections
 
 Open review_helper.html in a local browser, select the paper output folder, inspect the source crop and traced overlay, and export a Review Patch JSON. Then:

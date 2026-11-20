@@ -48,15 +48,15 @@ These are software-engineering results. They do not establish scientific point a
 - **AC-06:** Source immutability is proven on synthetic fixture trees; representative user corpus confirmation remains release-gated.
 - **AC-16:** The local Windows sampler is implemented and parse-checked in CI, but has not been run on the target 8 GB / 4-core Windows machine.
 - **AC-25:** Cache/resume behavior has synthetic coverage; full recovery under target-PC failure and disk-pressure conditions is pending.
-- **AC-30:** Review patches now support evidence-backed manual chart-family selection and deterministic reclassification after reviewed technique/axis-label changes. Prior classifications, reviewer/reason/timestamp, panel summaries, SQLite metadata/measurement technique, and bundle hashes are updated together; rollback coverage includes panel layout. Windows browser interaction still needs local manual acceptance.
+- **AC-30:** Software-side classification revision is implemented and regression-tested: manual family selection requires reviewer evidence; technique/axis-label changes reclassify deterministically; panel summaries, SQLite, bundle hashes, revision history and rollback are covered. Human Windows browser acceptance remains local.
 - **AC-31/32:** PDF backend comparison and final backend choice require 3–5 approved representative real PDFs.
-- **AC-36:** An automated Windows/Python 3.12 inventory generates a CycloneDX SBOM, exact resolved-package snapshot, and raw package-license metadata report across all declared extras. Artifact generation is automated; missing/ambiguous declarations, native-wheel bundled notices, OCR model weights, and final legal/license approval remain release-gated.
+- **AC-36:** Windows/Python 3.12 SBOM and package metadata inventory generation is automated for all declared extras. Manual review of raw/missing declarations, native-wheel notices, OCR model/data terms, and the project's own licensing decision remains release-gated.
 - **AC-37–46:** P0 extraction routes and low-ambiguity guards are implemented; scientific accuracy for supported plot families is not established without annotated real figures.
 - **AC-48:** Evidence-backed series-level subject links and cross-technique queries work; automatic subject assignment from real legends/text remains partial.
-- **AC-55–60:** Conservative domain semantics and conversion guards exist. The LOD/LOQ parser now retains the raw comparator, LOD/LOQ kind, and any explicitly supplied numeric limit/unit (including Unicode ≤/≥ and scientific notation); it always leaves `numeric_value` unset for censored results. This parser-level behavior is regression-tested, but end-to-end scalar-observation ingestion/persistence remains partial because the scalar-observation workflow is P1 (AC-51).
+- **AC-55–60:** Battery/AOP/PFAS semantic guardrails remain explicit and conservative; LOD/LOQ retains comparator and limit metadata without converting censored results to numbers. Export schema 1.2 supports explicitly requested per-axis dimensional conversions with separate X/Y statuses, method/evidence IDs, unresolved warnings, and unchanged original values/units. This does not implement the separate P1 scalar-observation ingestion workflow.
 - **AC-68–70:** Thresholds remain provisional; no calibrated real-paper benchmark or point-error report has been accepted.
-- **AC-30/80–83/86–88:** Offline review now exposes chart-family revision and axis-label corrections; patch application recomputes or explicitly overrides the preliminary chart family and records revision history. Source/test coverage includes panel-layout hash refresh and transaction rollback. Interactive Windows browser acceptance remains pending.
-- **AC-92/93:** ML export preserves original values, conditions, identity, provenance and explicit NOT_HARMONIZED state; validated standardized-value generation remains incomplete.
+- **AC-30/80–83/86–88:** Offline review exposes chart-family revision and axis-label corrections; patch application recomputes or explicitly overrides preliminary classification with revision history. Panel summaries, bundle hashes and SQLite index update transactionally with rollback coverage. Human browser acceptance remains pending.
+- **AC-92/93:** ML export schema 1.2 preserves originals, units, identity, conditions, provenance and QC/review state; explicit whitelisted dimensional conversions are supported without overwriting originals. Cross-series comparability remains `NOT_HARMONIZED`; no automatic pooling or reference-electrode conversion occurs.
 - **AC-94:** Scheduler-level SFD temporary scratch peak is reported, but target-PC and representative-corpus reconciliation is not complete.
 
 ### Blocked or deferred
@@ -71,9 +71,9 @@ These are software-engineering results. They do not establish scientific point a
 
 ## Tests and evidence
 
-- Test files: `tests/test_core.py`, `tests/test_upstream_compat.py`, `tests/test_temp_disk_monitor.py`.
-- Current source count: 108 test functions; 2 parametrization decorators add four extra cases, for approximately 112 pytest cases.
-- Current head CI: #240 (completed, success) — https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44737812440
+- Test files: `tests/test_core.py`, `tests/test_upstream_compat.py`, `tests/test_temp_disk_monitor.py`, `tests/test_dependency_audit.py`.
+- Current source count: **117 test functions / 121 pytest cases** (two parametrized functions contribute four additional cases).
+- Latest source/test HEAD `f597d01f4e14c728d09394c04875ca70164d169a`: [Windows CI #44747871501](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747871501), all test jobs passed on Python 3.11, 3.12 and 3.13; compileall, Ruff and Windows harness parse check passed.
 - CI validates Python 3.11, 3.12, 3.13 on hosted Windows; it is not a substitute for the target-PC measurement or scientific benchmark.
 
 ## Engineering log
@@ -81,7 +81,7 @@ These are software-engineering results. They do not establish scientific point a
 ### 2026-11-20 — Export, semantics, multi-paper identity and report hardening
 
 - Namespaced generated Series IDs by paper identity, with stable hash suffixes where sanitization/truncation is required. Spawned two-paper integration proves same Figure1/a panel names no longer collide in the global SQLite primary key.
-- Upgraded point export to schema 1.1: each row includes point index, values and explicit raw copies, units, pixel/error fields, subject links/evidence, measurement conditions, source/QC/review/extraction state, and explicit NOT_PERFORMED/NOT_HARMONIZED statuses. JSON numeric types are preserved.
+- Upgraded point export to schema 1.2: each row includes point index, values and explicit raw copies, units, per-axis optional standardized values/statuses, pixel/error fields, subject links/evidence, measurement conditions, source/QC/review/extraction state, and explicit NOT_PERFORMED/NOT_HARMONIZED statuses. JSON numeric types are preserved.
 - Made scientific comparability conservative: missing battery capacity/cell/current-density/protocol dimensions remain UNRESOLVED; PFAS metrics are not conflated; reference conversion rejects non-finite inputs and outputs.
 - Improved nested upstream version detection using exact paper-relative artifact paths and producer/version metadata rather than repeated basename searches.
 - Expanded corpus reports with parent/worker CPU seconds, average core use and total/peak per-paper evidence/context-index storage. The context-index size is measured once per paper to avoid rescanning a large SQLite index for every panel.
@@ -154,23 +154,21 @@ These changes are code-complete in the current branch. Their final Windows CI re
 
 ## Latest verification
 
-- Latest functional source/test commit before the classification-review increment: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
-- Classification-review increment: manual chart-family revision, deterministic reclassification after reviewed technique/axis-label changes, panel summary synchronization, measurement-index synchronization, and atomic rollback coverage. Matching Windows CI result is to be checked for the new commit before this increment is called regression-accepted.
-- Functional-source Windows CI: [#250](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740797412) — completed successfully on Python 3.11, 3.12 and 3.13. That source/test commit passed compileall, the selected Ruff checks, and the full pytest suite. The subsequent STATUS-only synchronization did not change Python source or tests.
-- The immediately preceding semantics implementation commit passed [CI #249](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740754829); the bbox-import repair passed [CI #248](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740356204). The first STATUS synchronization snapshot also passed [CI #251](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44741025982) on all three Windows Python versions.
-- CI #242–#247 had failed at the undefined-name check because `pipeline.py` used `math.isfinite` without importing `math`. The missing import was fixed in `17cd6b0`; subsequent matching Windows CI runs are green. No test run was counted as passing for those failed commits because the test step was skipped.
-- Current test source count before the classification-review increment: **109 test functions / 112 pytest cases**. This increment adds three regression functions; the final count and pass state will be confirmed by the matching Windows CI run.
-- Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; it remains unchanged. The upstream repository remains untouched. No Release/tag was created.
+- AC-30 classification revision is implemented: manual family selection requires reviewer evidence; technique/axis-label edits trigger deterministic reclassification; history, panel summaries, SQLite, bundle hashes and rollback are covered. CI [#44744604564](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44744604564) passed on Python 3.11, 3.12 and 3.13. Human browser acceptance remains local.
+- AC-36 dependency inventory generation is automated. The Windows/Python 3.12 workflow installs all declared extras and uploads a CycloneDX 1.6 SBOM, resolved-package snapshot and package metadata report. Latest matching run: [#44747870960](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747870960); artifact ID `14634007008`.
+- AC-60 export schema 1.2 supports explicitly requested per-axis dimensional conversions. Only exact pairs in the deterministic factor table are converted; originals are preserved; unresolved axes remain empty and produce warnings; reference-electrode conversions remain separate. P1 scalar-observation ingestion is not included.
+- Latest source/test commit: `f597d01f4e14c728d09394c04875ca70164d169a`. Matching Windows CI [#44747871501](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747871501) passed test jobs on Python 3.11, 3.12 and 3.13, plus compileall, Ruff and the Windows harness syntax check.
+- Current test source count: **117 test functions / 121 pytest cases** (two parametrized functions add four cases).
+- Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; unchanged. The upstream repository remains untouched. No Release/tag was created.
 
 ## Current blockers / next acceptance actions
 
-1. Run the PowerShell resource harness on the actual target Windows 8 GB / 4-core machine with a small approved corpus; record machine specifications, peak memory, temporary disk use, timing and report output. Hosted Windows CI is not this acceptance.
-2. Compare PDFium/high-level and raw APIs, pdfminer.six, and pikepdf/QPDF on 3–5 user-approved real PDFs; retain the JSON probe reports and manual inspection of text, coordinates, vector paths, clipping, rotation, Form XObjects, text-as-path and fragmented paths. Do not select a final backend from synthetic fixtures alone.
-3. Create or provide manually annotated Battery, AOP and PFAS figure/axis benchmarks; calculate anchor residuals and point errors before marking calibrated thresholds or scientific accuracy accepted.
-4. Manually open the offline review helper in Windows and verify actual image loading, overlays, panel/axis/point editing, patch export, patch apply and readback. The current CI covers code paths, not a human browser acceptance.
-5. Complete the exact resolved dependency/binary/OCR-license inventory and machine-readable SBOM before any distribution. The current third-party table is preliminary and is not a completed release audit.
-6. Keep P1 (scalar table/text observations, tables, bars/scatter, error bars, marker-dependent and complex curve separation) deferred; AC-51 scalar observation ingestion remains unimplemented end-to-end. Keep P2 (heatmaps, advanced LC-MS/MS and specialized reconstruction) deferred.
-7. Revisit AC-30 manual classification revision and comprehensive Battery/AOP/PFAS condition/unit comparability only when the necessary user evidence and review workflow are available.
+1. Run the PowerShell resource harness on the actual target Windows 8 GB / 4-core machine with an approved small corpus; record machine specifications, peak memory, temporary disk use, timing and report output. Hosted Windows CI is not this acceptance.
+2. Compare PDFium/high-level and raw APIs, pdfminer.six, and pikepdf/QPDF on 3–5 user-approved real PDFs; retain JSON probe reports and inspect clipping, rotation, Form XObjects, text-as-path and fragmented paths before selecting a backend.
+3. Use manually annotated Battery, AOP and PFAS figures/axes to calculate anchor residuals and point errors before calibrating thresholds or claiming scientific accuracy.
+4. Open the offline review helper in Windows and verify real image loading, overlays, panel/axis/point editing, patch export/apply and readback. Code tests do not replace human browser acceptance.
+5. Review the generated dependency/license artifact (37 package metadata records were marked for manual review in the captured package set); inspect native-wheel notices, RapidOCR model/data terms, the transitive `opencv-python-headless` wheel, and the project's own license decision. SBOM generation is complete, but is not legal approval.
+6. Keep P1 (scalar table/text observations, tables, bars/scatter, error bars, marker-dependent and complex curve separation) deferred. Keep P2 (heatmaps, advanced LC-MS/MS and specialized reconstruction) deferred.
 
 GitHub regression success establishes software behavior for the tested fixtures and hosted Windows versions only. It does not establish representative-corpus integrity, scientific digitization accuracy, calibrated QC, target-PC resource acceptance, or production readiness.
  

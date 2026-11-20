@@ -66,6 +66,19 @@ Shape:
 
 pixel_points are in the local panel image coordinate system and preserve their declared order. This is the supported explicit path for CV/EIS and other non-monotonic traces.
 
+### Explicit dimensional standardization
+
+A series may optionally declare a `standardization` object in the same override. It accepts only `x_target_unit` and/or `y_target_unit`. For example, a series with `x_unit: "s"` and `y_unit: "mg/L"` may request:
+
+```json
+"standardization": {
+  "x_target_unit": "min",
+  "y_target_unit": "g/L"
+}
+```
+
+Only exact conversions present in the deterministic unit-factor table are applied. The export keeps original values and units unchanged, writes standardized values into separate columns, and records a status/evidence ID for each axis. Unsupported conversions remain unresolved. This option never converts reference-electrode scales such as Ag/AgCl to RHE.
+
 For a monotonic single-color raster trace, replace pixel_points with color_rgb [R,G,B] and optional color_tolerance. Automatic color tracing is conservative and refuses obvious discontinuity or multiple-band ambiguity.
 
 An override is evidence/configuration, not a claim that values have been independently validated. The result remains provisional and is routed for review by default.
