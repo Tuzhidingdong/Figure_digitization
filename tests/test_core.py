@@ -2855,3 +2855,48 @@ def test_condition_query_matches_both_condition_name_and_value(tmp_path: Path):
     assert [row["series_id"] for row in by_value] == ["series-b"]
     assert [row["series_id"] for row in by_unit] == ["series-b"]
     catalog.close()
+
+
+
+
+def test_scheduler_retries_broken_process_pool_submission_a_finite_number_of_times(
+    tmp_path: Path, monkeypatch,
+):
+    import scientific_figure_data.scheduler as scheduler_module
+    from concurrent.futures.process import BrokenProcessPool
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import JobLedger, run_corpus
+
+    class BrokenSubmitExecutor:
+        def __init__(self, *args, **kwargs):
+            self.shutdown_calls = 0
+
+        def submit(self, *args, **kwargs):
+            raise BrokenProcessPool("synthetic broken submit")
+
+        def shutdown(self, wait=False, cancel_futures=False):
+            self.shutdown_calls += 1
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-a"
+    paper.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    monkeypatch.setattr(scheduler_module, "ProcessPoolExecutor", BrokenSubmitExecutor)
+
+    output_root = tmp_path / "output"
+    report = run_corpus(
+        input_root, output_root, discover_papers(input_root), workers=1,
+        max_attempts=2, lease_seconds=30,
+        options={"memory_limit_mb": 0, "min_free_memory_mb": 0, "min_free_disk_mb": 0},
+    )
+
+    ledger = JobLedger(output_root / "catalog.sqlite")
+    row = ledger.con.execute(
+        "SELECT state,attempt_count,last_error FROM jobs WHERE paper_id='paper-a'"
+    ).fetchone()
+    assert row["state"] == "FAILED_PERMANENT"
+    assert row["attempt_count"] == 2
+    assert "WORKER_POOL_SUBMIT_FAILED" in row["last_error"]
+    assert report["retried_papers"] == 1
+    assert report["permanently_failed_papers"] == 1
+    ledger.close()
