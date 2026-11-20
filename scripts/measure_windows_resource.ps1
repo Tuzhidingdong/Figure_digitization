@@ -65,17 +65,50 @@ function Get-DescendantProcessIds([int]$RootPid) {
     return @($ids)
 }
 
+function Get-CanonicalComparisonPath([string]$Path) {
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    $pending = New-Object 'System.Collections.Generic.List[string]'
+    $probe = $full
+    while (-not (Test-Path -LiteralPath $probe -PathType Container)) {
+        $leaf = [IO.Path]::GetFileName($probe.TrimEnd('\'))
+        if (-not $leaf) { throw "Cannot resolve existing parent for path: $Path" }
+        $pending.Insert(0, $leaf)
+        $parent = [IO.Path]::GetDirectoryName($probe.TrimEnd('\'))
+        if (-not $parent -or $parent -eq $probe) {
+            throw "Cannot resolve existing parent for path: $Path"
+        }
+        $probe = $parent
+    }
+    $canonical = (Resolve-Path -LiteralPath $probe).Path
+    foreach ($part in $pending) { $canonical = Join-Path $canonical $part }
+    $canonical = [IO.Path]::GetFullPath($canonical)
+    if ($canonical.Length -gt $root.Length) { $canonical = $canonical.TrimEnd('\') }
+    return $canonical
+}
+
 $inputPath = (Resolve-Path -LiteralPath $InputRoot).Path
+$inputFull = Get-CanonicalComparisonPath $inputPath
+$outputFull = Get-CanonicalComparisonPath $OutputRoot
+$inputPrefix = $inputFull.TrimEnd('\') + '\'
+$outputPrefix = $outputFull.TrimEnd('\') + '\'
+if ($inputFull -ieq $outputFull -or
+    $inputFull.StartsWith($outputPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+    $outputFull.StartsWith($inputPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "InputRoot and OutputRoot must be disjoint directory trees."
+}
+
+# Do not create OutputRoot until overlap has been rejected: it may otherwise
+# create a new directory inside the immutable upstream input tree.
 if (-not (Test-Path -LiteralPath $OutputRoot)) {
     New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 }
 $outputPath = (Resolve-Path -LiteralPath $OutputRoot).Path
-$inputFull = [IO.Path]::GetFullPath($inputPath).TrimEnd('\')
-$outputFull = [IO.Path]::GetFullPath($outputPath).TrimEnd('\')
+$outputFull = Get-CanonicalComparisonPath $outputPath
 if ($inputFull -ieq $outputFull -or
-    $inputFull.StartsWith($outputFull + '\', [StringComparison]::OrdinalIgnoreCase) -or
-    $outputFull.StartsWith($inputFull + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw "InputRoot and OutputRoot must be disjoint directory trees."
+    $inputFull.StartsWith($outputFull.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or
+    $outputFull.StartsWith($inputFull.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Resolved InputRoot and OutputRoot overlap after directory creation."
 }
 if ($SampleIntervalSeconds -lt 1) { throw "SampleIntervalSeconds must be at least 1." }
 
