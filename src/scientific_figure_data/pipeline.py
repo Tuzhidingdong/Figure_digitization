@@ -374,16 +374,32 @@ def _extract_panel(
         )
         for link in definition.get("subject_links", []):
             entity_data = link.get("entity") or {}
-            entity = SubjectEntity(
-                entity_id=str(entity_data.get("entity_id", "UNKNOWN")),
-                canonical_name=str(entity_data.get("canonical_name", "")),
-                entity_type=str(entity_data.get("entity_type", "unknown")),
-                domain=entity_data.get("domain"), aliases=entity_data.get("aliases", []),
-            ) if entity_data else None
-            record.subject_links.append(link_series_to_subject(
+            source_entity_id = str(entity_data.get("entity_id") or "").strip()
+            requested_scope = str(
+                entity_data.get("identity_scope") or link.get("identity_scope") or "PAPER"
+            ).upper()
+            if entity_data and source_entity_id and source_entity_id != "UNKNOWN":
+                scoped_entity_id = (
+                    source_entity_id if requested_scope == "GLOBAL"
+                    else namespaced_id(paper_id, source_entity_id)
+                )
+                entity = SubjectEntity(
+                    entity_id=scoped_entity_id,
+                    canonical_name=str(entity_data.get("canonical_name", "")),
+                    entity_type=str(entity_data.get("entity_type", "unknown")),
+                    domain=entity_data.get("domain"), aliases=entity_data.get("aliases", []),
+                )
+            else:
+                entity = None
+                requested_scope = "PAPER"
+            linked = link_series_to_subject(
                 series_id, entity, str(link.get("role_in_series", "unknown")),
                 link.get("evidence"), exact_match=bool(link.get("exact_match", False)),
-            ))
+            )
+            if linked.get("status") == "ASSIGNED_WITH_EVIDENCE":
+                linked["identity_scope"] = "GLOBAL" if requested_scope == "GLOBAL" else "PAPER"
+                linked["source_entity_id"] = source_entity_id
+            record.subject_links.append(linked)
         record.conditions = definition.get("conditions", [])
         classification = classify_chart_family(
             definition.get("technique") or panel.get("technique") or figure.get("technique"),
