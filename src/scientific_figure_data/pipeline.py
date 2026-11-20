@@ -334,6 +334,21 @@ def _normalize_bbox(bbox: Any, width: int, height: int) -> tuple[int, int, int, 
     return coords
 
 
+def _validated_normalized_bbox(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        coords = [float(item) for item in value]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not all(math.isfinite(item) and 0.0 <= item <= 1.0 for item in coords):
+        return None
+    x0, y0, x1, y1 = coords
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return coords
+
+
 def _figure_panels(figure: dict) -> list[dict]:
     panels = figure.get("panels")
     if isinstance(panels, list) and panels:
@@ -1276,12 +1291,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 isinstance(bbox, (list, tuple)) and len(bbox) == 4
                 and all(isinstance(value, (int, float)) for value in bbox)
             )
-            bbox_is_normalized = bool(
-                bbox_values_valid and all(0 <= value <= 1 for value in bbox)
+            inferred_normalized_bbox = (
+                _validated_normalized_bbox(bbox) if bbox_values_valid else None
             )
-            normalized_bbox = panel.get("normalized_bbox")
+            bbox_is_normalized = inferred_normalized_bbox is not None
+            normalized_bbox = _validated_normalized_bbox(panel.get("normalized_bbox"))
+            explicit_normalized_bbox_invalid = (
+                panel.get("normalized_bbox") is not None and normalized_bbox is None
+            )
             if normalized_bbox is None and bbox_is_normalized:
-                normalized_bbox = list(bbox)
+                normalized_bbox = inferred_normalized_bbox
             source_bbox = panel.get("source_bbox")
             if source_bbox is None and bbox is not None and not bbox_is_normalized:
                 source_bbox = bbox
@@ -1297,6 +1316,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 "segmentation_confidence_status",
                 "PROVIDED_UNCALIBRATED" if segmentation_confidence is not None else "NOT_CALIBRATED",
             )
+            segmentation_status = (
+                "INVALID_NORMALIZED_BBOX" if explicit_normalized_bbox_invalid
+                else panel.get("segmentation_status", "UNSPECIFIED")
+            )
+            if explicit_normalized_bbox_invalid:
+                panel_status = "NEEDS_REVIEW"
+                review_needed = True
             panels.append({
                 "figure_id": figure_id, "panel_id": panel_id,
                 "bbox": bbox,
@@ -1312,7 +1338,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     ),
                 ),
                 "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
-                "segmentation_status": panel.get("segmentation_status", "UNSPECIFIED"),
+                "segmentation_status": segmentation_status,
                 "status": panel_status,
                 "segmentation_confidence": segmentation_confidence,
                 "segmentation_confidence_status": segmentation_confidence_status,

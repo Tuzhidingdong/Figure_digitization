@@ -427,3 +427,15 @@ def test_legacy_figure_inventory_image_changed_after_snapshot_is_rejected(tmp_pa
 
     assert figures[0]["image_asset_status"] == "HASH_MISMATCH"
     assert "image_path" not in figures[0]
+
+
+
+
+def test_normalized_panel_bbox_requires_finite_ordered_coordinates():
+    from scientific_figure_data.pipeline import _validated_normalized_bbox
+
+    assert _validated_normalized_bbox([0.1, 0.2, 0.9, 0.8]) == [0.1, 0.2, 0.9, 0.8]
+    assert _validated_normalized_bbox([0.9, 0.2, 0.1, 0.8]) is None
+    assert _validated_normalized_bbox([0.1, 0.2, 1.2, 0.8]) is None
+    assert _validated_normalized_bbox([0.1, float("nan"), 0.9, 0.8]) is None
+    assert _validated_normalized_bbox([0.1, 0.2, 0.9]) is None
