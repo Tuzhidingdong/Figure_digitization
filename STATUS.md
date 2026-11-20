@@ -154,9 +154,9 @@ These changes are code-complete in the current branch. Their final Windows CI re
 
 ## Latest verification
 
-- Current `main` HEAD: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
-- Current-head Windows CI: [#250](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740797412) — completed successfully on Python 3.11, 3.12 and 3.13. The same commit passed compileall, the selected Ruff checks, and the full pytest suite.
-- The immediately preceding semantics implementation commit passed [CI #249](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740754829); the bbox-import repair passed [CI #248](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740356204).
+- Latest functional source/test commit: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
+- Functional-source Windows CI: [#250](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740797412) — completed successfully on Python 3.11, 3.12 and 3.13. That source/test commit passed compileall, the selected Ruff checks, and the full pytest suite. The subsequent STATUS-only synchronization did not change Python source or tests.
+- The immediately preceding semantics implementation commit passed [CI #249](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740754829); the bbox-import repair passed [CI #248](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740356204). The first STATUS synchronization snapshot also passed [CI #251](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44741025982) on all three Windows Python versions.
 - CI #242–#247 had failed at the undefined-name check because `pipeline.py` used `math.isfinite` without importing `math`. The missing import was fixed in `17cd6b0`; subsequent matching Windows CI runs are green. No test run was counted as passing for those failed commits because the test step was skipped.
 - Current test source count: **109 test functions / 112 pytest cases** (two parametrized functions add three additional cases).
 - Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; it remains unchanged. The upstream repository remains untouched. No Release/tag was created.
