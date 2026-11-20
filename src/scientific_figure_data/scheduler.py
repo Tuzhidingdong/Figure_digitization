@@ -141,6 +141,10 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             "papers_seen": count + already_cached,
             "dry_run": True,
             "workers": workers,
+            "discovered_papers": int((options or {}).get("discovered_papers", count + already_cached)),
+            "eligible_papers": int((options or {}).get("eligible_papers", count)),
+            "skipped_by_selection": int((options or {}).get("skipped_by_selection", 0)),
+            "skipped_papers": int((options or {}).get("skipped_by_selection", 0)) + already_cached,
         }
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
     catalog = Catalog(output_root / "catalog.sqlite")
@@ -293,6 +297,26 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "cached": results["cached"] + resume_cached_skipped,
         "resume_cached_skipped": resume_cached_skipped,
         "papers_seen": total_seen + results["active_jobs_skipped"] + resume_cached_skipped,
+        "discovered_papers": int(options.get("discovered_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped)),
+        "eligible_papers": int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped)),
+        "skipped_by_selection": int(options.get("skipped_by_selection", 0)),
+        "skipped_cached_unchanged": resume_cached_skipped,
+        "skipped_active_lease": results["active_jobs_skipped"],
+        "skipped_unstarted_resource_pressure": max(
+            0,
+            int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+            - total_seen - results["active_jobs_skipped"] - resume_cached_skipped,
+        ) if resource_paused else 0,
+        "skipped_papers": (
+            int(options.get("skipped_by_selection", 0))
+            + resume_cached_skipped
+            + results["active_jobs_skipped"]
+            + (
+                max(0, int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                    - total_seen - results["active_jobs_skipped"] - resume_cached_skipped)
+                if resource_paused else 0
+            )
+        ),
         "workers": workers,
         "requested_workers": requested_workers,
         "max_open_pdfs": max_open_pdfs,

@@ -2020,3 +2020,32 @@ def test_same_figure_series_link_to_distinct_subjects_and_query_shared_sample_te
     assert associations_b["subject_links"][0]["entity_id"] == "sample-b"
     assert associations_a["subject_links"][0]["evidence_json"] != associations_b["subject_links"][0]["evidence_json"]
     catalog.close()
+
+
+
+def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: Path):
+    from scientific_figure_data.scheduler import run_corpus
+
+    input_root = tmp_path / "input"
+    papers = [input_root / f"paper-{index}" for index in range(2)]
+    for paper in papers:
+        paper.mkdir(parents=True)
+    output_root = tmp_path / "output"
+
+    report = run_corpus(
+        input_root, output_root, iter(papers), workers=1, max_attempts=1,
+        lease_seconds=30,
+        options={
+            "memory_limit_mb": 0,
+            "discovered_papers": 5,
+            "eligible_papers": 2,
+            "skipped_by_selection": 3,
+            "resume_cached_skipped": 0,
+        },
+    )
+
+    assert report["discovered_papers"] == 5
+    assert report["eligible_papers"] == 2
+    assert report["skipped_by_selection"] == 3
+    assert report["skipped_cached_unchanged"] == 0
+    assert report["skipped_papers"] == 3

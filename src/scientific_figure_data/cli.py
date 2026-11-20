@@ -167,6 +167,9 @@ def _run(args) -> int:
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
         "resume_cached_skipped": 0,
+        "discovered_papers": sum(1 for _ in discover_papers(input_root)),
+        "eligible_papers": 0,
+        "skipped_by_selection": 0,
     }
     selected_states = None
     prior_fingerprints: dict[str, str] = {}
@@ -212,12 +215,16 @@ def _run(args) -> int:
             relative = paper.relative_to(input_root).as_posix()
             storage_id = storage_paper_id(relative)
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
+                options["skipped_by_selection"] += 1
                 continue
             if args.failed_only:
                 if selected_states is None or storage_id not in selected_states:
+                    options["skipped_by_selection"] += 1
                     continue
+                options["eligible_papers"] += 1
                 yield paper
                 continue
+            options["eligible_papers"] += 1
             if args.resume and selected_states is not None and storage_id not in selected_states:
                 previous_fingerprint = prior_fingerprints.get(storage_id)
                 previous_job_state = prior_job_states.get(storage_id)
