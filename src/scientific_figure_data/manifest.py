@@ -9,7 +9,7 @@ from typing import Iterable
 from .hashing import sha256_file, sha256_json
 from .models import InputArtifact, PaperSnapshot, utc_now
 
-ADAPTER_VERSION = "0.1.0"
+ADAPTER_VERSION = "0.2.0"
 
 
 def storage_paper_id(paper_id: str) -> str:
@@ -61,6 +61,7 @@ def _extract_version_marker(payload: object, depth: int = 0) -> str | None:
         return None
     explicit_keys = (
         "chem_literature_version", "upstream_version", "producer_version", "tool_version",
+        "package_version",
     )
     for key in explicit_keys:
         value = payload.get(key)
@@ -117,6 +118,138 @@ def _detect_upstream_version(
     return None
 
 
+def _evidence_payloads(
+    paper_dir: Path, corpus_root: Path, artifacts: list[InputArtifact],
+) -> Iterable[dict]:
+    for artifact in artifacts:
+        if artifact.role != "evidence_index":
+            continue
+        candidate = (corpus_root / artifact.path).resolve()
+        try:
+            candidate.relative_to(paper_dir.resolve())
+        except ValueError:
+            continue
+        try:
+            with candidate.open("r", encoding="utf-8-sig") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        if isinstance(payload, dict):
+            yield payload
+
+
+def _has_embedded_figure_inventory(
+    paper_dir: Path, corpus_root: Path, artifacts: list[InputArtifact],
+) -> bool:
+    return any(isinstance(payload.get("figures"), list)
+               for payload in _evidence_payloads(paper_dir, corpus_root, artifacts))
+
+
+def _resolve_main_pdf_reference(
+    paper_dir: Path, corpus_root: Path, artifacts: list[InputArtifact],
+) -> tuple[Path | None, list[dict], list[InputArtifact], list[str]]:
+    """Resolve the MAIN PDF referenced by Chem-Literature's evidence_index.
+
+    The source preprocessor stores an absolute source path in inventory.main_pdf,
+    while the immutable preprocessing package normally contains only crops and
+    text. The absolute path is kept in memory only; snapshots store hashes and a
+    stable JSON-pointer reference, never the local path.
+    """
+    if any(item.role == "main_pdf" for item in artifacts):
+        return None, [], [], []
+
+    for payload in _evidence_payloads(paper_dir, corpus_root, artifacts):
+        inventory = payload.get("inventory")
+        entry = inventory.get("main_pdf") if isinstance(inventory, dict) else None
+        if not isinstance(entry, dict):
+            continue
+        raw_path = entry.get("path")
+        expected_hash = str(entry.get("sha256") or "").strip().lower() or None
+        reference = "evidence_index.json#/inventory/main_pdf"
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            return None, [{"reference": reference, "status": "MISSING_PATH",
+                           "expected_sha256": expected_hash}], [], [
+                "Upstream evidence_index has no inventory.main_pdf.path."
+            ]
+
+        declared = Path(raw_path).expanduser()
+        candidates = [declared] if declared.is_absolute() else [
+            paper_dir / declared, corpus_root / declared,
+        ]
+        candidate = None
+        for value in candidates:
+            resolved = value.resolve()
+            if not declared.is_absolute():
+                try:
+                    resolved.relative_to(paper_dir.resolve())
+                except ValueError:
+                    try:
+                        resolved.relative_to(corpus_root.resolve())
+                    except ValueError:
+                        continue
+            if resolved.is_file():
+                candidate = resolved
+                break
+
+        if candidate is None:
+            return None, [{"reference": reference, "status": "MISSING",
+                           "expected_sha256": expected_hash}], [], [
+                "The MAIN PDF referenced by evidence_index is missing; no source PDF was opened."
+            ]
+
+        try:
+            stat = candidate.stat()
+            with candidate.open("rb") as handle:
+                magic = handle.read(5)
+            actual_hash = sha256_file(candidate)
+        except OSError as exc:
+            return None, [{"reference": reference, "status": "UNREADABLE",
+                           "expected_sha256": expected_hash}], [], [
+                f"The referenced MAIN PDF could not be read ({type(exc).__name__})."
+            ]
+
+        if candidate.suffix.lower() != ".pdf" or magic != b"%PDF-":
+            status = "INVALID_PDF"
+        elif expected_hash and actual_hash != expected_hash:
+            status = "HASH_MISMATCH"
+        elif expected_hash:
+            status = "HASH_VERIFIED"
+        else:
+            status = "HASH_COMPUTED_NO_EXPECTED_SHA256"
+
+        try:
+            relative = candidate.relative_to(corpus_root).as_posix()
+            in_corpus = True
+        except ValueError:
+            relative = None
+            in_corpus = False
+
+        source_record = {
+            "reference": reference,
+            "status": status,
+            "scope": "INPUT_ROOT" if in_corpus else "EXTERNAL",
+            "sha256": actual_hash,
+            "expected_sha256": expected_hash,
+            "size_bytes": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+        }
+        if status not in {"HASH_VERIFIED", "HASH_COMPUTED_NO_EXPECTED_SHA256"}:
+            return None, [source_record], [], [
+                f"The referenced MAIN PDF failed integrity checks ({status}); it was not used."
+            ]
+
+        additions: list[InputArtifact] = []
+        if in_corpus and relative and not any(item.path == relative for item in artifacts):
+            additions.append(InputArtifact(
+                path=relative, role="main_pdf", size_bytes=int(stat.st_size),
+                mtime_ns=int(stat.st_mtime_ns), sha256=actual_hash,
+            ))
+        external_sources = [] if in_corpus else [source_record]
+        return candidate, external_sources, additions, []
+
+    return None, [], [], []
+
+
 def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = None) -> PaperSnapshot:
     paper_dir = paper_dir.resolve()
     corpus_root = corpus_root.resolve()
@@ -134,9 +267,17 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
                 path=path.name, role="unreadable", size_bytes=-1, mtime_ns=-1,
                 sha256=f"UNREADABLE:{type(exc).__name__}",
             ))
+    source_pdf, external_sources, referenced_artifacts, source_warnings = _resolve_main_pdf_reference(
+        paper_dir, corpus_root, artifacts,
+    )
+    artifacts.extend(referenced_artifacts)
     present = {item.role for item in artifacts}
+    if source_pdf is not None:
+        present.add("main_pdf")
+    if _has_embedded_figure_inventory(paper_dir, corpus_root, artifacts):
+        present.add("figure_inventory")
     missing = [role for role in ("main_pdf", "figure_inventory") if role not in present]
-    warnings = []
+    warnings = list(source_warnings)
     for role in ("main_pdf", "figure_inventory", "evidence_index"):
         count = sum(1 for item in artifacts if item.role == role)
         if count > 1:
@@ -150,6 +291,7 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
         "adapter_version": ADAPTER_VERSION,
         "artifacts": [{"path": a.path, "role": a.role, "size_bytes": a.size_bytes,
                        "mtime_ns": a.mtime_ns, "sha256": a.sha256} for a in artifacts],
+        "external_sources": external_sources,
     }
     storage_id = storage_paper_id(paper_id)
     return PaperSnapshot(
@@ -160,4 +302,6 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
         artifacts=artifacts, missing_roles=missing,
         warnings=warnings + ([] if upstream_version else ["Upstream version marker not detected; artifact discovery adapter used."]),
         input_fingerprint=sha256_json(payload),
+        external_sources=external_sources,
+        resolved_main_pdf=source_pdf,
     )

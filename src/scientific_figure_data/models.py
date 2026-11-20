@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 
@@ -48,9 +49,14 @@ class PaperSnapshot:
     missing_roles: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     input_fingerprint: str = ""
+    external_sources: list[dict[str, Any]] = field(default_factory=list)
+    # Runtime-only, hash-verified source path. Never serialize absolute local paths.
+    resolved_main_pdf: Path | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload.pop("resolved_main_pdf", None)
+        return payload
 
 
 @dataclass(slots=True)

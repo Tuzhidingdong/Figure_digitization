@@ -68,15 +68,21 @@ def load_json_artifact(paper_dir: Path, relative_to_paper: str) -> dict | list |
 
 
 def locate_pdf(paper_dir: Path, input_root: Path, snapshot: PaperSnapshot) -> Path | None:
+    """Return an indexed PDF or a hash-verified source PDF referenced by evidence_index."""
+    root = input_root.resolve()
     for artifact in snapshot.artifacts:
-        if artifact.role == "main_pdf":
-            candidate = (input_root / artifact.path).resolve()
-            try:
-                candidate.relative_to(paper_dir.resolve())
-            except ValueError:
-                continue
-            if candidate.is_file():
-                return candidate
+        if artifact.role != "main_pdf":
+            continue
+        candidate = (root / artifact.path).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file() and candidate.suffix.lower() == ".pdf":
+            return candidate
+    candidate = snapshot.resolved_main_pdf
+    if candidate and candidate.is_file() and candidate.suffix.lower() == ".pdf":
+        return candidate.resolve()
     return None
 
 

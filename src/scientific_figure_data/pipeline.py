@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
-from .adapter import snapshot_paper
+from .adapter import locate_pdf, snapshot_paper
 from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
 from .axis_text import extract_native_numeric_axis_anchors, extract_numeric_axis_anchors
 from .chart_classifier import classify_chart_family
@@ -164,7 +164,47 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
         else:
             figures = None
         if figures is not None:
-            return figures, path
+            normalized = [dict(item) for item in figures if isinstance(item, dict)]
+            # Chem-Literature stores MAIN figure crops in media_assets and references
+            # them by figure_id; the figure bbox itself may only be the caption bbox.
+            if isinstance(data, dict):
+                assets_by_figure: dict[tuple[str, str], dict[str, Any]] = {}
+                media_assets = data.get("media_assets")
+                if isinstance(media_assets, list):
+                    for asset in media_assets:
+                        if not isinstance(asset, dict) or asset.get("asset_type") != "figure":
+                            continue
+                        figure_id = str(asset.get("figure_id") or "").strip()
+                        relative_path = asset.get("relative_path")
+                        doc_type = str(asset.get("doc_type") or "MAIN").upper()
+                        if not figure_id or not isinstance(relative_path, str):
+                            continue
+                        asset_path = _safe_local_file(paper_dir, relative_path)
+                        if asset_path is None:
+                            continue
+                        expected_hash = str(asset.get("sha256") or "").strip().lower()
+                        try:
+                            if expected_hash and sha256_file(asset_path) != expected_hash:
+                                continue
+                        except OSError:
+                            continue
+                        key = (figure_id, doc_type)
+                        if key not in assets_by_figure:
+                            assets_by_figure[key] = asset
+                        else:
+                            previous = assets_by_figure[key]
+                            if (previous.get("sha256") != asset.get("sha256")
+                                    or previous.get("relative_path") != relative_path):
+                                assets_by_figure[key] = {}
+                for figure in normalized:
+                    key = (str(figure.get("figure_id") or figure.get("id") or "").strip(),
+                           str(figure.get("doc_type") or "MAIN").upper())
+                    asset = assets_by_figure.get(key)
+                    if asset and asset.get("relative_path") and not figure.get("image_path"):
+                        figure["image_path"] = asset["relative_path"]
+                        figure["image_asset_sha256"] = asset.get("sha256")
+                        figure["image_asset_id"] = asset.get("asset_id")
+            return normalized, path
     return [], None
 
 
@@ -870,15 +910,23 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     )
     context_index_bytes = _directory_size(paper_output / "context")
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
-    pdf_path = None
+    pdf_path = locate_pdf(paper_dir, input_root, snapshot)
     pdf_sha256 = None
-    for artifact in snapshot.artifacts:
-        if artifact.role == "main_pdf":
-            candidate = input_root / artifact.path
-            if candidate.is_file():
-                pdf_path = candidate
-                pdf_sha256 = artifact.sha256
-                break
+    if pdf_path is not None:
+        resolved_pdf = pdf_path.resolve()
+        pdf_sha256 = next(
+            (artifact.sha256 for artifact in snapshot.artifacts
+             if artifact.role == "main_pdf"
+             and (input_root / artifact.path).resolve() == resolved_pdf),
+            None,
+        )
+        if pdf_sha256 is None:
+            pdf_sha256 = next(
+                (str(source.get("sha256")) for source in snapshot.external_sources
+                 if source.get("status") in {"HASH_VERIFIED", "HASH_COMPUTED_NO_EXPECTED_SHA256"}
+                 and source.get("sha256")),
+                None,
+            )
 
     figures: list[dict] = []
     panels: list[dict] = []
@@ -891,8 +939,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             continue
         figure_id = safe_id(str(source_figure.get("figure_id") or source_figure.get("id") or f"Figure{figure_index}"))
         page_number = source_figure.get("page") or source_figure.get("page_number")
+        source_doc_type = str(source_figure.get("doc_type") or "MAIN").strip().upper()
+        is_main_pdf_figure = source_doc_type not in {"SI", "SUPPLEMENT", "SUPPLEMENTARY"}
         figure = {
             "figure_id": figure_id, "page": int(page_number) if page_number else None,
+            "source_doc_type": source_doc_type,
             "caption": source_figure.get("caption") or source_figure.get("title"),
             "shared_legends": source_figure.get("shared_legends") or source_figure.get("legend") or [],
             "technique": source_figure.get("technique"), "domain": source_figure.get("domain"),
@@ -900,7 +951,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         if isinstance(figure["shared_legends"], str):
             figure["shared_legends"] = [{"text": figure["shared_legends"], "scope": "FIGURE"}]
         figures.append(figure)
-        if pdf_path and figure["page"]:
+        if pdf_path and figure["page"] and is_main_pdf_figure:
             page_number_int = int(figure["page"])
             if page_number_int not in native_evidence_by_page:
                 try:
@@ -940,7 +991,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_id = safe_id(str(panel.get("panel_id") or panel.get("id") or panel.get("label") or panel_index))
             panel["panel_id"] = panel_id
             bbox = panel.get("bbox") or panel.get("bounding_box") or source_figure.get("bbox")
-            panel_specific_image = bool(panel.get("image_path"))
+            panel_specific_image = bool(panel.get("image_path") or source_figure.get("image_path"))
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
             crop_mapping = None
@@ -950,7 +1001,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
                 saved_crop = panel_path
-            if saved_crop is None and pdf_path and figure["page"] and _within_paper_disk_budget(
+            if saved_crop is None and pdf_path and figure["page"] and is_main_pdf_figure and _within_paper_disk_budget(
                 paper_output, temp_disk_limit_mb, context_index_bytes):
                 if backend is None:
                     backend = PdfiumBackend()
@@ -985,7 +1036,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             if options.get("ocr") and saved_crop:
                 from .ocr import run_ocr
                 ocr_evidence = run_ocr(saved_crop)
-            native_summary = native_evidence_by_page.get(int(figure["page"])) if figure["page"] else None
+            native_summary = (
+                native_evidence_by_page.get(int(figure["page"]))
+                if figure["page"] and is_main_pdf_figure else None
+            )
             native_file_path = (
                 paper_output / native_summary["artifact"]
                 if native_summary and native_summary.get("artifact") else None
