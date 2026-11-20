@@ -351,3 +351,36 @@ def test_source_figure_asset_changed_after_snapshot_is_not_copied(tmp_path: Path
     assert not evidence.exists() or not list(evidence.glob("MAIN_FIG_P1_01_1.*"))
     assert result["figures"][0]["source_asset_status"] == "HASH_MISMATCH"
     assert result["job_state"] == "NEEDS_REVIEW"
+
+
+
+
+def test_main_pdf_mutation_during_processing_marks_results_needs_review(
+    tmp_path: Path, monkeypatch,
+):
+    from scientific_figure_data import pipeline
+
+    input_root, package, source_pdf, image_relative = _make_chem_literature_package(tmp_path)
+    _write_valid_figure_png(package, image_relative)
+    snapshot = snapshot_paper(package, input_root)
+    original_extract = pipeline._extract_panel
+
+    def mutate_pdf_then_extract(*args, **kwargs):
+        source_pdf.write_bytes(b"%PDF-1.7\nmutated while processing\n")
+        return original_extract(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_extract_panel", mutate_pdf_then_extract)
+    result = pipeline.process_paper(
+        input_root,
+        Path("10.1000_demo/01_preprocessing"),
+        tmp_path / "downstream-pdf-midrun",
+        options={"memory_limit_mb": 0, "temp_disk_limit_mb": 0},
+        input_snapshot=snapshot,
+    )
+
+    assert result["job_state"] == "NEEDS_REVIEW"
+    assert "MAIN_PDF_CHANGED_DURING_PROCESSING" in result["snapshot"]["warnings"]
+    assert result["snapshot"]["external_sources"][0]["status"] == "CHANGED_DURING_PROCESSING"
+    assert result["figures"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"
+    assert result["panels"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"
+    assert result["series"][0]["evidence"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"

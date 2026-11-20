@@ -1279,6 +1279,27 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 "shared_legend_refs": figure["shared_legends"],
             })
 
+    if pdf_path is not None and pdf_sha256:
+        try:
+            final_pdf_hash = sha256_file(pdf_path)
+        except OSError:
+            final_pdf_hash = None
+        if final_pdf_hash != pdf_sha256:
+            snapshot.warnings.append("MAIN_PDF_CHANGED_DURING_PROCESSING")
+            if "main_pdf" not in snapshot.missing_roles:
+                snapshot.missing_roles.append("main_pdf")
+            for source in snapshot.external_sources:
+                if source.get("sha256") == pdf_sha256:
+                    source["status"] = "CHANGED_DURING_PROCESSING"
+            for figure in figures:
+                figure["source_pdf_integrity_status"] = "CHANGED_DURING_PROCESSING"
+            for panel in panels:
+                panel["source_pdf_integrity_status"] = "CHANGED_DURING_PROCESSING"
+            for record in series:
+                for evidence in record.evidence:
+                    evidence["source_pdf_integrity_status"] = "CHANGED_DURING_PROCESSING"
+            review_needed = True
+
     if not figures:
         status = "NEEDS_REVIEW"
         review_needed = True
