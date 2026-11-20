@@ -431,7 +431,7 @@ def test_end_to_end_cli_streaming_workflow_without_pdf_or_gpu(tmp_path: Path, ca
     assert main(["query", "--output-root", str(output_root), "--technique", "CV"]) == 0
     query_rows = json.loads(capsys.readouterr().out)
     assert len(query_rows) == 1
-    assert query_rows[0]["series_id"] == "Figure1_a_unassigned"
+    assert query_rows[0]["series_id"] == "paper-001__Figure1_a_unassigned"
 
     export_dir = tmp_path / "ml-output"
     assert main([
