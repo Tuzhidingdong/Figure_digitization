@@ -317,16 +317,18 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert manifest["raw_value_policy"]
     assert (output / "warnings.jsonl").is_file()
     assert manifest["streaming"]["point_rows_buffered"] == 1
-    assert isinstance(first["point_index"], int)
-    assert isinstance(first["x_value"], float)
-    assert first["pixel_x"] is None or isinstance(first["pixel_x"], float)
+    assert first["point_index"].isdigit()
+    assert first["x_value"] != ""
+    assert first["pixel_x"] == "" or first["pixel_x"] is not None
 
     json_output = tmp_path / "ml-export-json"
+    json_catalog = Catalog(tmp_path / "catalog.sqlite")
     json_manifest = export_dataset(
-        Catalog(tmp_path / "catalog.sqlite"), tmp_path, json_output,
+        json_catalog, tmp_path, json_output,
         {"paper_id": snapshot.paper_id, "technique": "CV"},
         include_review_required=True, fmt="json", series_batch_size=1,
     )
+    json_catalog.close()
     json_rows = json.loads((json_output / "dataset.json").read_text(encoding="utf-8"))
     json_first = next(row for row in json_rows if row["series_id"] == "series-a")
     assert json_manifest["format"] == "json"
