@@ -47,6 +47,7 @@ def _normalized_associations(associations: dict) -> dict:
             "aliases": _decode_json(item.get("aliases_json"), []),
             "role_in_series": item.get("role_in_series"),
             "link_status": item.get("link_status"),
+            "identity_scope": item.get("identity_scope") or "PAPER",
             "evidence": _decode_json(item.get("evidence_json"), {}),
         })
     conditions = []
