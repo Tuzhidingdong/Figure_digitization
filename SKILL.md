@@ -117,3 +117,9 @@ The profile schema is extensible. Do not embed one paper's sample names, values,
 - Record implementation and acceptance evidence in STATUS.md.
 - Do not claim completion of a criterion based only on a synthetic test. Real-paper acceptance requires user-approved PDFs and human-annotated reference points/anchors.
 - Do not publish a release without explicit user approval.
+
+## Extraction acceptance boundary
+
+P0 code paths are implemented conservatively, but their scientific accuracy is not yet validated against annotated real papers. Treat automatic results as `PROVISIONAL_UNCALIBRATED`; unsupported or ambiguous traces must remain `NEEDS_REVIEW`. Synthetic CI verifies software behavior, not point-level scientific accuracy.
+
+P1 planned scope: tables, bar/scatter plots, error bars, marker classification and more difficult curve separation. P2 experimental/deferred scope: heatmaps, advanced LC-MS/MS and specialized image reconstruction. Do not describe P1/P2 as supported production features or claim production readiness until the frozen Task Plan's real-paper, target-Windows, licensing, integrity and manual-review gates are accepted.
