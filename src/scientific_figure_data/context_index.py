@@ -10,9 +10,9 @@ from pathlib import Path
 
 from .hashing import atomic_write_json, sha256_file, sha256_json
 
-SAMPLE_RE = re.compile(r"\\b(?:sample|specimen|electrode|catalyst|material)\\s*[-_ ]?[A-Za-z0-9][A-Za-z0-9_.-]{0,40}\\b", re.I)
-REFERENCE_RE = re.compile(r"\\b(?:vs\\.?|versus)\\s+(?:Ag/AgCl|SCE|SHE|RHE|Hg/HgO|Hg/Hg2SO4|Li/Li\\+|Na/Na\\+|Zn/Zn2+)\\b", re.I)
-ERROR_RE = re.compile(r"\\b(?:mean\\s*[±+/-]\\s*(?:SD|SEM)|standard deviation|standard error|95%\\s*(?:CI|confidence interval)|n\\s*=\\s*\\d+)\\b", re.I)
+SAMPLE_RE = re.compile(r"\b(?:sample|specimen|electrode|catalyst|material)\s*[-_ ]?[A-Za-z0-9][A-Za-z0-9_.-]{0,40}\b", re.I)
+REFERENCE_RE = re.compile(r"\b(?:vs\.?|versus)\s+(?:Ag/AgCl|SCE|SHE|RHE|Hg/HgO|Hg/Hg2SO4|Li/Li\+|Na/Na\+|Zn/Zn2+)\b", re.I)
+ERROR_RE = re.compile(r"\b(?:mean\s*[±+/-]\s*(?:SD|SEM)|standard deviation|standard error|95%\s*(?:CI|confidence interval)|n\s*=\s*\d+)\b", re.I)
 TEXT_SUFFIXES = {".md", ".txt", ".csv"}
 
 
