@@ -1960,3 +1960,61 @@ def test_context_index_reuses_unchanged_cache_and_invalidates_changed_sources(tm
     third = PaperContextIndex.build(paper, output, memory_budget_bytes=1)
     assert third.fingerprint != first_fingerprint
     assert third.search("sample_alias", "Sample-B")
+
+
+
+def test_same_figure_series_link_to_distinct_subjects_and_query_shared_sample_techniques(tmp_path: Path):
+    snapshot = make_snapshot("paper-shared-samples")
+    xrd_sample_a = make_series("xrd-sample-a", "measurement-xrd-a", "temperature")
+    xrd_sample_a.technique = "XRD"
+    cv_sample_a = make_series("cv-sample-a", "measurement-cv-a", "scan rate")
+    cv_sample_a.technique = "CV"
+    cv_sample_b = make_series("cv-sample-b", "measurement-cv-b", "scan rate")
+    cv_sample_b.technique = "CV"
+
+    sample_a_link = {
+        "entity_id": "sample-a",
+        "canonical_name": "Sample A",
+        "entity_type": "material",
+        "aliases": ["SA"],
+        "role_in_series": "measured_sample",
+        "status": "ASSIGNED_WITH_EVIDENCE",
+        "evidence": {"source": "figure legend", "page": 2, "text": "Sample A"},
+    }
+    sample_b_link = {
+        "entity_id": "sample-b",
+        "canonical_name": "Sample B",
+        "entity_type": "material",
+        "aliases": ["SB"],
+        "role_in_series": "measured_sample",
+        "status": "ASSIGNED_WITH_EVIDENCE",
+        "evidence": {"source": "figure legend", "page": 2, "text": "Sample B"},
+    }
+    xrd_sample_a.subject_links = [sample_a_link]
+    cv_sample_a.subject_links = [sample_a_link]
+    cv_sample_b.subject_links = [sample_b_link]
+
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    catalog.index_paper(
+        snapshot,
+        [{"figure_id": "Figure1", "page": 2, "caption": "XRD and CV of two samples"}],
+        [{"figure_id": "Figure1", "panel_id": "a", "bbox": [0, 0, 1, 1]}],
+        [xrd_sample_a, cv_sample_a, cv_sample_b],
+        "COMPLETED_WITH_REVIEW",
+    )
+
+    sample_a = catalog.query_series({"entity": "SA"})
+    assert {(row["series_id"], row["technique"]) for row in sample_a} == {
+        ("xrd-sample-a", "XRD"), ("cv-sample-a", "CV")
+    }
+    sample_b = catalog.query_series({"entity": "SB"})
+    assert {(row["series_id"], row["technique"]) for row in sample_b} == {
+        ("cv-sample-b", "CV")
+    }
+
+    associations_a = catalog.series_associations("xrd-sample-a")
+    associations_b = catalog.series_associations("cv-sample-b")
+    assert associations_a["subject_links"][0]["entity_id"] == "sample-a"
+    assert associations_b["subject_links"][0]["entity_id"] == "sample-b"
+    assert associations_a["subject_links"][0]["evidence_json"] != associations_b["subject_links"][0]["evidence_json"]
+    catalog.close()
