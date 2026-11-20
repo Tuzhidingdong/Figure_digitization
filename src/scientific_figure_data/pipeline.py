@@ -240,9 +240,9 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
 
 def _copy_image_asset_to_evidence(source_path: Path, destination: Path) -> Path | None:
     """Copy a source image into downstream evidence atomically without modifying its source."""
-    destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(destination.name + ".tmp")
     try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source_path, temporary)
         temporary.replace(destination)
         return destination
