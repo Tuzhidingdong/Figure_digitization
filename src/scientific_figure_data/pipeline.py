@@ -502,6 +502,44 @@ def _plot_box_to_pdf(
 
 
 
+
+def _standardization_request_from_definition(definition: dict) -> dict | None:
+    """Validate explicit per-axis target units without guessing any unit."""
+    if "standardization" not in definition:
+        return None
+    supplied = definition.get("standardization")
+    if not isinstance(supplied, dict):
+        return {
+            "status": "INVALID_CONFIGURATION",
+            "configuration_errors": ["standardization must be an object"],
+            "provided": supplied,
+        }
+    allowed = {"x_target_unit", "y_target_unit"}
+    errors = [f"unsupported key: {key}" for key in sorted(set(supplied) - allowed)]
+    targets: dict[str, str | None] = {"x_target_unit": None, "y_target_unit": None}
+    for key in allowed:
+        if key not in supplied:
+            continue
+        value = supplied[key]
+        if not isinstance(value, str) or not value.strip() or len(value.strip()) > 64:
+            errors.append(f"{key} must be a non-empty unit string of at most 64 characters")
+        else:
+            targets[key] = value.strip()
+    if errors:
+        return {"status": "INVALID_CONFIGURATION", "configuration_errors": errors, "provided": supplied}
+    if not any(targets.values()):
+        return {"status": "NOT_REQUESTED", **targets}
+    return {"status": "REQUESTED", **targets}
+
+
+def _attach_standardization_request(record: SeriesRecord, definition: dict) -> None:
+    request = _standardization_request_from_definition(definition)
+    if request is None:
+        return
+    if not isinstance(record.metadata, dict):
+        record.metadata = {}
+    record.metadata["standardization"] = request
+
 def _extract_panel(
     image_path: Path | None, paper_id: str, figure_id: str, panel_id: str,
     panel: dict, figure: dict, overrides: dict, context: PaperContextIndex,
@@ -827,10 +865,12 @@ def _extract_panel(
             if record.points:
                 record.qc_status = "PROVISIONAL_UNCALIBRATED"
                 record.review_state = "NEEDS_REVIEW"
+                _attach_standardization_request(record, definition)
                 results.append(record)
                 continue
             if vector_selection and vector_selection.get("status") == "NEEDS_REVIEW":
                 if vector_indices or not color_rgb:
+                    _attach_standardization_request(record, definition)
                     results.append(record)
                     continue
                 record.metadata["vector_fallback"] = "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
@@ -844,6 +884,7 @@ def _extract_panel(
                 "plot_detection": plot_detection,
                 "calibration_errors": calibration_errors,
             }
+            _attach_standardization_request(record, definition)
             results.append(record)
             continue
         if isinstance(pixel_points, list) and len(pixel_points) >= 2:
@@ -909,6 +950,7 @@ def _extract_panel(
         if record.points:
             record.qc_status = "PROVISIONAL_UNCALIBRATED"
             record.review_state = "NEEDS_REVIEW"
+        _attach_standardization_request(record, definition)
         results.append(record)
     return results
 

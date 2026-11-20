@@ -421,6 +421,85 @@ def test_stale_review_patch_is_rejected_and_preserved(tmp_path: Path):
     assert "not applied" not in target.read_text(encoding="utf-8")
 
 
+def test_export_populates_standardized_axes_only_for_explicit_supported_targets():
+    from scientific_figure_data.exporter import _make_row
+
+    record = {
+        "paper_id": "paper-1", "input_fingerprint": "fingerprint",
+        "series_id": "series-1", "measurement_id": "measurement-1",
+        "figure_id": "Figure1", "panel_id": "a", "technique": "AOP",
+        "domain": "aop", "label": "concentration", "x_unit": "s", "y_unit": "mg/L",
+        "y_axis_side": "LEFT", "qc_status": "PROVISIONAL_UNCALIBRATED",
+        "review_state": "NEEDS_REVIEW", "extraction_status": "EXTRACTED_PROVISIONAL",
+        "metadata_json": json.dumps({"standardization": {
+            "status": "REQUESTED", "x_target_unit": "min", "y_target_unit": "g/L"
+        }}),
+    }
+    point = {"point_index": 0, "x_value": 60, "y_value": 2500, "pixel_x": 20, "pixel_y": 40}
+    row = _make_row(record, point, {"subject_links": [], "conditions": []})
+
+    assert row["x_value"] == row["x_value_raw"] == 60
+    assert row["y_value"] == row["y_value_raw"] == 2500
+    assert row["x_unit"] == row["x_unit_raw"] == "s"
+    assert row["y_unit"] == row["y_unit_raw"] == "mg/L"
+    assert row["x_value_standardized"] == pytest.approx(1)
+    assert row["y_value_standardized"] == pytest.approx(2.5)
+    assert row["x_unit_standardized"] == "min"
+    assert row["y_unit_standardized"] == "g/L"
+    assert row["x_standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+    assert row["y_standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+    assert row["standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+    assert row["standardization_method_id"] == "DIMENSIONAL_FACTOR_TABLE_V1"
+    assert row["standardization_evidence_id"] == "x:unit-factor:s->min;y:unit-factor:mg/L->g/L"
+    assert row["compatibility_status"] == "NOT_HARMONIZED"
+
+
+def test_export_keeps_unsupported_reference_scale_conversion_unresolved_per_axis():
+    from scientific_figure_data.exporter import _make_row
+
+    record = {
+        "paper_id": "paper-1", "series_id": "series-2", "figure_id": "Figure2",
+        "panel_id": "b", "technique": "CV", "domain": "battery",
+        "label": "potential/current", "x_unit": "V vs Ag/AgCl", "y_unit": "mg/L",
+        "y_axis_side": "LEFT", "qc_status": "PROVISIONAL_UNCALIBRATED",
+        "review_state": "NEEDS_REVIEW", "metadata_json": json.dumps({"standardization": {
+            "status": "REQUESTED", "x_target_unit": "V vs RHE", "y_target_unit": "g/L"
+        }}),
+    }
+    row = _make_row(record, {"point_index": 0, "x_value": 0.25, "y_value": 1000},
+                    {"subject_links": [], "conditions": []})
+
+    assert row["x_value"] == row["x_value_raw"] == 0.25
+    assert row["x_value_standardized"] is None
+    assert row["x_unit_standardized"] is None
+    assert row["x_standardization_status"] == "UNRESOLVED_UNSUPPORTED_CONVERSION"
+    assert row["y_value_standardized"] == pytest.approx(1)
+    assert row["y_unit_standardized"] == "g/L"
+    assert row["y_standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+    assert row["standardization_status"] == "PARTIAL_DIMENSIONAL_STANDARDIZATION"
+
+
+def test_export_flags_invalid_explicit_standardization_configuration():
+    from scientific_figure_data.exporter import _make_row
+
+    record = {
+        "paper_id": "paper-1", "series_id": "series-3", "figure_id": "Figure3",
+        "panel_id": "c", "technique": "CV", "domain": "battery",
+        "label": "series", "x_unit": "V", "y_unit": "mA", "y_axis_side": "LEFT",
+        "qc_status": "PROVISIONAL_UNCALIBRATED", "review_state": "NEEDS_REVIEW",
+        "metadata_json": json.dumps({"standardization": {
+            "status": "INVALID_CONFIGURATION", "configuration_errors": ["unsupported key: factor"]
+        }}),
+    }
+    row = _make_row(record, {"point_index": 0, "x_value": 0.1, "y_value": 1.0},
+                    {"subject_links": [], "conditions": []})
+    assert row["standardization_status"] == "INVALID_CONFIGURATION"
+    assert row["x_standardization_status"] == "INVALID_CONFIGURATION"
+    assert row["y_standardization_status"] == "INVALID_CONFIGURATION"
+    assert "STANDARDIZATION_CONFIGURATION_INVALID" in json.loads(row["compatibility_warnings_json"])
+
+
+
 def test_cli_exposes_query_export_and_review_apply():
     parser = build_parser()
     query = parser.parse_args(["query", "--output-root", "out", "--technique", "CV", "--analyte", "PFOA"])
@@ -464,6 +543,8 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert first["y_value_standardized"] == ""
     assert first["x_unit_standardized"] == ""
     assert first["standardization_method_id"] == ""
+    assert first["x_standardization_status"] == "NOT_REQUESTED"
+    assert first["y_standardization_status"] == "NOT_REQUESTED"
     assert first["compatibility_status"] == "NOT_HARMONIZED"
     assert json.loads(first["subject_entity_ids_json"]) == ["paper-1__sample-a"]
     point_subjects = json.loads(first["subject_links_json"])
@@ -483,7 +564,7 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert first_metadata["standardization_status"] == "NOT_PERFORMED"
     assert first_metadata["subject_links"][0]["evidence"]["source"] == "legend"
     assert isinstance(first_metadata["conditions"][0]["value"], dict)
-    assert manifest["schema_version"] == "1.1"
+    assert manifest["schema_version"] == "1.2"
     assert manifest["row_granularity"] == "one_row_per_digitized_series_point"
     assert manifest["raw_value_policy"]
     assert (output / "warnings.jsonl").is_file()
@@ -1552,7 +1633,8 @@ def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_
         "vector_object_indices": [7],
         "x_axis_anchors": [{"pixel": 15, "value": -1}, {"pixel": 120, "value": 1}],
         "y_axis_anchors": [{"pixel": 120, "value": -10}, {"pixel": 45, "value": 10}],
-        "x_unit": "V", "y_unit": "mA cm-2",
+        "x_unit": "s", "y_unit": "mA cm-2",
+        "standardization": {"x_target_unit": "min"},
     }
     override = {"figures": {"Figure1": {"panels": {"a": {"series": [definition]}}}}}
     override_path = paper / "digitization_overrides.json"
@@ -1563,6 +1645,9 @@ def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_
     assert result["series_count"] == 1
     record = result["series"][0]
     assert record["extraction_method"] == "PDFIUM_NATIVE_VECTOR_POLYLINE"
+    assert record["metadata"]["standardization"] == {
+        "status": "REQUESTED", "x_target_unit": "min", "y_target_unit": None,
+    }
     mapping = record["metadata"]["crop_mapping"]
     assert mapping["page_rotation_degrees"] == 0
     assert mapping["render_scale"] == pytest.approx(1.5)

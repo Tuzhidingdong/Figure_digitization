@@ -10,7 +10,7 @@ from typing import Any
 
 from .hashing import atomic_write_json
 from .storage import Catalog
-from .semantics import domain_semantic_warnings
+from .semantics import domain_semantic_warnings, standardize_measurement_value
 
 FIELDS = [
     "paper_id", "input_fingerprint", "series_id", "measurement_id", "figure_id", "panel_id",
@@ -19,7 +19,8 @@ FIELDS = [
     "x_value_raw", "x_label_raw", "y_value_raw", "x_unit_raw", "y_unit_raw",
     "x_value_standardized", "y_value_standardized", "x_unit_standardized", "y_unit_standardized",
     "standardization_method_id", "standardization_evidence_id",
-    "standardization_status", "y_axis_side",
+    "standardization_status", "x_standardization_status", "y_standardization_status",
+    "y_axis_side",
     "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type",
     "subject_entity_ids_json", "subject_links_json", "conditions_json",
     "compatibility_status", "compatibility_warnings_json",
@@ -86,6 +87,9 @@ def _series_compatibility_warnings(record: dict, associations: dict, metadata: d
     ):
         if warning not in warnings:
             warnings.append(warning)
+    standardization = metadata.get("standardization")
+    if isinstance(standardization, dict) and standardization.get("status") == "INVALID_CONFIGURATION":
+        warnings.append("STANDARDIZATION_CONFIGURATION_INVALID")
     explicit = metadata.get("compatibility_warnings", [])
     if isinstance(explicit, list):
         for warning in explicit:
@@ -111,17 +115,90 @@ def _optional_int(value: Any) -> int | None:
     return int(number)
 
 
+def _standardize_axis(value: float | None, source_unit: Any, target_unit: Any) -> dict[str, Any]:
+    if target_unit is None:
+        return {"standardized_value": None, "standardized_unit": None,
+                "standardization_status": "NOT_REQUESTED", "method_id": None, "evidence_id": None}
+    if not isinstance(target_unit, str) or not target_unit.strip():
+        return {"standardized_value": None, "standardized_unit": None,
+                "standardization_status": "INVALID_CONFIGURATION", "method_id": None, "evidence_id": None}
+    if value is None:
+        return {"standardized_value": None, "standardized_unit": None,
+                "standardization_status": "UNRESOLVED_MISSING_NUMERIC_VALUE",
+                "method_id": None, "evidence_id": None}
+    return standardize_measurement_value(value, source_unit, target_unit.strip())
+
+
+def _standardization_summary(
+    standardization: dict, x_value: float | None, y_value: float | None,
+    x_unit: Any, y_unit: Any, point: dict,
+) -> dict[str, Any]:
+    status = standardization.get("status", "NOT_PERFORMED")
+    if status == "INVALID_CONFIGURATION":
+        invalid = {"standardized_value": None, "standardized_unit": None,
+                   "standardization_status": "INVALID_CONFIGURATION",
+                   "method_id": None, "evidence_id": None}
+        return {"x": invalid, "y": dict(invalid), "status": "INVALID_CONFIGURATION",
+                "method_id": None, "evidence_id": None}
+    if status == "REQUESTED":
+        x_result = _standardize_axis(x_value, x_unit, standardization.get("x_target_unit"))
+        y_result = _standardize_axis(y_value, y_unit, standardization.get("y_target_unit"))
+        requested = [r for r in (x_result, y_result) if r["standardization_status"] != "NOT_REQUESTED"]
+        converted = [r for r in requested if r["standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"]
+        if requested and len(converted) == len(requested):
+            overall = "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+        elif converted:
+            overall = "PARTIAL_DIMENSIONAL_STANDARDIZATION"
+        elif requested:
+            statuses = {r["standardization_status"] for r in requested}
+            overall = next(iter(statuses)) if len(statuses) == 1 else "UNRESOLVED_STANDARDIZATION"
+        else:
+            overall = "NOT_PERFORMED"
+        methods = sorted({r["method_id"] for r in converted if r.get("method_id")})
+        evidences = [
+            f"{axis}:{r['evidence_id']}"
+            for axis, r in (("x", x_result), ("y", y_result)) if r.get("evidence_id")
+        ]
+        return {"x": x_result, "y": y_result, "status": overall,
+                "method_id": ";".join(methods) if methods else None,
+                "evidence_id": ";".join(evidences) if evidences else None}
+
+    # Backward compatibility for materialized point values with explicit method/evidence IDs.
+    legacy_method = standardization.get("method_id")
+    legacy_evidence = standardization.get("evidence_id")
+    legacy_ok = (status == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+                 and bool(legacy_method) and bool(legacy_evidence))
+    if legacy_ok:
+        x_std = _optional_float(point.get("x_value_standardized"))
+        y_std = _optional_float(point.get("y_value_standardized"))
+        x_unit_std = point.get("x_unit_standardized") if x_std is not None else None
+        y_unit_std = point.get("y_unit_standardized") if y_std is not None else None
+        x_result = {
+            "standardized_value": x_std, "standardized_unit": x_unit_std,
+            "standardization_status": (
+                "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+                if x_std is not None and x_unit_std else "NOT_REQUESTED"
+            ), "method_id": legacy_method, "evidence_id": legacy_evidence,
+        }
+        y_result = {
+            "standardized_value": y_std, "standardized_unit": y_unit_std,
+            "standardization_status": (
+                "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+                if y_std is not None and y_unit_std else "NOT_REQUESTED"
+            ), "method_id": legacy_method, "evidence_id": legacy_evidence,
+        }
+        return {"x": x_result, "y": y_result, "status": status,
+                "method_id": legacy_method, "evidence_id": legacy_evidence}
+    no_request = {"standardized_value": None, "standardized_unit": None,
+                  "standardization_status": "NOT_REQUESTED", "method_id": None, "evidence_id": None}
+    return {"x": no_request, "y": dict(no_request), "status": "NOT_PERFORMED",
+            "method_id": None, "evidence_id": None}
+
+
 def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
     metadata = _decode_json(record.get("metadata_json"), {})
     warnings = _series_compatibility_warnings(record, associations, metadata)
     standardization = metadata.get("standardization") if isinstance(metadata.get("standardization"), dict) else {}
-    standardization_status = standardization.get("status", "NOT_PERFORMED")
-    standardization_method = standardization.get("method_id")
-    standardization_evidence = standardization.get("evidence_id")
-    standardization_is_evidenced = (
-        standardization_status == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
-        and bool(standardization_method) and bool(standardization_evidence)
-    )
     subject_ids = sorted({
         item["entity_id"] for item in associations.get("subject_links", [])
         if item.get("entity_id")
@@ -129,6 +206,11 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
     x_value = _optional_float(point.get("x_value"))
     x_label = point.get("x_label") or None
     y_value = _optional_float(point.get("y_value"))
+    standardization_result = _standardization_summary(
+        standardization, x_value, y_value, record.get("x_unit"), record.get("y_unit"), point
+    )
+    x_standardized = standardization_result["x"]
+    y_standardized = standardization_result["y"]
     point_index = _optional_int(point.get("point_index"))
     pixel_x = _optional_float(point.get("pixel_x"))
     pixel_y = _optional_float(point.get("pixel_y"))
@@ -155,21 +237,15 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         "y_value_raw": y_value,
         "x_unit_raw": record["x_unit"],
         "y_unit_raw": record["y_unit"],
-        "x_value_standardized": (
-            _optional_float(point.get("x_value_standardized")) if standardization_is_evidenced else None
-        ),
-        "y_value_standardized": (
-            _optional_float(point.get("y_value_standardized")) if standardization_is_evidenced else None
-        ),
-        "x_unit_standardized": (
-            point.get("x_unit_standardized") if standardization_is_evidenced else None
-        ),
-        "y_unit_standardized": (
-            point.get("y_unit_standardized") if standardization_is_evidenced else None
-        ),
-        "standardization_method_id": standardization_method if standardization_is_evidenced else None,
-        "standardization_evidence_id": standardization_evidence if standardization_is_evidenced else None,
-        "standardization_status": standardization_status if standardization_is_evidenced else "NOT_PERFORMED",
+        "x_value_standardized": x_standardized.get("standardized_value"),
+        "y_value_standardized": y_standardized.get("standardized_value"),
+        "x_unit_standardized": x_standardized.get("standardized_unit"),
+        "y_unit_standardized": y_standardized.get("standardized_unit"),
+        "standardization_method_id": standardization_result["method_id"],
+        "standardization_evidence_id": standardization_result["evidence_id"],
+        "standardization_status": standardization_result["status"],
+        "x_standardization_status": x_standardized["standardization_status"],
+        "y_standardization_status": y_standardized["standardization_status"],
         "y_axis_side": record["y_axis_side"],
         "pixel_x": pixel_x,
         "pixel_y": pixel_y,
@@ -253,7 +329,7 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                         add_warning(record["series_id"], warning)
 
                     metadata_record = {
-                        "export_schema_version": "1.1",
+                        "export_schema_version": "1.2",
                         "paper_id": record["paper_id"],
                         "input_fingerprint": record.get("input_fingerprint"),
                         "series_id": record["series_id"],
@@ -267,7 +343,12 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                         "y_unit": record.get("y_unit"),
                         "x_unit_raw": record.get("x_unit"),
                         "y_unit_raw": record.get("y_unit"),
-                        "standardization_status": "NOT_PERFORMED",
+                        "standardization_status": (
+                            series_metadata.get("standardization", {}).get("status", "NOT_PERFORMED")
+                            if isinstance(series_metadata.get("standardization"), dict)
+                            else "NOT_PERFORMED"
+                        ),
+                        "standardization_request": series_metadata.get("standardization"),
                         "x_value_standardized": None,
                         "y_value_standardized": None,
                         "x_unit_standardized": None,
@@ -303,6 +384,13 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                         if record is None:
                             continue
                         row = _make_row(record, point, associations_map[record["series_id"]])
+                        for axis in ("x", "y"):
+                            axis_status = row[f"{axis}_standardization_status"]
+                            if axis_status.startswith("UNRESOLVED") or axis_status == "INVALID_CONFIGURATION":
+                                add_warning(
+                                    record["series_id"],
+                                    f"STANDARDIZATION_{axis.upper()}_{axis_status}",
+                                )
                         if csv_writer:
                             csv_writer.writerow(row)
                         else:
@@ -318,13 +406,19 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
             data_stream.close()
 
     manifest = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "row_granularity": "one_row_per_digitized_series_point",
         "raw_value_policy": (
-            "x_value/y_value are reconstructed on the extracted axis scale with the stored "
-            "original units. *_raw columns repeat those values explicitly. No dimensional or "
-            "reference-scale normalization is performed by export."
+            "x_value/y_value and *_raw columns retain the reconstructed original axis values "
+            "and units. Standardized columns are populated only when digitization_overrides.json "
+            "explicitly requests a target unit and the deterministic dimensional factor table "
+            "supports the exact conversion. The original columns are never overwritten."
+        ),
+        "standardization_policy": (
+            "Per-axis x_target_unit/y_target_unit requests are opt-in. Each axis reports its own "
+            "status. Unsupported or missing-unit conversions remain unresolved. Electrode-reference "
+            "scale conversions are separate and are never performed by dimensional unit factors."
         ),
         "subject_condition_policy": (
             "Every point row carries its series-level subject links and measurement conditions "
