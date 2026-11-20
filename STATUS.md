@@ -139,6 +139,19 @@ These are software-engineering results. They do not establish scientific point a
 - Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
 - Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
 
+## Additional P0 follow-up — 2026-11-20
+
+After the previous status sync, the following software-level gaps were addressed:
+
+- Scheduler preflight snapshot errors and retry-snapshot errors are recorded as per-paper failures; BrokenProcessPool raised by submit receives a finite retry path. A regression test verifies that a bad paper does not stop a later valid paper.
+- Condition queries now search both condition names and serialized values.
+- Battery/AOP/PFAS export warnings consume only explicit per-series measurement_semantics; AOP/PFAS metric-role conflicts and missing Battery capacity bases remain warnings, never automatic conversions.
+- Reference-electrode conversion now retains every required condition including pH and records the scale factor/offset. Dimensional conversion rejects NaN/Infinity and non-finite results.
+- Normalized Panel bboxes are validated for finite, ordered 0–1 coordinates; invalid boundaries are retained as review-required rather than drawn as valid geometry.
+- README and Windows benchmark examples consistently use the Chem-Literature runs/preprocessed input root.
+
+These changes are code-complete in the current branch. Their final Windows CI result must be checked against the matching current HEAD before this follow-up is called regression-accepted. Real-paper scientific accuracy, target-PC resource measurement and manual browser review remain external acceptance items.
+
 ## Latest verification
 
 - Current main HEAD: `5430fe99d7f0f0958ea0c81fab6f39569b95fea0`.
