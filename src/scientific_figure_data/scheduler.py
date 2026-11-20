@@ -475,6 +475,11 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     combined_cpu_seconds = parent_cpu_seconds + completed_worker_cpu_seconds
     report = {
         **results,
+        "completed_papers": results["completed"],
+        "review_required_papers": results["completed_with_review"],
+        "permanently_failed_papers": results["failed"],
+        "blocked_review_locked_papers": results["blocked_review_locked"],
+        "retried_papers": results["retried"],
         "parent_cpu_seconds": round(parent_cpu_seconds, 3),
         "completed_worker_cpu_seconds": round(completed_worker_cpu_seconds, 3),
         "combined_cpu_seconds": round(combined_cpu_seconds, 3),

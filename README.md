@@ -75,3 +75,6 @@ The repository implements the conservative P0 workflow and its evidence, persist
 P0 automation is restricted to low-ambiguity one-dimensional traces with explicit figure/axis evidence. Non-monotonic CV/EIS raster traces, marker-dependent curve identity, ambiguous same-colour branches, overlapping curves, uncertain axes, and unresolved scientific identities must remain `NEEDS_REVIEW` unless a separately validated extractor is available.
 
 P1 is planned expansion for tables, bar/scatter charts, error bars, marker classification, difficult curve separation, and schema-mapped scalar observations. P2 remains experimental/deferred for heatmaps, advanced LC-MS/MS, and specialized image reconstruction. Neither P1 nor P2 is claimed complete. Release/production readiness remains blocked on the frozen Task Plan's real-paper benchmark, target-Windows resource, licensing/SBOM, source-integrity, and manual review acceptance gates.
+
+
+`run_report.json` publishes explicit counts for `completed_papers`, `review_required_papers`, `permanently_failed_papers`, `blocked_review_locked_papers` and `retried_papers` in addition to the underlying job-state counts. It also records discovered/eligible/skipped totals, failure-reason distribution, throughput, RSS, run-scoped SFD temporary disk peak, and algorithm/profile/QC fingerprints.

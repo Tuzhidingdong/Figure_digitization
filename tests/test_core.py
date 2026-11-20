@@ -2190,6 +2190,11 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert row["started_at"]
     assert isinstance(row["worker_pid"], int)
     assert report["completed_with_review"] == 1
+    assert report["completed_papers"] == 0
+    assert report["review_required_papers"] == 1
+    assert report["permanently_failed_papers"] == 0
+    assert report["blocked_review_locked_papers"] == 0
+    assert report["retried_papers"] == 0
     assert report["parent_cpu_seconds"] >= 0
     assert report["completed_worker_cpu_seconds"] >= 0
     assert report["combined_cpu_seconds"] >= report["parent_cpu_seconds"]
