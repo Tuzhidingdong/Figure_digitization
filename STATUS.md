@@ -63,7 +63,7 @@ These are software-engineering results. They do not establish scientific point a
 
 - **AC-16:** Target Windows hardware resource run.
 - **AC-31/32/68–70/102:** 3–5 approved real PDFs, manual point annotations, backend comparison, and scientific accuracy/QC calibration.
-- **AC-36:** Final dependency/license/SBOM review and model/language-data terms.
+- **AC-36:** Manual legal review of package metadata declarations, native-wheel bundled notices, OCR model/language-data terms, transitive OCR dependencies, and the project's own license decision.
 - **AC-81:** Manual browser workflow acceptance.
 - **AC-51/99/100:** P1 table/scalar, bar/scatter, error-bar, marker and complex table support.
 - **AC-101:** P2 heatmap, advanced LC-MS/MS and specialized image reconstruction.
