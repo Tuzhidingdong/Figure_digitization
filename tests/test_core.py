@@ -2521,3 +2521,78 @@ def test_corrupt_paper_inventory_does_not_stop_other_papers(tmp_path: Path):
     assert (output_root / "papers" / "paper-corrupt" / "paper_manifest.json").is_file()
     assert (output_root / "papers" / "paper-valid" / "paper_manifest.json").is_file()
     ledger.close()
+
+
+
+def test_calibrated_qc_thresholds_require_benchmark_and_algorithm_provenance(tmp_path: Path):
+    from scientific_figure_data.qc import load_thresholds
+
+    path = tmp_path / "uncited-calibrated.json"
+    path.write_text(json.dumps({
+        "schema_version": "1.0",
+        "status": "CALIBRATED",
+        "thresholds": {
+            "maximum_axis_anchor_rmse": 0.1,
+            "minimum_trace_points": 8,
+            "minimum_trace_pixel_fraction": 0.15,
+            "maximum_overlay_distance": 2.0,
+            "minimum_curve_coverage": 0.8,
+        },
+    }), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="benchmark and thresholds mappings|benchmark provenance"):
+        load_thresholds(path)
+
+
+def test_calibrated_qc_thresholds_accept_complete_versioned_benchmark(tmp_path: Path):
+    from scientific_figure_data.qc import load_thresholds
+
+    path = tmp_path / "calibrated.json"
+    config = {
+        "schema_version": "1.0",
+        "status": "CALIBRATED",
+        "benchmark": {
+            "dataset_manifest": "benchmarks/real-paper-dataset.json",
+            "annotation_manifest": "benchmarks/annotations-v1.json",
+            "paper_count": 5,
+            "figure_count": 24,
+            "calibrated_at": "2026-11-20T00:00:00Z",
+            "calibration_method": "held-out annotated figure validation",
+            "algorithm_version": "0.1.0",
+            "profile_version": "sha256:profile-fingerprint",
+        },
+        "thresholds": {
+            "maximum_axis_anchor_rmse": 0.1,
+            "minimum_trace_points": 8,
+            "minimum_trace_pixel_fraction": 0.15,
+            "maximum_overlay_distance": 2.0,
+            "minimum_curve_coverage": 0.8,
+            "additional_domain_rules": {"battery": {"max_capacity_range_error": 0.1}},
+        },
+    }
+    path.write_text(json.dumps(config), encoding="utf-8")
+    assert load_thresholds(path) == config
+
+
+def test_calibrated_qc_thresholds_reject_invalid_numeric_ranges(tmp_path: Path):
+    from scientific_figure_data.qc import load_thresholds
+
+    config = {
+        "schema_version": "1.0",
+        "status": "CALIBRATED",
+        "benchmark": {
+            "dataset_manifest": "dataset.json", "annotation_manifest": "annotations.json",
+            "paper_count": 1, "figure_count": 1, "calibrated_at": "2026-11-20",
+            "calibration_method": "test", "algorithm_version": "0.1.0",
+            "profile_version": "sha256:profile",
+        },
+        "thresholds": {
+            "maximum_axis_anchor_rmse": 0.1, "minimum_trace_points": 1,
+            "minimum_trace_pixel_fraction": 1.5, "maximum_overlay_distance": 2.0,
+            "minimum_curve_coverage": 0.8,
+        },
+    }
+    path = tmp_path / "bad-calibrated.json"
+    path.write_text(json.dumps(config), encoding="utf-8")
+    with pytest.raises(ValueError, match="outside its permitted range"):
+        load_thresholds(path)

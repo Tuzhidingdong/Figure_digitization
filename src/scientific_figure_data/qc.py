@@ -18,6 +18,48 @@ PROVISIONAL = {
 }
 
 
+def _validate_calibrated_thresholds(config: dict) -> None:
+    benchmark = config.get("benchmark")
+    thresholds = config.get("thresholds")
+    if not isinstance(benchmark, dict) or not isinstance(thresholds, dict):
+        raise ValueError("CALIBRATED QC thresholds require benchmark and thresholds mappings")
+
+    required_benchmark = (
+        "dataset_manifest", "annotation_manifest", "paper_count", "figure_count",
+        "calibrated_at", "calibration_method", "algorithm_version", "profile_version",
+    )
+    missing = [
+        key for key in required_benchmark
+        if benchmark.get(key) in (None, "", 0)
+    ]
+    if missing:
+        raise ValueError(
+            "CALIBRATED QC thresholds lack benchmark provenance: " + ", ".join(missing)
+        )
+    for key in ("paper_count", "figure_count"):
+        if not isinstance(benchmark.get(key), int) or benchmark[key] < 1:
+            raise ValueError(f"CALIBRATED benchmark {key} must be a positive integer")
+
+    numeric_bounds = {
+        "maximum_axis_anchor_rmse": (0.0, None),
+        "minimum_trace_points": (2.0, None),
+        "minimum_trace_pixel_fraction": (0.0, 1.0),
+        "maximum_overlay_distance": (0.0, None),
+        "minimum_curve_coverage": (0.0, 1.0),
+    }
+    for key, (minimum, maximum) in numeric_bounds.items():
+        value = thresholds.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"CALIBRATED threshold {key} must be a finite number")
+        if value < minimum or (maximum is not None and value > maximum):
+            raise ValueError(f"CALIBRATED threshold {key} is outside its permitted range")
+
+    for key in ("additional_domain_rules",):
+        value = thresholds.get(key, {})
+        if not isinstance(value, dict):
+            raise ValueError(f"CALIBRATED threshold {key} must be a mapping")
+
+
 def load_thresholds(path: Path | None = None) -> dict:
     if not path or not path.is_file():
         return dict(PROVISIONAL)
@@ -35,6 +77,8 @@ def load_thresholds(path: Path | None = None) -> dict:
     status = config.get("status")
     if status not in {"PROVISIONAL_UNCALIBRATED", "CALIBRATED"}:
         raise ValueError("QC thresholds must explicitly declare PROVISIONAL_UNCALIBRATED or CALIBRATED")
+    if status == "CALIBRATED":
+        _validate_calibrated_thresholds(config)
     return config
 
 
