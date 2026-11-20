@@ -15,7 +15,7 @@ from typing import Iterable
 from .models import JobState, utc_now
 from .manifest import storage_paper_id
 from .storage import connect_catalog, Catalog
-from .hashing import atomic_write_json
+from .hashing import atomic_write_json, sha256_json
 
 
 def _worker_initializer():
@@ -319,6 +319,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         catalog.close()
     elapsed = max(0.0, time.perf_counter() - started_at)
     resume_cached_skipped = int(options.get("resume_cached_skipped", 0))
+    from .pipeline import ALGORITHM_VERSION, algorithm_implementation_fingerprint
+    from .profiles import profile_registry_fingerprint
+    from .qc import load_thresholds
+
+    qc_threshold_path = Path(options["qc_thresholds"]) if options.get("qc_thresholds") else None
+    qc_thresholds = load_thresholds(qc_threshold_path)
     report = {
         **results,
         "cached": results["cached"] + resume_cached_skipped,
@@ -370,8 +376,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "paused_for_resource_pressure": resource_paused,
         "resource_pressure_reason": resource_pause_reason,
         "default_llm_tokens": 0,
-        "algorithm_version": "0.1.0",
-        "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_implementation_fingerprint": algorithm_implementation_fingerprint(),
+        "profile_config_fingerprint": profile_registry_fingerprint(),
+        "qc_threshold_source": str(qc_threshold_path) if qc_threshold_path else "BUILTIN_PROVISIONAL",
+        "qc_threshold_fingerprint": sha256_json(qc_thresholds),
+        "qc_threshold_status": qc_thresholds.get("status", "UNKNOWN"),
     }
     report_con = connect_catalog(output_root / "catalog.sqlite")
     try:
