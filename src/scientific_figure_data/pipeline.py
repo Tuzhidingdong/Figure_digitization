@@ -710,9 +710,13 @@ def _paper_disk_usage(paper_output: Path) -> dict[str, int]:
     }
 
 
-def _within_evidence_budget(paper_output: Path, budget_mb: int) -> bool:
-    usage = _paper_disk_usage(paper_output)
-    return budget_mb <= 0 or usage["budgeted_storage_bytes"] < budget_mb * 1024 * 1024
+def _within_paper_disk_budget(
+    paper_output: Path, budget_mb: int, context_index_bytes: int,
+) -> bool:
+    if budget_mb <= 0:
+        return True
+    evidence_bytes = _directory_size(paper_output / "evidence")
+    return evidence_bytes + max(0, context_index_bytes) < budget_mb * 1024 * 1024
 
 
 def _crop_local_image(source_path: Path, bbox: Any, output_path: Path) -> Path | None:
@@ -825,6 +829,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         paper_dir, paper_output / "context",
         memory_budget_bytes=int(options.get("context_memory_budget", 500_000)),
     )
+    context_index_bytes = _directory_size(paper_output / "context")
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
     pdf_path = None
     pdf_sha256 = None
@@ -869,7 +874,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                 max_segments_per_path=1500,
                             )
                     native_path = paper_output / "evidence" / f"page_{page_number_int:04d}_native.json"
-                    if _within_evidence_budget(paper_output, temp_disk_limit_mb):
+                    if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
                         atomic_write_json(native_path, native_payload)
                         native_artifact = native_path.relative_to(paper_output).as_posix()
                         native_hash = sha256_file(native_path)
@@ -901,13 +906,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             saved_crop = None
             crop_mapping = None
             if panel_path and not panel_specific_image and bbox:
-                if _within_evidence_budget(paper_output, temp_disk_limit_mb):
+                if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
                     saved_crop = _crop_local_image(
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
                 saved_crop = panel_path
-            if saved_crop is None and pdf_path and figure["page"] and _within_evidence_budget(
-                paper_output, temp_disk_limit_mb):
+            if saved_crop is None and pdf_path and figure["page"] and _within_paper_disk_budget(
+                paper_output, temp_disk_limit_mb, context_index_bytes):
                 if backend is None:
                     backend = PdfiumBackend()
                 with backend.open(pdf_path) as doc:
