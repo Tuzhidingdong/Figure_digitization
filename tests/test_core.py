@@ -180,9 +180,26 @@ def test_units_battery_comparability_and_pfas_metrics_are_conservative():
     )[0]
     assert pfas_metric_warning("parent_removal", "defluorination") == "PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"
     assert pfas_metric_warning(None, "defluorination") == "PFAS_METRIC_UNRESOLVED"
-    assert preserve_censored_value("<LOQ")["numeric_value"] is None
-    assert preserve_censored_value("<0.1 mg/L")["limit_value"] == 0.1
-    assert preserve_censored_value("<0.1 mg/L")["numeric_value"] is None
+    lod = preserve_censored_value("<LOD")
+    assert lod["raw"] == "<LOD"
+    assert lod["comparator"] == "<"
+    assert lod["limit_type"] == "LOD"
+    assert lod["limit_value"] is None
+    assert lod["numeric_value"] is None
+
+    loq = preserve_censored_value("≤ LOQ = 5.0e-2 mg/L")
+    assert loq["raw"] == "≤ LOQ = 5.0e-2 mg/L"
+    assert loq["comparator"] == "<="
+    assert loq["limit_type"] == "LOQ"
+    assert loq["limit_value"] == 0.05
+    assert loq["unit"] == "mg/L"
+    assert loq["numeric_value"] is None
+
+    numeric_limit = preserve_censored_value("<0.1 mg/L")
+    assert numeric_limit["limit_value"] == 0.1
+    assert numeric_limit["unit"] == "mg/L"
+    assert numeric_limit["numeric_value"] is None
+    assert preserve_censored_value("ND (<LOD)")["numeric_value"] is None
 
 
 def test_entity_link_requires_exact_match_and_evidence():
