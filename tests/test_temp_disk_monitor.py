@@ -22,6 +22,11 @@ def test_worker_initializer_redirects_all_temp_variables_to_run_scope(tmp_path: 
     temp_root = tmp_path / "isolated-temp"
     temp_root.mkdir()
     original_tempdir = tempfile.tempdir
+    variables = (
+        "TMP", "TEMP", "TMPDIR", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
+    )
+    original_env = {name: os.environ.get(name) for name in variables}
     try:
         _worker_initializer(str(temp_root))
         assert tempfile.gettempdir() == str(temp_root)
@@ -30,3 +35,8 @@ def test_worker_initializer_redirects_all_temp_variables_to_run_scope(tmp_path: 
         assert os.environ["TMPDIR"] == str(temp_root)
     finally:
         tempfile.tempdir = original_tempdir
+        for name, value in original_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value

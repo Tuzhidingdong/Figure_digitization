@@ -107,31 +107,18 @@ $startedAt = Get-Date
 $outputBytesAtStart = Get-DirectoryBytes $outputPath
 $freeDiskAtStart = Get-VolumeFreeBytes $outputPath
 $freeMemoryAtStart = Get-SystemMemoryBytes
-$previousTemp = $env:TEMP
-$previousTmp = $env:TMP
-$tempBase = if ($previousTemp) { $previousTemp } else { [IO.Path]::GetTempPath() }
-$benchmarkTempRoot = Join-Path $tempBase "sfd-resource-benchmark-$stamp"
-New-Item -ItemType Directory -Path $benchmarkTempRoot -Force | Out-Null
-$temporaryBytesAtStart = Get-DirectoryBytes $benchmarkTempRoot
-$temporaryFreeDiskAtStart = Get-VolumeFreeBytes $benchmarkTempRoot
-try {
-    # The sfd child process and its descendants inherit this isolated temp location.
-    $env:TEMP = $benchmarkTempRoot
-    $env:TMP = $benchmarkTempRoot
-    $process = Start-Process -FilePath $resolvedCommand -ArgumentList $argumentLine -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-} finally {
-    if ($null -eq $previousTemp) { Remove-Item Env:TEMP -ErrorAction SilentlyContinue } else { $env:TEMP = $previousTemp }
-    if ($null -eq $previousTmp) { Remove-Item Env:TMP -ErrorAction SilentlyContinue } else { $env:TMP = $previousTmp }
-}
+$sfdTempRelative = ".sfd-runtime-tmp"
+$sfdTempRoot = Join-Path $outputPath $sfdTempRelative
+$sfdTempBytesAtStart = Get-DirectoryBytes $sfdTempRoot
+$sfdTempBytesPeak = $sfdTempBytesAtStart
+$process = Start-Process -FilePath $resolvedCommand -ArgumentList $argumentLine -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
 $peakWorkingSetBytes = [Int64]0
 $minimumFreeDiskBytes = $freeDiskAtStart
-$minimumTemporaryFreeDiskBytes = $temporaryFreeDiskAtStart
 $minimumFreeMemoryBytes = $freeMemoryAtStart
 $cpuByPid = @{}
 $observedPids = New-Object 'System.Collections.Generic.HashSet[int]'
 $outputBytesPeak = $outputBytesAtStart
-$temporaryBytesPeak = $temporaryBytesAtStart
 $sampleCount = 0
 
 while (-not $process.HasExited) {
@@ -159,11 +146,7 @@ while (-not $process.HasExited) {
         ($null -eq $minimumFreeDiskBytes -or $freeDisk -lt $minimumFreeDiskBytes)) {
         $minimumFreeDiskBytes = $freeDisk
     }
-    $temporaryFreeDisk = Get-VolumeFreeBytes $benchmarkTempRoot
-    if ($null -ne $temporaryFreeDisk -and
-        ($null -eq $minimumTemporaryFreeDiskBytes -or $temporaryFreeDisk -lt $minimumTemporaryFreeDiskBytes)) {
-        $minimumTemporaryFreeDiskBytes = $temporaryFreeDisk
-    }
+    # The scheduler creates and samples its run-local TEMP/TMP/TMPDIR here.
     $freeMemory = Get-SystemMemoryBytes
     if ($null -ne $freeMemory -and
         ($null -eq $minimumFreeMemoryBytes -or $freeMemory -lt $minimumFreeMemoryBytes)) {
@@ -174,8 +157,8 @@ while (-not $process.HasExited) {
     if (($sampleCount % 5) -eq 0) {
         $outputBytes = Get-DirectoryBytes $outputPath
         if ($outputBytes -gt $outputBytesPeak) { $outputBytesPeak = $outputBytes }
-        $temporaryBytes = Get-DirectoryBytes $benchmarkTempRoot
-        if ($temporaryBytes -gt $temporaryBytesPeak) { $temporaryBytesPeak = $temporaryBytes }
+        $sfdTempBytes = Get-DirectoryBytes $sfdTempRoot
+        if ($sfdTempBytes -gt $sfdTempBytesPeak) { $sfdTempBytesPeak = $sfdTempBytes }
     }
     Start-Sleep -Seconds $SampleIntervalSeconds
     $process.Refresh()
@@ -185,9 +168,8 @@ $endedAt = Get-Date
 $outputBytesAtEnd = Get-DirectoryBytes $outputPath
 if ($outputBytesAtEnd -gt $outputBytesPeak) { $outputBytesPeak = $outputBytesAtEnd }
 $freeDiskAtEnd = Get-VolumeFreeBytes $outputPath
-$temporaryBytesAtEnd = Get-DirectoryBytes $benchmarkTempRoot
-if ($temporaryBytesAtEnd -gt $temporaryBytesPeak) { $temporaryBytesPeak = $temporaryBytesAtEnd }
-$temporaryFreeDiskAtEnd = Get-VolumeFreeBytes $benchmarkTempRoot
+$sfdTempBytesAtEnd = Get-DirectoryBytes $sfdTempRoot
+if ($sfdTempBytesAtEnd -gt $sfdTempBytesPeak) { $sfdTempBytesPeak = $sfdTempBytesAtEnd }
 $freeMemoryAtEnd = Get-SystemMemoryBytes
 $elapsedSeconds = [Math]::Max(0.001, ($endedAt - $startedAt).TotalSeconds)
 $cpuSeconds = [double](($cpuByPid.Values | Measure-Object -Sum).Sum)
@@ -206,7 +188,7 @@ if (Test-Path -LiteralPath $pipelineReportPath) {
 }
 
 $result = [ordered]@{
-    schema_version = "1.0"
+    schema_version = "1.1"
     benchmark_type = "LOCAL_WINDOWS_PROCESS_TREE_SAMPLE"
     started_at = $startedAt.ToString("o")
     ended_at = $endedAt.ToString("o")
@@ -223,13 +205,12 @@ $result = [ordered]@{
     free_disk_bytes_at_start = $freeDiskAtStart
     minimum_free_disk_bytes_observed = $minimumFreeDiskBytes
     free_disk_bytes_at_end = $freeDiskAtEnd
-    isolated_temp_directory = $benchmarkTempRoot
-    temporary_directory_bytes_at_start = $temporaryBytesAtStart
-    temporary_directory_bytes_peak_sampled = $temporaryBytesPeak
-    temporary_directory_bytes_at_end = $temporaryBytesAtEnd
-    temporary_volume_free_bytes_at_start = $temporaryFreeDiskAtStart
-    minimum_temporary_volume_free_bytes_observed = $minimumTemporaryFreeDiskBytes
-    temporary_volume_free_bytes_at_end = $temporaryFreeDiskAtEnd
+    sfd_temp_directory_relative = $sfdTempRelative
+    sfd_temp_directory_bytes_at_start = $sfdTempBytesAtStart
+    sfd_temp_directory_bytes_peak_sampled = $sfdTempBytesPeak
+    sfd_temp_directory_bytes_at_end = $sfdTempBytesAtEnd
+    pipeline_sfd_temp_peak_bytes = $pipelineReport.sfd_temp_peak_bytes
+    pipeline_sfd_temp_cleanup_succeeded = $pipelineReport.sfd_temp_cleanup_succeeded
     output_directory_bytes_at_start = $outputBytesAtStart
     output_directory_bytes_peak_sampled = $outputBytesPeak
     output_directory_bytes_at_end = $outputBytesAtEnd
@@ -242,9 +223,9 @@ $result = [ordered]@{
     pipeline_run_report = $pipelineReport
     measurement_notes = @(
         "Process-tree RSS is sampled; very short-lived spikes between samples may be missed.",
-        "Output-directory bytes are sampled separately from the isolated TEMP/TMP directory.",
-        "The isolated TEMP/TMP directory is retained for inspection and is not automatically deleted.",
-        "Temporary-directory byte counts are sampled and may miss very short-lived peaks.",
+        "The scheduler redirects worker TEMP/TMP/TMPDIR to a run-local subdirectory under OutputRoot and removes it after worker shutdown.",
+        "This sampler observes OutputRoot/.sfd-runtime-tmp; the embedded run_report.json also contains the scheduler-internal per-run peak.",
+        "No other application's global TEMP/TMP directory is enumerated; sampled file-byte peaks may miss very short-lived spikes.",
         "The embedded run_report.json supplies per-paper and scheduler resource telemetry.",
         "This is a local engineering measurement, not scientific extraction-accuracy evidence."
     )
