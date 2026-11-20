@@ -53,7 +53,7 @@ These are software-engineering results. They do not establish scientific point a
 - **AC-36:** Third-party notices exist; final resolved dependency/license/SBOM review and OCR language-data distribution terms remain release-gated.
 - **AC-37–46:** P0 extraction routes and low-ambiguity guards are implemented; scientific accuracy for supported plot families is not established without annotated real figures.
 - **AC-48:** Evidence-backed series-level subject links and cross-technique queries work; automatic subject assignment from real legends/text remains partial.
-- **AC-55–60:** Conservative semantics and conversion guards exist; complete domain-specific comparability, condition interpretation, unit registry, and LOD/LOQ scalar-observation workflow are not fully integrated.
+- **AC-55–60:** Conservative domain semantics and conversion guards exist. The LOD/LOQ parser now retains the raw comparator, LOD/LOQ kind, and any explicitly supplied numeric limit/unit (including Unicode ≤/≥ and scientific notation); it always leaves `numeric_value` unset for censored results. This parser-level behavior is regression-tested, but end-to-end scalar-observation ingestion/persistence remains partial because the scalar-observation workflow is P1 (AC-51).
 - **AC-68–70:** Thresholds remain provisional; no calibrated real-paper benchmark or point-error report has been accepted.
 - **AC-80–83/86–88:** Offline review loading, patch export/apply and transaction tests exist; interactive Windows browser acceptance remains pending.
 - **AC-92/93:** ML export preserves original values, conditions, identity, provenance and explicit NOT_HARMONIZED state; validated standardized-value generation remains incomplete.
@@ -154,21 +154,25 @@ These changes are code-complete in the current branch. Their final Windows CI re
 
 ## Latest verification
 
-- Current main HEAD: `5430fe99d7f0f0958ea0c81fab6f39569b95fea0`.
-- Current head CI: #240 (completed, success) — https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44737812440
-- Latest completed green CI recorded in the workflow history: #240.
-- Current test source count: 108 functions / approximately 112 test cases.
-- The frozen Task Plan was fetched but not modified. No release/tag was created.
+- Current `main` HEAD: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
+- Current-head Windows CI: [#250](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740797412) — completed successfully on Python 3.11, 3.12 and 3.13. The same commit passed compileall, the selected Ruff checks, and the full pytest suite.
+- The immediately preceding semantics implementation commit passed [CI #249](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740754829); the bbox-import repair passed [CI #248](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740356204).
+- CI #242–#247 had failed at the undefined-name check because `pipeline.py` used `math.isfinite` without importing `math`. The missing import was fixed in `17cd6b0`; subsequent matching Windows CI runs are green. No test run was counted as passing for those failed commits because the test step was skipped.
+- Current test source count: **109 test functions / 112 pytest cases** (two parametrized functions add three additional cases).
+- Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; it remains unchanged. The upstream repository remains untouched. No Release/tag was created.
 
-## Current blockers / next engineering actions
+## Current blockers / next acceptance actions
 
-1. Complete the current Windows CI run for the latest main head and fix any new regressions at their root cause.
-2. Run the local PowerShell resource harness on the target Windows 8 GB / 4-core machine using a small approved representative corpus; retain JSON/logs and machine specification.
-3. Compare PDFium/raw PDFium, pdfminer.six, and pikepdf/QPDF on 3–5 approved real PDFs; document native text, vector paths, clipping, rotation, Form XObjects, fragmentation, license, memory and timing results.
-4. Build manually annotated point/axis benchmarks for Battery, AOP and PFAS papers; calculate axis residuals and point errors before changing provisional thresholds.
-5. Manually open the offline review helper in Windows and verify image preview, overlays, axis/point edits, patch export/apply/readback.
-6. Continue P0 only where software-only evidence can close a criterion; keep P1/P2 deferred until separately authorized.
+1. Run the PowerShell resource harness on the actual target Windows 8 GB / 4-core machine with a small approved corpus; record machine specifications, peak memory, temporary disk use, timing and report output. Hosted Windows CI is not this acceptance.
+2. Compare PDFium/high-level and raw APIs, pdfminer.six, and pikepdf/QPDF on 3–5 user-approved real PDFs; retain the JSON probe reports and manual inspection of text, coordinates, vector paths, clipping, rotation, Form XObjects, text-as-path and fragmented paths. Do not select a final backend from synthetic fixtures alone.
+3. Create or provide manually annotated Battery, AOP and PFAS figure/axis benchmarks; calculate anchor residuals and point errors before marking calibrated thresholds or scientific accuracy accepted.
+4. Manually open the offline review helper in Windows and verify actual image loading, overlays, panel/axis/point editing, patch export, patch apply and readback. The current CI covers code paths, not a human browser acceptance.
+5. Complete the exact resolved dependency/binary/OCR-license inventory and machine-readable SBOM before any distribution. The current third-party table is preliminary and is not a completed release audit.
+6. Keep P1 (scalar table/text observations, tables, bars/scatter, error bars, marker-dependent and complex curve separation) deferred; AC-51 scalar observation ingestion remains unimplemented end-to-end. Keep P2 (heatmaps, advanced LC-MS/MS and specialized reconstruction) deferred.
+7. Revisit AC-30 manual classification revision and comprehensive Battery/AOP/PFAS condition/unit comparability only when the necessary user evidence and review workflow are available.
 
+GitHub regression success establishes software behavior for the tested fixtures and hosted Windows versions only. It does not establish representative-corpus integrity, scientific digitization accuracy, calibrated QC, target-PC resource acceptance, or production readiness.
+ 
 ## Non-negotiable constraints
 
 - Do not modify, move, rename or delete anything in the upstream `chem-literature` repository or its input directories.
