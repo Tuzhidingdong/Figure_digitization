@@ -237,3 +237,44 @@ def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
     assert result["snapshot"]["external_sources"][0]["sha256"] == before[3]
     assert result["job_state"] in {"NEEDS_REVIEW", "COMPLETED", "COMPLETED_WITH_REVIEW"}
     assert after == before
+
+
+def test_evidence_index_caption_bbox_is_not_relabelled_as_panel_boundary(tmp_path: Path):
+    from scientific_figure_data.pipeline import _figure_panels
+
+    figure = {
+        "figure_id": "MAIN_FIG_P1_01",
+        "bbox": [20.0, 200.0, 570.0, 240.0],
+        "image_asset_status": "VERIFIED",
+    }
+
+    panel = _figure_panels(figure)[0]
+
+    assert panel["bbox"] is None
+    assert panel["segmentation_provenance"] == "SINGLE_PANEL_FALLBACK"
+    assert panel["segmentation_status"] == "WHOLE_FIGURE_NOT_SEGMENTED"
+
+
+def test_explicit_panel_geometry_retains_source_normalized_and_provenance_fields():
+    from scientific_figure_data.pipeline import _figure_panels
+
+    figure = {
+        "panels": [{
+            "panel_id": "a",
+            "bbox": [10.0, 20.0, 410.0, 220.0],
+            "normalized_bbox": [0.1, 0.2, 0.9, 0.8],
+            "bbox_coordinate_space": "PDF_POINTS",
+            "bbox_provenance": "UPSTREAM_ANNOTATION",
+            "segmentation_confidence": 0.92,
+            "segmentation_provenance": "HUMAN_ANNOTATION",
+        }],
+    }
+
+    panel = _figure_panels(figure)[0]
+
+    assert panel["bbox"] == [10.0, 20.0, 410.0, 220.0]
+    assert panel["normalized_bbox"] == [0.1, 0.2, 0.9, 0.8]
+    assert panel["bbox_coordinate_space"] == "PDF_POINTS"
+    assert panel["bbox_provenance"] == "UPSTREAM_ANNOTATION"
+    assert panel["segmentation_confidence"] == 0.92
+    assert panel["segmentation_provenance"] == "HUMAN_ANNOTATION"

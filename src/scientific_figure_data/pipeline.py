@@ -273,9 +273,31 @@ def _normalize_bbox(bbox: Any, width: int, height: int) -> tuple[int, int, int, 
 def _figure_panels(figure: dict) -> list[dict]:
     panels = figure.get("panels")
     if isinstance(panels, list) and panels:
-        return [p if isinstance(p, dict) else {"label": str(p)} for p in panels]
-    return [{"panel_id": "1", "label": figure.get("panel_label", "whole-figure"),
-             "bbox": figure.get("bbox") or figure.get("bounding_box")}]
+        normalized = []
+        for item in panels:
+            panel = dict(item) if isinstance(item, dict) else {"label": str(item)}
+            has_bbox = bool(panel.get("bbox") or panel.get("bounding_box"))
+            panel.setdefault("segmentation_provenance", "UPSTREAM_PANEL_INVENTORY")
+            panel.setdefault(
+                "segmentation_status",
+                "BOUNDARY_SUPPLIED" if has_bbox else "BOUNDARY_UNSPECIFIED",
+            )
+            normalized.append(panel)
+        return normalized
+
+    # A Chem-Literature evidence_index bbox can describe only the caption.
+    # Never relabel it as panel geometry when the figure image is a separately
+    # extracted media asset. Preserve the raw figure bbox on the Figure record.
+    bbox = None if figure.get("image_asset_status") else (
+        figure.get("bbox") or figure.get("bounding_box")
+    )
+    return [{
+        "panel_id": "1",
+        "label": figure.get("panel_label", "whole-figure"),
+        "bbox": bbox,
+        "segmentation_provenance": "SINGLE_PANEL_FALLBACK",
+        "segmentation_status": "WHOLE_FIGURE_NOT_SEGMENTED",
+    }]
 
 
 def _load_overrides(paper_dir: Path, output_root: Path, paper_id: str) -> dict:
@@ -981,6 +1003,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             "figure_id": figure_id, "page": int(page_number) if page_number else None,
             "source_doc_type": source_doc_type,
             "source_asset_status": source_figure.get("image_asset_status"),
+            "source_bbox": source_figure.get("bbox") or source_figure.get("bounding_box"),
+            "source_bbox_role": (
+                "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED"
+                if source_figure.get("image_asset_status") else "UPSTREAM_FIGURE_BBOX"
+            ),
             "caption": source_figure.get("caption") or source_figure.get("title"),
             "shared_legends": source_figure.get("shared_legends") or source_figure.get("legend") or [],
             "technique": source_figure.get("technique"), "domain": source_figure.get("domain"),
@@ -1027,7 +1054,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel = dict(source_panel)
             panel_id = safe_id(str(panel.get("panel_id") or panel.get("id") or panel.get("label") or panel_index))
             panel["panel_id"] = panel_id
-            bbox = panel.get("bbox") or panel.get("bounding_box") or source_figure.get("bbox")
+            bbox = panel.get("bbox") or panel.get("bounding_box")
+            if bbox is None and not source_figure.get("image_asset_status"):
+                bbox = source_figure.get("bbox") or source_figure.get("bounding_box")
             panel_specific_image = bool(panel.get("image_path") or source_figure.get("image_path"))
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
@@ -1105,11 +1134,17 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             )
             for item in extracted:
                 item.evidence[0]["extraction_channel"] = item.extraction_method
+                segmentation_confidence = panel.get("segmentation_confidence")
+                segmentation_confidence_status = panel.get(
+                    "segmentation_confidence_status",
+                    "PROVIDED_UNCALIBRATED" if segmentation_confidence is not None else "NOT_CALIBRATED",
+                )
                 qc_panel_context = {
                     "bbox": bbox,
                     "status": panel_status,
-                    "segmentation_confidence": None,
-                    "segmentation_confidence_status": "NOT_CALIBRATED",
+                    "segmentation_confidence": segmentation_confidence,
+                    "segmentation_confidence_status": segmentation_confidence_status,
+                    "segmentation_provenance": panel.get("segmentation_provenance"),
                     "shared_legend_refs": figure["shared_legends"],
                 }
                 qc_report = build_series_qc_report(item, qc_panel_context, thresholds)
@@ -1121,13 +1156,46 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 item.points.clear()
             series.extend(extracted)
             review_needed = review_needed or panel_status in {"NEEDS_REVIEW", "EXTRACTED_NEEDS_REVIEW"}
+            bbox_values_valid = (
+                isinstance(bbox, (list, tuple)) and len(bbox) == 4
+                and all(isinstance(value, (int, float)) for value in bbox)
+            )
+            bbox_is_normalized = bool(
+                bbox_values_valid and all(0 <= value <= 1 for value in bbox)
+            )
+            normalized_bbox = panel.get("normalized_bbox")
+            if normalized_bbox is None and bbox_is_normalized:
+                normalized_bbox = list(bbox)
+            source_bbox = panel.get("source_bbox")
+            if source_bbox is None and bbox is not None and not bbox_is_normalized:
+                source_bbox = bbox
+            bbox_coordinate_space = panel.get("bbox_coordinate_space")
+            if not bbox_coordinate_space:
+                bbox_coordinate_space = (
+                    "NORMALIZED_0_1" if bbox_is_normalized
+                    else "UNSPECIFIED_SOURCE_COORDINATES" if bbox is not None
+                    else "NOT_PROVIDED"
+                )
+            segmentation_confidence = panel.get("segmentation_confidence")
+            segmentation_confidence_status = panel.get(
+                "segmentation_confidence_status",
+                "PROVIDED_UNCALIBRATED" if segmentation_confidence is not None else "NOT_CALIBRATED",
+            )
             panels.append({
                 "figure_id": figure_id, "panel_id": panel_id,
-                "bbox": bbox, "normalized_bbox": bbox if isinstance(bbox, (list, tuple)) and
-                    all(isinstance(value, (int, float)) and 0 <= value <= 1 for value in bbox) else None,
+                "bbox": bbox,
+                "source_bbox": source_bbox,
+                "normalized_bbox": normalized_bbox,
+                "bbox_coordinate_space": bbox_coordinate_space,
+                "bbox_provenance": panel.get(
+                    "bbox_provenance",
+                    "UPSTREAM_PANEL_BOUNDARY" if bbox is not None else "NOT_PROVIDED",
+                ),
+                "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
+                "segmentation_status": panel.get("segmentation_status", "UNSPECIFIED"),
                 "status": panel_status,
-                "segmentation_confidence": None,
-                "segmentation_confidence_status": "NOT_CALIBRATED",
+                "segmentation_confidence": segmentation_confidence,
+                "segmentation_confidence_status": segmentation_confidence_status,
                 "chart_family": (
                     extracted[0].metadata.get("chart_family_classification", {}).get("chart_family", "UNCLASSIFIED")
                     if extracted else "UNCLASSIFIED"
