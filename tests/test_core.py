@@ -2679,3 +2679,14 @@ def test_battery_capacity_export_requires_explicit_comparability_bases():
         "BATTERY_BASIS_UNRESOLVED:current_density_basis",
         "BATTERY_BASIS_UNRESOLVED:cycling_protocol",
     ]
+
+
+
+
+def test_battery_capacity_warnings_do_not_apply_to_spectral_characterization():
+    from scientific_figure_data.semantics import domain_semantic_warnings
+
+    assert domain_semantic_warnings("battery", {}, technique="XRD") == []
+    assert domain_semantic_warnings("battery", {}, technique="GCD") == [
+        "BATTERY_MEASUREMENT_METRIC_UNRESOLVED"
+    ]

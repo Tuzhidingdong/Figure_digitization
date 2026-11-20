@@ -95,7 +95,9 @@ def aop_metric_warning(metric_a: str | None, metric_b: str | None) -> str | None
     return None
 
 
-def domain_semantic_warnings(domain: str | None, metadata: dict) -> list[str]:
+def domain_semantic_warnings(
+    domain: str | None, metadata: dict, technique: str | None = None,
+) -> list[str]:
     """Validate only explicit per-series semantics; never infer missing scientific fields."""
     semantics = metadata.get("measurement_semantics")
     if not isinstance(semantics, dict):
@@ -129,9 +131,14 @@ def domain_semantic_warnings(domain: str | None, metadata: dict) -> list[str]:
 
     elif normalized_domain in {"battery", "energy_storage"}:
         metric_text = str(metric or "").strip().casefold()
-        if not metric_text:
+        technique_text = str(technique or "").strip().upper()
+        capacity_metric = any(token in metric_text for token in ("capacity", "specific_capacity"))
+        capacity_technique = technique_text in {
+            "GCD", "GITT", "CHARGE_DISCHARGE", "BATTERY_PERFORMANCE",
+        }
+        if not metric_text and capacity_technique:
             warnings.append("BATTERY_MEASUREMENT_METRIC_UNRESOLVED")
-        elif any(token in metric_text for token in ("capacity", "specific_capacity")):
+        elif capacity_metric:
             required = (
                 "capacity_basis", "cell_scope", "current_density_basis", "cycling_protocol",
             )

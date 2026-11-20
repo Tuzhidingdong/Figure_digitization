@@ -94,3 +94,12 @@ A figure image linked from an upstream evidence index is used only when its exac
 An untyped Figure-level bbox in an evidence index is preserved as source metadata, but is not assumed to be a Panel boundary or plot-area crop. Panel records separately preserve the original source bbox, an explicit or safely recognized normalized bbox, coordinate-space label, bbox provenance, segmentation provenance/status, and segmentation-confidence status. When only a whole-figure fallback exists, the record states that panel segmentation was not performed rather than fabricating a boundary.
 
 The MAIN PDF is hash-checked when the input snapshot is created and again immediately before worker use. If its content changes between those two points, the worker does not open it using the old snapshot identity; the paper is retained with a `CHANGED_AFTER_SNAPSHOT` provenance status and routed to `NEEDS_REVIEW`. The original snapshot fingerprint is retained so a subsequent scan can detect and reprocess the changed input.
+
+
+## Explicit measurement-semantic metadata
+
+An override may supply a `measurement_semantics` object for a Series. Export compatibility warnings use only these explicit fields; they never infer a capacity basis, cell scope, or treatment metric from a technique name alone.
+
+For battery capacity metrics, the recognized fields are `capacity_basis`, `cell_scope`, `current_density_basis`, and `cycling_protocol`. When a GCD/GITT or battery-performance series has no explicit metric, export marks the metric unresolved. Spectral characterization techniques are not assigned battery-capacity basis warnings.
+
+AOP and PFAS series require an explicit metric for comparability. If `comparison_target_metric` is supplied, distinct metric roles (for example parent-compound removal versus defluorination) generate an incompatibility warning. All exports remain `NOT_HARMONIZED`; these warnings do not authorize automatic value conversion or merging.
