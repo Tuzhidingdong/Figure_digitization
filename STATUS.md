@@ -1,140 +1,80 @@
 # STATUS — Figure_digitization
 
-> Execution tracking for [TASK_PLAN_v1.4.1.md](./TASK_PLAN_v1.4.1.md). This file records implementation progress only; it does not modify the frozen objective, scope, constraints, or acceptance criteria.
+Updated: 2026-11-20 (Asia/Singapore)
 
 ## Baseline and governance
 
-- Task Plan: [TASK_PLAN_v1.4.1.md](./TASK_PLAN_v1.4.1.md)
-- Task Plan version: v1.4.1
-- Baseline status: FROZEN — DO NOT EDIT
-- Plan commit recorded in the baseline: \`6d6386e13da72d67d70bc0a93b83df2cce6594c3\`
-- User-selected implementation repository: \`Tuzhidingdong/Figure_digitization\`
-- Note: the frozen plan names \`Tuzhidingdong/scientific-figure-data\` as its target repository. The user subsequently explicitly selected \`Figure_digitization\` for implementation. This execution follows that later repository instruction; the frozen plan file remains unchanged.
-- Implementation branch: \`main\`
-- Implementation status: IN PROGRESS — P0 ENGINEERING BASELINE; REAL-PAPER AND TARGET-HARDWARE ACCEPTANCE PENDING
-- Release status: NOT AUTHORIZED
-- Default runtime: Windows 10/11; 8 GB RAM; 4 logical CPU cores; no GPU
-- Default worker mode: one spawned paper worker; lazy sequential page/panel processing
-- Default LLM usage: zero tokens
-- OCR: optional, disabled by default, loaded lazily and reused within each worker
+- Downstream repository: [Tuzhidingdong/Figure_digitization](https://github.com/Tuzhidingdong/Figure_digitization). It remains independent of the read-only upstream `Tuzhidingdong/chem-literature`.
+- Frozen plan: `TASK_PLAN_v1.4.1.md`; SHA256/blob SHA recorded by GitHub fetch: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`. The plan is unchanged.
+- Development changes are committed to `main`. No Release/tag or production-readiness claim has been made.
+- Default execution remains one spawned CPU worker, zero LLM tokens, no GPU requirement, and no paid-model fallback.
 
 ## Current milestone
 
-**M1 — Core implementation and verification**
+The P0 engineering implementation has been extended beyond the previous M1 baseline. The current code adds upstream package compatibility and integrity checks, safer Panel provenance, downstream review-image availability, bounded temporary-disk accounting, explicit semantic warnings, condition-value querying, and per-paper scheduler preflight isolation.
 
-The initial executable framework and a substantial portion of the P0 data path have been committed. The repository now contains a Python package, CLI, read-only input adapter, paper context index, PDFium backend wrapper/probe, bounded scheduler, canonical paper artifacts, SQLite catalog, query/export, review patch application, domain profiles, offline review helper, regression tests, and Windows CI workflow.
-
-This is an implementation milestone, not a production-readiness claim. The native PDF backend spike has not been completed with the required 3–5 user-approved PDFs. The current digitization algorithms are deliberately conservative and only automatically digitize explicitly specified/low-ambiguity traces. No general-purpose automatic vector-curve digitizer or broad automatic chart classifier is claimed.
+These are software-engineering results. They do not establish scientific point accuracy. Outputs remain provisional until real annotated-paper benchmarks and manual acceptance are completed.
 
 ## Progress summary
 
-Status key:
-- **CODE PRESENT — TEST PENDING**: implementation exists, but no successful automated test run has yet been recorded.
-- **PARTIAL**: some required behavior exists; acceptance criterion is not fully met.
-- **BLOCKED ON USER INPUT**: requires user-approved source PDFs/annotations or target-machine measurements.
-- **DEFERRED**: P1/P2 or release-only work not started.
-
-| Area | Status | Current evidence / remaining limitation |
-|---|---|---|
-| Frozen Task Plan | COMPLETE — IMMUTABLE | \`TASK_PLAN_v1.4.1.md\`; no implementation edits have been made to it |
-| Repository/package/Skill entry | CODE PRESENT — TEST PENDING | \`pyproject.toml\`, \`SKILL.md\`, \`README.md\`, package under \`src/scientific_figure_data\` |
-| Windows installation/CI | VERIFIED IN CI | Windows CI #187 passed package install, compileall, Ruff and 70 pytest cases on Python 3.11, 3.12 and 3.13 (68 test functions including a 3-case parametrized test); hosted-runner CI is not the user's 8 GB target-machine measurement |
-| Read-only upstream adapter | PARTIAL — SYNTHETIC INTEGRITY TESTED | Recognizes current artifact names, snapshots paths/roles/size/mtime/SHA256, detects nested producer-version markers through exact artifact-relative paths, rejects paper-ID normalization collisions, and rejects overlapping input/output root trees. Synthetic tests prove source paths/hashes stay unchanged; compatibility across actual upstream schema/layout versions still needs representative corpus fixtures |
-| Corpus manifest/fingerprints | REGRESSION-TESTED | Lazy discovery and SHA256 snapshots, JSONL manifest, POSIX source-relative paths, stable Windows-safe IDs, root-paper consistency, and collision rejection are covered by tests |
-| MAIN/SI text context | REGRESSION-TESTED | Line-streamed MAIN/SI/table index; spills to SQLite above the memory budget; content fingerprints reuse unchanged JSON/SQLite indexes and invalidate changed sources. Windows SQLite handles are explicitly closed before replacement |
-| PDF page handling | PARTIAL | PDFium page-at-a-time access/rendering and native object inventory; actual backend comparison and path coverage not yet validated |
-| PDF backend technical spike | BLOCKED ON USER INPUT | Probe exists; 3–5 representative real PDFs are needed. No final vector backend selection is claimed |
-| Figure/Panel inventory | PARTIAL | Consumes upstream Figure inventory; stores shared legend references and panel records; automatic panel segmentation/confidence calibration is incomplete |
-| Hybrid evidence | PARTIAL | Stores page-level native text/object/path inventory alongside raster panel evidence; full native text-coordinate/axis extraction and vector curve reconstruction remain incomplete |
-| P0 curve digitization | PARTIAL | Explicit ordered pixel polyline and conservative explicit-color monotonic raster tracing; relative-signal mode is supported with explicit plot box; automatic chart recognition and broad trace extraction remain incomplete |
-| CV/EIS handling | PARTIAL | Explicit point order is preserved and not sorted; automatic extraction of arbitrary raster CV/EIS loops is not implemented |
-| Entity/Measurement/Condition/Series model | PARTIAL | Separate model classes and series-level evidence links; links/conditions currently require explicit adapter/override evidence for reliable assignment |
-| Battery/AOP/PFAS profiles | REGRESSION-TESTED — SEMANTIC ENGINE PARTIAL | Inherited YAML profiles and PFAS analyte registry; battery comparison treats missing basis/scope/protocol as UNRESOLVED, PFAS metrics remain distinct, and reference conversion rejects non-finite inputs. Profile-driven automatic interpretation remains incomplete |
-| Units/reference electrodes | PARTIAL — SAFETY BOUNDARIES TESTED | Dimensional conversion and explicit-evidence-only reference conversion are separate; unknown/non-finite conversions remain unresolved or error. Broad unit vocabulary and profile-integrated validation remain incomplete |
-| Dual Y axis | PARTIAL | LEFT/RIGHT/UNASSIGNED field supported; automatic evidence-based axis-side classifier not yet implemented |
-| QC/evidence chain | PARTIAL | Source PDF/input hashes, extraction channel, algorithm version, calibration metadata, and component QC states are recorded; QC metrics/thresholds require benchmark calibration |
-| Provisional/calibrated thresholds | PARTIAL | Provisional YAML is present and selected thresholds enter cache fingerprints; no calibrated threshold file is generated because no annotated benchmark exists |
-| Streaming persistence | REGRESSION-TESTED | Panel CSV point batches, compact paper JSON/Bundle, batched SQLite point indexing/rebuild, single writer, per-paper namespaced Series IDs and CPU/evidence/context footprint reports |
-| Resume/idempotency/review lock | REGRESSION-TESTED — TARGET FAILURE TEST PENDING | Leases, worker slot/PID, start time, input fingerprint, heartbeat, finite retries, `INTERRUPTED_RECOVERY`, context/stage cache reuse, bundle integrity and reviewed-result lock. CI injects BrokenProcessPool and verifies retry success/exhaustion; destructive OS-level worker termination on the target PC remains unmeasured |
-| Query and ML export | PARTIAL — SELF-DESCRIBING POINT EXPORT | Cursor-based combined filters and panel-streamed schema 1.1 CSV/JSON. Each point row includes series subject links/evidence, conditions, pixel/error fields, raw copies, QC/review/provenance, NOT_PERFORMED standardization and NOT_HARMONIZED compatibility. JSON numeric types are preserved. Synthetic tests verify distinct samples in one figure and XRD+CV retrieval for the same sample. No automatic harmonization is claimed |
-| Offline review helper | IMPLEMENTED — MANUAL ACCEPTANCE PENDING | Folder picker and recursive local-folder drag-and-drop, lazy Panel CSV loading, source crop/curve overlay, X/Y anchors, ordered point correction, label/axis-side correction and patch export are implemented. No network upload is used; manual Windows browser acceptance/readback remains outstanding |
-| Review patch apply | VERIFIED BY REGRESSION AND FAILURE INJECTION | Schema allowlist, base SHA256, stale conflict, idempotent patch ID, version backup, Bundle hash refresh, SQLite synchronization, and rollback of CSV/JSON/Bundle when the catalog transaction fails |
-| Corpus reporting | PARTIAL — RESOURCE FOOTPRINTS EXPANDED | Reports discovered/eligible/selection-skipped/cached/active-lease/unexamined-on-resource-pause, job states, retries/failures, elapsed/throughput, parent/worker CPU seconds, average core use, sampled peak parent+worker RSS, free disk/memory and pause reasons, algorithm/profile/QC fingerprints, zero LLM tokens, and total/peak per-paper evidence/context-index bytes. This excludes full OS temp directory, series CSVs and version backups; target-PC profiling remains pending |
-| Real-paper P0 acceptance | BLOCKED ON USER INPUT | Requires user-approved Battery/AOP/PFAS PDFs and annotated reference points/anchors |
-| P1 | DEFERRED | Tables, bar/scatter/marker/error-bar automation and complex tables are not claimed |
-| P2 | DEFERRED | Heatmap matrix reconstruction, advanced LC-MS/MS and specialized image reconstruction are not claimed |
-| Production release | NOT AUTHORIZED | AC-102 requires all real-paper, Windows resource, licensing, and data-integrity evidence |
+- Current Chem-Literature 1.1 packages are discovered at `runs/preprocessed/<paper_id>/01_preprocessing`. The adapter reads the evidence index, follows the MAIN PDF reference, associates exact figure media assets, and keeps absolute paths out of serialized manifests.
+- MAIN PDF and image hashes are rechecked at the point of Worker use/copy; changes between scan and processing or during processing force `NEEDS_REVIEW`.
+- Upstream Figure bboxes are not silently relabelled as Panel boundaries. Source bbox, normalized bbox, coordinate space, provenance, segmentation status, and confidence status are stored separately.
+- Verified upstream images are copied byte-for-byte into downstream `papers/<paper_id>/evidence/`; the offline reviewer looks up the actual evidence filename. Upstream files remain unchanged.
+- Corpus reporting now exposes explicit completion/review/failure/retry counts, run-scoped SFD temporary-disk peak and cleanup/isolation telemetry, plus algorithm/profile/QC fingerprints.
+- Condition queries match both condition names and serialized values.
+- Explicit Battery/AOP/PFAS measurement semantics can be supplied in per-series overrides; missing or incompatible metrics produce warnings without automatic conversion or harmonization.
+- Scheduler preflight and retry-snapshot failures are recorded per paper; BrokenProcessPool submission failures receive finite retry handling.
 
 ## Acceptance tracking by plan criteria
 
-The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This summary does not replace or modify that checklist.
-
 ### Regression-tested code paths
 
-- Windows matrix: Python 3.11, 3.12 and 3.13 each pass package installation, compileall, Ruff and 70 pytest cases in CI #187 (68 test functions, including one 3-case parametrized root/output-overlap test).
-- Scheduler/ledger: AC-20–AC-24 lease recovery, worker identity/PID, start time, input fingerprint, BrokenProcessPool retry, recovery and finite exhaustion are covered; a spawned root-paper integration verifies job/output ID agreement.
-- Stage cache: unchanged paper context and completed paper stages are reused; changed context/input and damaged bundles trigger invalidation or recovery paths.
-- Review transaction: AC-86–AC-88 schema/base-hash/idempotency behavior plus cross-artifact rollback on induced SQLite failure are covered.
-- Read-only behavior: a synthetic source-tree test verifies all upstream paths and SHA256 hashes are unchanged by downstream processing. This does not replace representative upstream corpus evidence for AC-06.
-- Subject/query: AC-48/AC-52 synthetic integration verifies different Series in one figure can link to different samples and a supported sample can be queried across XRD and CV.
-- Resource pressure/reporting: AC-17 low disk/memory dispatch guards, root/output directory-tree rejection, CPU time reporting and per-paper evidence/context budget measurements are tested. Hosted CI does not establish AC-16 target-PC resource performance.
-- Multi-paper storage: generated Series IDs are namespaced by paper; a spawned two-paper integration proves identical Figure1/a panels do not collide in SQLite.
-- ML export: schema 1.1 point rows carry sample IDs/links/evidence, measurement conditions, pixel/error fields, raw values and explicit no-harmonization statuses; JSON numeric types are tested.
-- Semantic guardrails: missing battery comparability factors remain UNRESOLVED; PFAS metrics remain non-interchangeable; reference conversion rejects non-finite arithmetic.
-- Upstream adapter: nested producer version is resolved through its exact relative artifact path, not a repeated recursive basename search.
-- The remaining AC checklist in the frozen plan is not implicitly accepted by passing the regression suite.
+- **AC-03/04:** Chem-Literature 1.1 and legacy figure-inventory image paths are recognized; package version and input fingerprints are captured.
+- **AC-05:** Snapshot/preflight failure isolation is tested with a bad paper followed by a valid paper; retry snapshot and submission errors are isolated. BrokenProcessPool submission retry is bounded.
+- **AC-06:** Integration tests compare the upstream package path set and SHA256 values plus the external MAIN PDF size/hash before and after downstream processing. This is synthetic fixture evidence, not representative-corpus acceptance.
+- **AC-17/24/25:** Resource-pressure guards, finite retry, recovery, and resume/cache paths have regression coverage. Target-PC destructive crash/recovery acceptance is still pending.
+- **AC-27/29:** Panel source/normalized geometry and segmentation provenance/status/confidence are stored separately. An evidence-index Figure bbox with unresolved semantics is not reused as a Panel bbox.
+- **AC-47–50/52:** Subject entity, condition, measurement, series, and series-subject link storage/query paths have synthetic integration coverage.
+- **AC-55–57:** Explicit measurement-semantic warning paths cover Battery capacity bases, AOP metric non-interchangeability, and PFAS metric non-interchangeability. This is an evidence-backed guardrail, not automatic domain interpretation.
+- **AC-66/67/69/71:** Per-series evidence, independent QC dimensions, panel-segmentation metadata, and conservative review routing are covered by regression tests.
+- **AC-74–79/86–88:** Bundle hashes, cache/review versioning, stale-patch conflict, and idempotent review-apply paths remain regression-tested.
+- **AC-89–93:** CLI, query, ML export, provenance and comparability warning paths are tested. Condition filtering now includes values as well as names.
+- **AC-94/95–98:** Run reports expose named corpus counters, throughput, CPU/RSS, run-scoped temporary disk, algorithm/profile/QC fingerprints, and zero LLM token usage. P0/P1/P2 boundaries are documented.
 
 ### Partial or not yet accepted
 
-- Adapter/version compatibility and failure isolation: AC-03, AC-05.
-- Upstream immutability proof: AC-06.
-- Full target-Windows resource measurements: AC-16; AC-17 has tested low-free-disk and low-available-memory dispatch pauses, while the actual 8GB/4-core machine measurements remain blocked.
-- Stage-level reuse under all failure modes: AC-25; AC-24 has synthetic BrokenProcessPool retry/retry-exhaustion coverage, not a destructive real-process kill on the target PC.
-- Normalized panel geometry, independent segmentation confidence, and revision of chart classification: AC-27, AC-29–AC-30.
-- Real backend comparison and final backend selection: AC-31–AC-32.
-- Dependency/license verification: AC-36.
-- General P0 extraction coverage: AC-37, AC-39, AC-42–AC-45.
-- Automatic scientific subject inference from real figure legends/text remains partial: AC-48's series-level storage/query behavior is tested with explicit evidence-backed links, but end-to-end automatic assignment needs real upstream evidence.
-- Full domain-specific comparability semantics: AC-55–AC-57; conservative unknown/mismatch guardrails exist, but comprehensive profile-driven automatic interpretation is not complete.
-- Original/standardized measurement values and comprehensive unit interpretation: AC-60; export marks standardization NOT_PERFORMED and retains plotted-axis values/units, but no validated conversion registry is integrated into exports.
-- Multi-dimensional QC and benchmark-calibrated metrics: AC-66–AC-70.
-- Review visualization and complete review editing: AC-81; local-browser manual acceptance remains pending.
-- Full ML comparability and provenance contract: AC-92–AC-93; point rows are self-describing and explicitly NOT_HARMONIZED, but validated standardized-value generation and complete domain-specific compatibility comparisons remain partial.
-- Full corpus report fields: AC-94; paper-level evidence/context footprint, CPU and RSS metrics are reported, but full OS temp/series CSV/version-backup peak disk accounting and representative-corpus report reconciliation remain incomplete.
+- **AC-03/05:** Supported layouts are covered by current and legacy fixtures; exhaustive upstream version/layout compatibility remains partial.
+- **AC-06:** Source immutability is proven on synthetic fixture trees; representative user corpus confirmation remains release-gated.
+- **AC-16:** The local Windows sampler is implemented and parse-checked in CI, but has not been run on the target 8 GB / 4-core Windows machine.
+- **AC-25:** Cache/resume behavior has synthetic coverage; full recovery under target-PC failure and disk-pressure conditions is pending.
+- **AC-30:** Classification is deterministic and evidence-driven, but interactive revision after manual evidence changes still needs manual acceptance.
+- **AC-31/32:** PDF backend comparison and final backend choice require 3–5 approved representative real PDFs.
+- **AC-36:** Third-party notices exist; final resolved dependency/license/SBOM review and OCR language-data distribution terms remain release-gated.
+- **AC-37–46:** P0 extraction routes and low-ambiguity guards are implemented; scientific accuracy for supported plot families is not established without annotated real figures.
+- **AC-48:** Evidence-backed series-level subject links and cross-technique queries work; automatic subject assignment from real legends/text remains partial.
+- **AC-55–60:** Conservative semantics and conversion guards exist; complete domain-specific comparability, condition interpretation, unit registry, and LOD/LOQ scalar-observation workflow are not fully integrated.
+- **AC-68–70:** Thresholds remain provisional; no calibrated real-paper benchmark or point-error report has been accepted.
+- **AC-80–83/86–88:** Offline review loading, patch export/apply and transaction tests exist; interactive Windows browser acceptance remains pending.
+- **AC-92/93:** ML export preserves original values, conditions, identity, provenance and explicit NOT_HARMONIZED state; validated standardized-value generation remains incomplete.
+- **AC-94:** Scheduler-level SFD temporary scratch peak is reported, but target-PC and representative-corpus reconciliation is not complete.
 
 ### Blocked or deferred
 
-- Real annotated benchmark and calibrated thresholds: AC-16, AC-31–AC-32, AC-36, AC-68–AC-70, AC-102.
-- P1: AC-51, AC-99–AC-100.
-- P2: AC-101.
-- Release boundary: AC-06, AC-16, AC-36, AC-68, AC-94, AC-102 remain release-gated.
+- **AC-16:** Target Windows hardware resource run.
+- **AC-31/32/68–70/102:** 3–5 approved real PDFs, manual point annotations, backend comparison, and scientific accuracy/QC calibration.
+- **AC-36:** Final dependency/license/SBOM review and model/language-data terms.
+- **AC-81:** Manual browser workflow acceptance.
+- **AC-51/99/100:** P1 table/scalar, bar/scatter, error-bar, marker and complex table support.
+- **AC-101:** P2 heatmap, advanced LC-MS/MS and specialized image reconstruction.
+- **Release boundary:** AC-06, AC-16, AC-36, AC-68, AC-70, AC-94 and AC-102 remain release-gated.
 
 ## Tests and evidence
 
-### Added test assets
-
-- \`tests/test_core.py\`: input fingerprinting, paper discovery, role detection, cross-page context spill, calibration, ordered paths, reference-scale conservatism, unit/PFAS/Battery rules, evidence-backed entity linking, profile inheritance, measurement-condition isolation, streaming catalog rebuild, review patch apply/conflict/idempotency, and CLI parser coverage.
-- \`.github/workflows/windows-ci.yml\`: Windows runner matrix for Python 3.11, 3.12, and 3.13; package install, compileall, Ruff undefined-name/import checks, and pytest.
-- \`docs/PDF_BACKEND_SPIKE.md\`: required 3–5-PDF backend protocol.
-
-### Verification state
-
-- Test source files have been committed; the current suite contains 68 test functions and passed 70 pytest cases in the latest complete Windows matrix (#187).
-- The Windows CI workflow has been committed.
-- Windows CI run #39 passed package install, compileall, Ruff, and all 15 tests on Python 3.11, 3.12, and 3.13.
-- Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
-- Windows CI #187 passed package install, compileall, Ruff and 70 pytest cases on Windows Python 3.11, 3.12 and 3.13.
-- Windows CI #149–#152 passed injected Worker-pool crash/retry, retry exhaustion, cross-artifact review rollback and low-free-disk checks.
-- Windows CI #157 passed context-index cache reuse/invalidation after fixing regex and Windows SQLite handle issues.
-- Windows CI #159 passed the offline review helper drag-and-drop source update's associated project CI (note: CI does not replace manual browser acceptance).
-- Windows CI #161–#162 passed same-paper sample identity guard and cross-technique query integration.
-- Windows CI #163–#164 passed available-memory pause and resource-aware corpus report corrections.
-- Windows CI #166 verified storage-ID collision rejection without changing established paper IDs.
-- Windows CI #167 verified algorithm/profile/QC fingerprint fields in corpus reports.
-- Windows CI #170 verified worker identity/PID/start/input fingerprint, root-paper job/output identity, and resume after avoiding the `PaperSnapshot` local-import shadowing bug.
-- Added an optional backend spike that performs per-page measurements with PDFium, PDFMiner, and pikepdf/QPDF. The extra libraries are not part of the default installation.
-- The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
-- Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
+- Test files: `tests/test_core.py`, `tests/test_upstream_compat.py`, `tests/test_temp_disk_monitor.py`.
+- Current source count: 108 test functions; 2 parametrization decorators add four extra cases, for approximately 112 pytest cases.
+- Current head CI: #240 (completed, success) — https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44737812440
+- CI validates Python 3.11, 3.12, 3.13 on hosted Windows; it is not a substitute for the target-PC measurement or scientific benchmark.
 
 ## Engineering log
 
@@ -199,36 +139,27 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
 - Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
 
-## Latest verification — 2026-11-20
+## Latest verification
 
-- The current source contains 68 test functions (one is parameterized into three cases); Windows CI #187 passed all 70 pytest cases, package installation, compileall and Ruff on Python 3.11, 3.12 and 3.13.
-- The four failures from runs #142/#143 were fixed:
-  1. OCR tick extraction now accepts an explicit absolute pixel Plot Box even when the caller supplies OCR rows without a source image; normalized boxes still require image dimensions.
-  2. Review-axis test expectations now match the source pixels and pixel-to-value slopes; untouched Series values are asserted unchanged.
-  3. A generic "wavenumber" label alone no longer forces FTIR classification.
-  4. Hybrid raster fallback provenance is retained in final Series metadata.
-- Run #146 validates software behavior using synthetic fixtures. It does not validate numerical accuracy on real scientific figures.
-- Frozen TASK_PLAN_v1.4.1.md remains unchanged. No release or publication has been authorized.
+- Current main HEAD: `5430fe99d7f0f0958ea0c81fab6f39569b95fea0`.
+- Current head CI: #240 (completed, success) — https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44737812440
+- Latest completed green CI recorded in the workflow history: #240.
+- Current test source count: 108 functions / approximately 112 test cases.
+- The frozen Task Plan was fetched but not modified. No release/tag was created.
 
 ## Current blockers / next engineering actions
 
-1. Run the PDF backend technical spike on 3–5 user-approved real PDFs. Compare PDFium/pypdfium2.raw, PDFMiner and pikepdf/QPDF for text/coordinates, vector paths, embedded images, clipping, rotation, Form XObjects, path fragmentation and text-as-path; record per-page time, Peak RSS, object coverage and license evidence.
-2. Validate P0 extraction against user-approved, human-annotated Battery, AOP and PFAS figures. Measure axis calibration residuals and curve point errors before setting QC thresholds or claiming scientific accuracy.
-3. Measure memory, CPU, disk and recovery behavior on the user's Windows 10/11 target configuration (8 GB RAM, 4 logical cores); hosted CI and synthetic pressure tests are not substitutes.
-4. Manually validate the offline review helper in a Windows browser, including local folder selection, source overlay, axis/point edits, patch export and CLI apply/readback.
-5. Complete aggregate temporary-disk peak reporting and expanded upstream layout/version compatibility fixtures; collect source immutability evidence on representative corpus folders.
-6. Keep P1/P2 deferred until P0 has real-paper accuracy and operational acceptance.
+1. Complete the current Windows CI run for the latest main head and fix any new regressions at their root cause.
+2. Run the local PowerShell resource harness on the target Windows 8 GB / 4-core machine using a small approved representative corpus; retain JSON/logs and machine specification.
+3. Compare PDFium/raw PDFium, pdfminer.six, and pikepdf/QPDF on 3–5 approved real PDFs; document native text, vector paths, clipping, rotation, Form XObjects, fragmentation, license, memory and timing results.
+4. Build manually annotated point/axis benchmarks for Battery, AOP and PFAS papers; calculate axis residuals and point errors before changing provisional thresholds.
+5. Manually open the offline review helper in Windows and verify image preview, overlays, axis/point edits, patch export/apply/readback.
+6. Continue P0 only where software-only evidence can close a criterion; keep P1/P2 deferred until separately authorized.
 
 ## Non-negotiable constraints
 
-- Do not edit \`TASK_PLAN_v1.4.1.md\`.
-- Do not modify the upstream \`chem-literature\` repository or any of its source artifacts.
-- Windows 10/11, 8 GB RAM, 4 logical CPU cores, no GPU is the baseline target.
-- One worker by default; lazy synchronous streaming inside a paper worker.
-- Bounded dispatch only at real asynchronous boundaries; no unnecessary internal queues.
-- Heavy PDF/image buffers must be loaded on demand and released promptly.
-- Workers never write to SQLite; one parent process owns catalog writes.
-- Zero LLM tokens by default. No hidden model calls and no paid-model fallback.
-- Review patches must be base-hash checked; accepted results must not be overwritten by default.
-- Unsupported scientific values/relationships remain UNKNOWN, UNASSIGNED, or NEEDS_REVIEW.
-- No production-ready claim or release without real-paper benchmark, Windows resource, licensing, and integrity evidence.
+- Do not modify, move, rename or delete anything in the upstream `chem-literature` repository or its input directories.
+- Do not modify `TASK_PLAN_v1.4.1.md`; update this `STATUS.md` instead.
+- No model/LLM call by default; zero LLM tokens remains the default. Never auto-fallback to paid models.
+- Do not claim scientific accuracy, calibrated QC, production readiness or Release from synthetic CI alone.
+- Preserve raw evidence and route ambiguity to `NEEDS_REVIEW`; never invent values, identities, units or comparison semantics.
