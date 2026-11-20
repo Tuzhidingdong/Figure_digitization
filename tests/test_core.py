@@ -2173,3 +2173,27 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
     job.close()
+
+
+
+def test_snapshot_detects_nested_upstream_version_directly_from_artifact_path(tmp_path: Path):
+    paper = tmp_path / "nested" / "paper-versioned"
+    manifest_dir = paper / "metadata" / "nested"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "manifest.json").write_text(json.dumps({
+        "metadata": {"producer": {"name": "chem-literature", "version": "2.4.1"}}
+    }), encoding="utf-8")
+    (paper / "other" / "metadata").mkdir(parents=True)
+    (paper / "other" / "metadata" / "manifest.json").write_text(
+        json.dumps({"schema_version": "1.0"}), encoding="utf-8"
+    )
+    (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+
+    snapshot = snapshot_paper(paper, tmp_path)
+
+    assert snapshot.detected_upstream_version == "chem-literature 2.4.1"
+    versioned_artifact = next(
+        item for item in snapshot.artifacts
+        if item.path.endswith("metadata/nested/manifest.json")
+    )
+    assert versioned_artifact.role == "evidence_index"

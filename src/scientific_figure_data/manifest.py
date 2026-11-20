@@ -56,24 +56,57 @@ def detect_role(relative_posix: str) -> str:
     return "other"
 
 
-def _detect_upstream_version(paper_dir: Path, artifacts: list[InputArtifact]) -> str | None:
+def _extract_version_marker(payload: object, depth: int = 0) -> str | None:
+    if not isinstance(payload, dict) or depth > 3:
+        return None
+    priority = (
+        "chem_literature_version", "upstream_version", "producer_version",
+        "tool_version", "version", "schema_version",
+    )
+    for key in priority:
+        value = payload.get(key)
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            return str(value).strip()
+        if isinstance(value, dict):
+            nested = value.get("version")
+            if isinstance(nested, (str, int, float)) and str(nested).strip():
+                name = value.get("name") or value.get("id")
+                return f"{name} {nested}".strip() if name else str(nested).strip()
+    for key in ("metadata", "meta", "provenance", "producer", "software", "source"):
+        marker = _extract_version_marker(payload.get(key), depth + 1)
+        if marker:
+            return marker
+    return None
+
+
+def _detect_upstream_version(
+    paper_dir: Path, artifacts: list[InputArtifact], source_dir: str,
+) -> str | None:
+    source_relative = Path(source_dir)
     for artifact in artifacts:
         if artifact.role != "evidence_index":
             continue
-        relative = Path(artifact.path)
-        # artifact path is corpus-root relative; locate matching file by basename in this paper.
-        candidates = list(paper_dir.rglob(relative.name))
-        for candidate in candidates[:3]:
-            try:
-                with candidate.open("r", encoding="utf-8-sig") as handle:
-                    payload = json.load(handle)
-                if isinstance(payload, dict):
-                    for key in ("chem_literature_version", "upstream_version", "version", "schema_version"):
-                        value = payload.get(key)
-                        if isinstance(value, (str, int, float)):
-                            return str(value)
-            except (OSError, ValueError):
-                continue
+        artifact_relative = Path(artifact.path)
+        try:
+            paper_relative = artifact_relative.relative_to(source_relative)
+        except ValueError:
+            # Older snapshots may contain only a path relative to the paper directory.
+            paper_relative = artifact_relative
+        candidate = (paper_dir / paper_relative).resolve()
+        try:
+            candidate.relative_to(paper_dir.resolve())
+        except ValueError:
+            continue
+        if not candidate.is_file():
+            continue
+        try:
+            with candidate.open("r", encoding="utf-8-sig") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        marker = _extract_version_marker(payload)
+        if marker:
+            return marker
     return None
 
 
@@ -103,9 +136,10 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
             warnings.append(f"Multiple {role} candidates detected ({count}); deterministic first-candidate routing applies.")
     if "figure_inventory" not in present and "evidence_index" in present:
         warnings.append("No standalone figure inventory; downstream adapter will inspect evidence-index manifests for embedded figures.")
-    upstream_version = _detect_upstream_version(paper_dir, artifacts)
+    source_dir = paper_dir.relative_to(corpus_root).as_posix()
+    upstream_version = _detect_upstream_version(paper_dir, artifacts, source_dir)
     payload = {
-        "paper_id": paper_id, "source_dir": paper_dir.relative_to(corpus_root).as_posix(),
+        "paper_id": paper_id, "source_dir": source_dir,
         "adapter_version": ADAPTER_VERSION,
         "artifacts": [{"path": a.path, "role": a.role, "size_bytes": a.size_bytes,
                        "mtime_ns": a.mtime_ns, "sha256": a.sha256} for a in artifacts],
@@ -113,7 +147,7 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
     storage_id = storage_paper_id(paper_id)
     return PaperSnapshot(
         paper_id=storage_id,
-        source_dir=paper_dir.relative_to(corpus_root).as_posix(),
+        source_dir=source_dir,
         detected_upstream_version=upstream_version,
         adapter_version=ADAPTER_VERSION, created_at=utc_now(),
         artifacts=artifacts, missing_roles=missing,
