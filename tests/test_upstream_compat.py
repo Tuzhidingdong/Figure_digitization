@@ -205,6 +205,12 @@ def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
     image_path = package / image_relative
     with Image.new("RGB", (24, 16), "white") as image:
         image.save(image_path, format="PNG")
+    evidence_index = package / "evidence_index.json"
+    evidence_payload = json.loads(evidence_index.read_text(encoding="utf-8"))
+    for asset in evidence_payload["media_assets"]:
+        if asset.get("figure_id") == "MAIN_FIG_P1_01":
+            asset["sha256"] = _sha256(image_path.read_bytes())
+    evidence_index.write_text(json.dumps(evidence_payload), encoding="utf-8")
 
     def upstream_snapshot():
         package_paths = {
