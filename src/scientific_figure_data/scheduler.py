@@ -329,18 +329,27 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "skipped_by_selection": int(options.get("skipped_by_selection", 0)),
         "skipped_cached_unchanged": resume_cached_skipped,
         "skipped_active_lease": results["active_jobs_skipped"],
-        "skipped_unstarted_resource_pressure": max(
-            0,
-            int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
-            - total_seen - results["active_jobs_skipped"] - resume_cached_skipped,
-        ) if resource_paused else 0,
+        "selection_scan_complete": not resource_paused,
+        "unexamined_due_to_resource_pressure": (
+            max(0, int(options.get("discovered_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                - int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                - int(options.get("skipped_by_selection", 0)))
+            if resource_paused else 0
+        ),
+        "skipped_unstarted_resource_pressure": (
+            max(0, int(options.get("discovered_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                - int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                - int(options.get("skipped_by_selection", 0)))
+            if resource_paused else 0
+        ),
         "skipped_papers": (
             int(options.get("skipped_by_selection", 0))
             + resume_cached_skipped
             + results["active_jobs_skipped"]
             + (
-                max(0, int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
-                    - total_seen - results["active_jobs_skipped"] - resume_cached_skipped)
+                max(0, int(options.get("discovered_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                    - int(options.get("eligible_papers", total_seen + results["active_jobs_skipped"] + resume_cached_skipped))
+                    - int(options.get("skipped_by_selection", 0)))
                 if resource_paused else 0
             )
         ),
