@@ -59,19 +59,13 @@ def detect_role(relative_posix: str) -> str:
 def _extract_version_marker(payload: object, depth: int = 0) -> str | None:
     if not isinstance(payload, dict) or depth > 3:
         return None
-    priority = (
-        "chem_literature_version", "upstream_version", "producer_version",
-        "tool_version", "version", "schema_version",
+    explicit_keys = (
+        "chem_literature_version", "upstream_version", "producer_version", "tool_version",
     )
-    for key in priority:
+    for key in explicit_keys:
         value = payload.get(key)
         if isinstance(value, (str, int, float)) and str(value).strip():
-            marker = str(value).strip()
-            if key in {"version", "producer_version", "tool_version"}:
-                name = payload.get("name") or payload.get("id")
-                if isinstance(name, str) and name.strip():
-                    return f"{name.strip()} {marker}"
-            return marker
+            return str(value).strip()
         if isinstance(value, dict):
             nested = value.get("version")
             if isinstance(nested, (str, int, float)) and str(nested).strip():
@@ -80,6 +74,14 @@ def _extract_version_marker(payload: object, depth: int = 0) -> str | None:
     for key in ("metadata", "meta", "provenance", "producer", "software", "source"):
         marker = _extract_version_marker(payload.get(key), depth + 1)
         if marker:
+            return marker
+    for key in ("version", "schema_version"):
+        value = payload.get(key)
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            marker = str(value).strip()
+            name = payload.get("name") or payload.get("id")
+            if isinstance(name, str) and name.strip():
+                return f"{name.strip()} {marker}"
             return marker
     return None
 
