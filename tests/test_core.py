@@ -2348,31 +2348,66 @@ def test_pipeline_persists_qc_dimensions_for_extracted_series(tmp_path: Path):
     (paper / "figure_inventory.json").write_text(json.dumps({
         "figures": [{
             "figure_id": "Figure1",
+            "page": 1,
+            "caption": "CV of Sample A",
+            "technique": "CV",
+            "domain": "battery",
             "panels": [{
                 "panel_id": "a", "technique": "CV", "domain": "battery",
-                "pixel_points": [[10, 20], [20, 10], [15, 5]],
-                "x_axis_anchors": [{"pixel": 10, "value": 0}, {"pixel": 20, "value": 1}],
-                "y_axis_anchors": [{"pixel": 20, "value": 0}, {"pixel": 5, "value": 1}],
-                "shared_legend_refs": [{"text": "Sample A", "scope": "PANEL"}],
-                "subject_links": [{
-                    "entity_id": "sample-a", "canonical_name": "Sample A",
-                    "role_in_series": "tested_material",
-                    "evidence": {"source": "panel legend", "page": 1},
-                }],
-                "conditions": [{"name": "electrolyte", "value": "1 M",
-                                "evidence": {"source": "panel caption", "page": 1}}],
+                "bbox": [0.1, 0.1, 0.9, 0.9],
             }],
         }]
+    }), encoding="utf-8")
+    (paper / "digitization_overrides.json").write_text(json.dumps({
+        "schema_version": "1.0",
+        "figures": {
+            "Figure1": {
+                "panels": {
+                    "a": {
+                        "series": [{
+                            "series_id": "sample-a-cv",
+                            "label": "Sample A",
+                            "technique": "CV",
+                            "domain": "battery",
+                            "data_family": "CV",
+                            "pixel_points": [[10, 20], [20, 10], [15, 5]],
+                            "x_axis_anchors": [{"pixel": 10, "value": 0}, {"pixel": 20, "value": 1}],
+                            "y_axis_anchors": [{"pixel": 20, "value": 0}, {"pixel": 5, "value": 1}],
+                            "x_unit": "V",
+                            "y_unit": "mA cm-2",
+                            "y_axis_side": "LEFT",
+                            "subject_links": [{
+                                "entity": {
+                                    "entity_id": "sample-a",
+                                    "canonical_name": "Sample A",
+                                    "entity_type": "material",
+                                },
+                                "role_in_series": "tested_material",
+                                "exact_match": True,
+                                "evidence": {"source": "panel legend", "page": 1},
+                            }],
+                            "conditions": [{
+                                "name": "electrolyte", "value": "1 M",
+                                "evidence": {"source": "panel caption", "page": 1},
+                            }],
+                        }]
+                    }
+                }
+            }
+        },
     }), encoding="utf-8")
 
     result = process_paper(input_root, Path("paper-qc"), tmp_path / "output",
                            {"memory_limit_mb": 0})
     assert result["series_count"] == 1
+    assert result["series"][0]["metadata"]["points_count"] == 3
     metadata = result["series"][0]["metadata"]
     assert metadata["qc_report"]["status"] == "PROVISIONAL_UNCALIBRATED"
     assert metadata["qc_report"]["aggregate_score"] is None
     assert metadata["qc_report"]["trace_metrics"]["point_count"] == 3
+    assert metadata["qc_report"]["trace_metrics"]["x_direction_changes"] == 1
     assert metadata["qc_components"]["subject_link"] == "ASSIGNED_WITH_EVIDENCE"
+    assert metadata["qc_components"]["condition_interpretation"] == "EVIDENCE_ATTACHED"
 
 
 
