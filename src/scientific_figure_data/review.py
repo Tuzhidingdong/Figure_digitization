@@ -15,12 +15,15 @@ from .errors import StalePatchError
 from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
 from .hashing import atomic_write_json, sha256_file
 from .storage import connect_catalog
+from .chart_classifier import classify_chart_family
 
 ALLOWED_FIELDS = {
     "label", "technique", "domain", "x_label", "y_label", "x_unit", "y_unit",
-    "y_axis_side", "x_axis_anchors", "y_axis_anchors", "points"
+    "y_axis_side", "x_axis_anchors", "y_axis_anchors", "points",
+    "chart_family", "classification_evidence",
 }
 ALLOWED_AXIS_SIDES = {"LEFT", "RIGHT", "UNASSIGNED"}
+ALLOWED_CHART_FAMILIES = {"NON_MONOTONIC_CURVE", "SPECTRUM", "TIME_SERIES", "UNCLASSIFIED"}
 
 
 def _validate_anchors(value: Any, axis: str) -> None:
@@ -77,6 +80,15 @@ def _validate_patch(patch: dict) -> None:
             raise ValueError(f"Unsupported review fields: {sorted(forbidden)}")
         if "y_axis_side" in values and values["y_axis_side"] not in ALLOWED_AXIS_SIDES:
             raise ValueError("y_axis_side must be LEFT, RIGHT, or UNASSIGNED")
+        if "chart_family" in values:
+            family = values["chart_family"]
+            if not isinstance(family, str) or family not in ALLOWED_CHART_FAMILIES:
+                raise ValueError(f"chart_family must be one of {sorted(ALLOWED_CHART_FAMILIES)}")
+            rationale = values.get("classification_evidence")
+            if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 2000:
+                raise ValueError("A manual chart_family revision requires classification_evidence (1-2000 characters)")
+        elif "classification_evidence" in values:
+            raise ValueError("classification_evidence is only valid with chart_family")
         if "x_axis_anchors" in values:
             _validate_anchors(values["x_axis_anchors"], "x")
         if "y_axis_anchors" in values:
@@ -110,6 +122,138 @@ def _validate_patch(patch: dict) -> None:
                     raise ValueError("x must be a string, number, or null")
                 if isinstance(x, float) and not math.isfinite(x):
                     raise ValueError("x must be finite")
+
+
+
+def _revise_chart_classification(
+    item: dict, values: dict, patch: dict, reviewed_at: str, previous_inputs: dict,
+) -> None:
+    """Recompute a preliminary classification after reviewed inputs change, or record an explicit override."""
+    metadata = item.setdefault("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+        item["metadata"] = metadata
+    previous = metadata.get("chart_family_classification")
+    if not isinstance(previous, dict):
+        previous = None
+
+    native_text = ""
+    for evidence_item in item.get("evidence", []):
+        if not isinstance(evidence_item, dict):
+            continue
+        page_evidence = evidence_item.get("native_page_evidence")
+        if isinstance(page_evidence, dict):
+            native_text = str(
+                page_evidence.get("native_text_preview")
+                or page_evidence.get("native_text")
+                or ""
+            )
+            if native_text:
+                break
+
+    classification = classify_chart_family(
+        technique=item.get("technique"),
+        x_label=item.get("x_label"),
+        y_label=item.get("y_label"),
+        native_text=native_text,
+    )
+    changed_fields = [
+        key for key in ("technique", "x_label", "y_label", "chart_family")
+        if key in values
+    ]
+    changed_inputs = {
+        key: {"before": previous_inputs.get(key), "after": item.get(key)}
+        for key in ("technique", "x_label", "y_label") if key in values
+    }
+
+    if "chart_family" in values:
+        classification["chart_family"] = values["chart_family"]
+        classification["status"] = "MANUALLY_REVISED"
+        classification["confidence"] = None
+        classification.setdefault("evidence", []).append({
+            "source": "manual_review",
+            "rationale": values["classification_evidence"].strip(),
+            "reviewer": patch.get("reviewer") or None,
+        })
+        revision_kind = "MANUAL_CHART_FAMILY_SELECTION"
+        rationale = values["classification_evidence"].strip()
+    else:
+        classification["status"] = "RECLASSIFIED_AFTER_REVIEW"
+        if "technique" in values:
+            classification["confidence"] = None
+        classification.setdefault("evidence", []).append({
+            "source": "reviewed_fields",
+            "changed_inputs": changed_inputs,
+            "native_text_reused": bool(native_text),
+        })
+        revision_kind = "DETERMINISTIC_RECLASSIFICATION"
+        rationale = None
+
+    history = metadata.get("chart_family_classification_history")
+    if not isinstance(history, list):
+        history = []
+        metadata["chart_family_classification_history"] = history
+    revision = {
+        "revision": len(history) + 1,
+        "kind": revision_kind,
+        "reviewer": patch.get("reviewer") or None,
+        "reviewed_at": reviewed_at,
+        "changed_fields": changed_fields,
+        "changed_inputs": changed_inputs,
+        "rationale": rationale,
+    }
+    history.append({"previous": previous, "revision": revision})
+    classification["revision"] = revision
+    metadata["chart_family_classification"] = classification
+    if "x_label" in values or "y_label" in values:
+        metadata["reviewed_axis_labels"] = {
+            "x_label": item.get("x_label"),
+            "y_label": item.get("y_label"),
+            "reviewed_at": reviewed_at,
+        }
+
+
+def _refresh_panel_chart_classifications(paper_root: Path, digitization: dict) -> dict | None:
+    """Refresh panel-level classification summaries from canonical per-series records."""
+    layout_path = paper_root / "panel_layout.json"
+    if not layout_path.is_file():
+        return None
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    by_panel: dict[tuple[str, str], list[dict]] = {}
+    for item in digitization.get("series", []):
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("metadata")
+        classification = (
+            metadata.get("chart_family_classification", {})
+            if isinstance(metadata, dict) else {}
+        )
+        family = classification.get("chart_family") if isinstance(classification, dict) else None
+        if family:
+            key = (str(item.get("figure_id")), str(item.get("panel_id")))
+            by_panel.setdefault(key, []).append(classification)
+
+    for panel in layout.get("panels", []):
+        key = (str(panel.get("figure_id")), str(panel.get("panel_id")))
+        classifications = by_panel.get(key, [])
+        families = {str(item.get("chart_family")) for item in classifications}
+        if not families:
+            continue
+        if len(families) > 1:
+            panel["chart_family"] = "UNCLASSIFIED"
+            panel["chart_family_status"] = "CONFLICTING_SERIES_CLASSIFICATIONS"
+            panel["chart_family_conflicts"] = sorted(families)
+            continue
+        panel["chart_family"] = next(iter(families))
+        panel.pop("chart_family_conflicts", None)
+        statuses = {str(item.get("status") or "NEEDS_REVIEW") for item in classifications}
+        if statuses & {"MANUALLY_REVISED", "RECLASSIFIED_AFTER_REVIEW"}:
+            panel["chart_family_status"] = "REVISED_AFTER_REVIEW"
+        elif len(statuses) == 1:
+            panel["chart_family_status"] = next(iter(statuses))
+        else:
+            panel["chart_family_status"] = "MULTIPLE_EVIDENCE_SOURCES"
+    return layout
 
 
 def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = False) -> dict:
@@ -161,12 +305,17 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         csv_updates: dict[Path, dict[str, list[dict]]] = {}
         csv_axis_updates: dict[Path, dict[str, dict[str, Any]]] = {}
         point_sync_by_panel: dict[Path, set[str]] = {}
+        classification_changed_panels: set[tuple[str, str]] = set()
+        reviewed_at = datetime.now(timezone.utc).isoformat()
         for change in patch["changes"]:
             series_id = change["series_id"]
             if series_id not in series_index:
                 raise ValueError(f"Unknown series_id in patch: {series_id}")
             item = series_index[series_id]
             values = change["set"]
+            previous_classification_inputs = {
+                key: item.get(key) for key in ("technique", "x_label", "y_label")
+            }
             csv_path = paper_root / "series" / f"{item['figure_id']}__{item['panel_id']}" / "panel_series.csv"
             axis_transforms = {}
             for key in ("x_axis_anchors", "y_axis_anchors"):
@@ -184,10 +333,15 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                         raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
                     csv_updates.setdefault(csv_path, {})[series_id] = value
                     point_sync_by_panel.setdefault(csv_path, set()).add(series_id)
-                elif key in {"x_axis_anchors", "y_axis_anchors"}:
+                elif key in {"x_axis_anchors", "y_axis_anchors", "chart_family", "classification_evidence"}:
                     continue
                 else:
                     item[key] = value
+            if any(key in values for key in ("technique", "x_label", "y_label", "chart_family")):
+                _revise_chart_classification(
+                    item, values, patch, reviewed_at, previous_classification_inputs
+                )
+                classification_changed_panels.add((str(item["figure_id"]), str(item["panel_id"])))
             if axis_transforms:
                 if not csv_path.is_file():
                     raise FileNotFoundError(f"Panel point artifact missing: {csv_path}")
@@ -196,7 +350,12 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
             item["extraction_status"] = "REVIEWED_ACCEPTED"
             item["review_state"] = "REVIEWED_ACCEPTED"
             item.setdefault("metadata", {})["review_patch_id"] = patch_id
-        document["generated_at"] = datetime.now(timezone.utc).isoformat()
+        panel_layout_path = paper_root / "panel_layout.json"
+        panel_layout_update = (
+            _refresh_panel_chart_classifications(paper_root, document)
+            if classification_changed_panels else None
+        )
+        document["generated_at"] = reviewed_at
         document["review_status"] = "REVIEWED_ACCEPTED"
         new_hash_preview = "DRY_RUN"
         if dry_run:
@@ -210,6 +369,9 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
         bundle_backup = version_dir / "paper_bundle.before.json"
         if bundle_path.is_file():
             shutil.copy2(bundle_path, bundle_backup)
+        panel_layout_backup = version_dir / "panel_layout.before.json"
+        if panel_layout_update is not None and panel_layout_path.is_file():
+            shutil.copy2(panel_layout_path, panel_layout_backup)
         backups = {}
         for csv_path in set(csv_updates) | set(csv_axis_updates):
             backup_path = version_dir / (csv_path.parent.name + ".before.csv")
@@ -221,6 +383,8 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     csv_path, csv_updates.get(csv_path, {}),
                     csv_axis_updates.get(csv_path, {}),
                 )
+            if panel_layout_update is not None:
+                atomic_write_json(panel_layout_path, panel_layout_update)
             atomic_write_json(target, document)
             new_hash_preview = sha256_file(target)
             # Refresh canonical hashes before committing the SQLite transaction so files and
@@ -241,15 +405,29 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
                     sid = change["series_id"]
                     assignments = ["review_state='REVIEWED_ACCEPTED'", "extraction_status='REVIEWED_ACCEPTED'"]
                     args: list[Any] = []
-                    for key in ("label", "technique", "domain", "x_label", "y_label", "x_unit", "y_unit", "y_axis_side"):
+                    for key in ("label", "technique", "domain", "x_unit", "y_unit", "y_axis_side"):
                         if key in values:
                             assignments.append(f"{key}=?")
                             args.append(values[key])
                     series_metadata = series_index[sid].get("metadata", {})
+                    if "x_label" in values or "y_label" in values:
+                        series_metadata["reviewed_axis_labels"] = {
+                            "x_label": series_index[sid].get("x_label"),
+                            "y_label": series_index[sid].get("y_label"),
+                            "reviewed_at": reviewed_at,
+                        }
                     assignments.append("metadata_json=?")
                     args.append(json.dumps(series_metadata, ensure_ascii=False))
                     args.append(sid)
                     con.execute(f"UPDATE series SET {', '.join(assignments)} WHERE series_id=?", args)
+                    if "technique" in values or "domain" in values:
+                        con.execute(
+                            """UPDATE measurements SET
+                               technique=(SELECT technique FROM series WHERE series_id=?),
+                               domain=(SELECT domain FROM series WHERE series_id=?)
+                               WHERE measurement_id=(SELECT measurement_id FROM series WHERE series_id=?)""",
+                            (sid, sid, sid),
+                        )
 
                 # Rebuild all affected SQLite point rows from the final canonical Panel CSV.
                 # Stream each panel once and cap executemany batches to bound memory.
@@ -316,6 +494,8 @@ def apply_review_patch(output_root: Path, patch_path: Path, dry_run: bool = Fals
             shutil.copy2(backup_digitization, target)
             for csv_path, backup_path in backups.items():
                 shutil.copy2(backup_path, csv_path)
+            if panel_layout_backup.is_file():
+                shutil.copy2(panel_layout_backup, panel_layout_path)
             if bundle_backup.is_file():
                 shutil.copy2(bundle_backup, bundle_path)
             raise

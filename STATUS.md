@@ -48,14 +48,14 @@ These are software-engineering results. They do not establish scientific point a
 - **AC-06:** Source immutability is proven on synthetic fixture trees; representative user corpus confirmation remains release-gated.
 - **AC-16:** The local Windows sampler is implemented and parse-checked in CI, but has not been run on the target 8 GB / 4-core Windows machine.
 - **AC-25:** Cache/resume behavior has synthetic coverage; full recovery under target-PC failure and disk-pressure conditions is pending.
-- **AC-30:** Classification is deterministic and evidence-driven, but interactive revision after manual evidence changes still needs manual acceptance.
+- **AC-30:** Review patches now support evidence-backed manual chart-family selection and deterministic reclassification after reviewed technique/axis-label changes. Prior classifications, reviewer/reason/timestamp, panel summaries, SQLite metadata/measurement technique, and bundle hashes are updated together; rollback coverage includes panel layout. Windows browser interaction still needs local manual acceptance.
 - **AC-31/32:** PDF backend comparison and final backend choice require 3–5 approved representative real PDFs.
 - **AC-36:** Third-party notices exist; final resolved dependency/license/SBOM review and OCR language-data distribution terms remain release-gated.
 - **AC-37–46:** P0 extraction routes and low-ambiguity guards are implemented; scientific accuracy for supported plot families is not established without annotated real figures.
 - **AC-48:** Evidence-backed series-level subject links and cross-technique queries work; automatic subject assignment from real legends/text remains partial.
 - **AC-55–60:** Conservative domain semantics and conversion guards exist. The LOD/LOQ parser now retains the raw comparator, LOD/LOQ kind, and any explicitly supplied numeric limit/unit (including Unicode ≤/≥ and scientific notation); it always leaves `numeric_value` unset for censored results. This parser-level behavior is regression-tested, but end-to-end scalar-observation ingestion/persistence remains partial because the scalar-observation workflow is P1 (AC-51).
 - **AC-68–70:** Thresholds remain provisional; no calibrated real-paper benchmark or point-error report has been accepted.
-- **AC-80–83/86–88:** Offline review loading, patch export/apply and transaction tests exist; interactive Windows browser acceptance remains pending.
+- **AC-30/80–83/86–88:** Offline review now exposes chart-family revision and axis-label corrections; patch application recomputes or explicitly overrides the preliminary chart family and records revision history. Source/test coverage includes panel-layout hash refresh and transaction rollback. Interactive Windows browser acceptance remains pending.
 - **AC-92/93:** ML export preserves original values, conditions, identity, provenance and explicit NOT_HARMONIZED state; validated standardized-value generation remains incomplete.
 - **AC-94:** Scheduler-level SFD temporary scratch peak is reported, but target-PC and representative-corpus reconciliation is not complete.
 
@@ -154,11 +154,12 @@ These changes are code-complete in the current branch. Their final Windows CI re
 
 ## Latest verification
 
-- Latest functional source/test commit: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
+- Latest functional source/test commit before the classification-review increment: `df5bbac8e9e771f7bc59375c607c82efa10a5f87`.
+- Classification-review increment: manual chart-family revision, deterministic reclassification after reviewed technique/axis-label changes, panel summary synchronization, measurement-index synchronization, and atomic rollback coverage. Matching Windows CI result is to be checked for the new commit before this increment is called regression-accepted.
 - Functional-source Windows CI: [#250](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740797412) — completed successfully on Python 3.11, 3.12 and 3.13. That source/test commit passed compileall, the selected Ruff checks, and the full pytest suite. The subsequent STATUS-only synchronization did not change Python source or tests.
 - The immediately preceding semantics implementation commit passed [CI #249](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740754829); the bbox-import repair passed [CI #248](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44740356204). The first STATUS synchronization snapshot also passed [CI #251](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44741025982) on all three Windows Python versions.
 - CI #242–#247 had failed at the undefined-name check because `pipeline.py` used `math.isfinite` without importing `math`. The missing import was fixed in `17cd6b0`; subsequent matching Windows CI runs are green. No test run was counted as passing for those failed commits because the test step was skipped.
-- Current test source count: **109 test functions / 112 pytest cases** (two parametrized functions add three additional cases).
+- Current test source count before the classification-review increment: **109 test functions / 112 pytest cases**. This increment adds three regression functions; the final count and pass state will be confirmed by the matching Windows CI run.
 - Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; it remains unchanged. The upstream repository remains untouched. No Release/tag was created.
 
 ## Current blockers / next acceptance actions

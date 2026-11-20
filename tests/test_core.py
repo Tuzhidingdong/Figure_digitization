@@ -268,6 +268,140 @@ def test_review_patch_applies_atomically_updates_bundle_and_catalog(tmp_path: Pa
     assert apply_review_patch(tmp_path, patch_path)["status"] == "ALREADY_APPLIED"
 
 
+def _seed_chart_classification_for_review(paper_root: Path) -> None:
+    digitization_path = paper_root / "digitization.json"
+    digitization = json.loads(digitization_path.read_text(encoding="utf-8"))
+    for item in digitization["series"]:
+        item.setdefault("metadata", {})["chart_family_classification"] = {
+            "technique": "CV",
+            "chart_family": "NON_MONOTONIC_CURVE",
+            "status": "CLASSIFIED_FROM_UPSTREAM_METADATA",
+            "confidence": 1.0,
+            "evidence": [{"source": "upstream_technique", "value": "CV"}],
+        }
+    digitization_path.write_text(json.dumps(digitization, indent=2), encoding="utf-8")
+    layout_path = paper_root / "panel_layout.json"
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    layout["panels"][0]["chart_family"] = "NON_MONOTONIC_CURVE"
+    layout["panels"][0]["chart_family_status"] = "CLASSIFIED_FROM_UPSTREAM_METADATA"
+    layout_path.write_text(json.dumps(layout, indent=2), encoding="utf-8")
+    bundle_path = paper_root / "paper_bundle.json"
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    for relative in ("digitization.json", "panel_layout.json"):
+        bundle["content_hashes"][relative] = sha256_file(paper_root / relative)
+    bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+
+
+def test_review_patch_manually_revises_chart_family_and_panel_summary(tmp_path: Path):
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    _seed_chart_classification_for_review(paper_root)
+    digitization = paper_root / "digitization.json"
+    rationale = "The corrected panel evidence identifies a diffraction spectrum."
+    changes = [{
+        "series_id": series_id,
+        "set": {
+            "technique": "XRD",
+            "chart_family": "SPECTRUM",
+            "classification_evidence": rationale,
+        },
+    } for series_id in ("series-a", "series-b")]
+    patch_path = tmp_path / "classification-review.json"
+    patch_path.write_text(json.dumps({
+        "schema_version": "1.0", "patch_id": "classification-review-001",
+        "paper_id": snapshot.paper_id, "target_artifact": "digitization.json",
+        "original_result_hash": sha256_file(digitization), "reviewer": "reviewer-a",
+        "changes": changes,
+    }), encoding="utf-8")
+
+    result = apply_review_patch(tmp_path, patch_path)
+    assert result["status"] == "REVIEWED_ACCEPTED"
+    updated = json.loads(digitization.read_text(encoding="utf-8"))
+    for item in updated["series"]:
+        classification = item["metadata"]["chart_family_classification"]
+        assert item["technique"] == "XRD"
+        assert classification["chart_family"] == "SPECTRUM"
+        assert classification["status"] == "MANUALLY_REVISED"
+        assert classification["confidence"] is None
+        history = item["metadata"]["chart_family_classification_history"]
+        assert history[0]["previous"]["chart_family"] == "NON_MONOTONIC_CURVE"
+        assert history[0]["revision"]["rationale"] == rationale
+        assert history[0]["revision"]["reviewer"] == "reviewer-a"
+
+    layout_path = paper_root / "panel_layout.json"
+    panel = json.loads(layout_path.read_text(encoding="utf-8"))["panels"][0]
+    assert panel["chart_family"] == "SPECTRUM"
+    assert panel["chart_family_status"] == "REVISED_AFTER_REVIEW"
+    bundle = json.loads((paper_root / "paper_bundle.json").read_text(encoding="utf-8"))
+    assert bundle["content_hashes"]["digitization.json"] == sha256_file(digitization)
+    assert bundle["content_hashes"]["panel_layout.json"] == sha256_file(layout_path)
+    assert (paper_root / "versions" / "review-classification-review-001" /
+            "panel_layout.before.json").is_file()
+
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    rows = catalog.con.execute(
+        "SELECT technique,metadata_json FROM series WHERE paper_id=? ORDER BY series_id",
+        (snapshot.paper_id,),
+    ).fetchall()
+    assert [row["technique"] for row in rows] == ["XRD", "XRD"]
+    assert all(
+        json.loads(row["metadata_json"])["chart_family_classification"]["chart_family"] == "SPECTRUM"
+        for row in rows
+    )
+    measurements = catalog.con.execute(
+        "SELECT technique FROM measurements WHERE paper_id=? ORDER BY technique",
+        (snapshot.paper_id,),
+    ).fetchall()
+    assert [row["technique"] for row in measurements] == ["XRD", "XRD"]
+    catalog.close()
+
+
+def test_reviewed_technique_change_recomputes_preliminary_classification(tmp_path: Path):
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    _seed_chart_classification_for_review(paper_root)
+    digitization = paper_root / "digitization.json"
+    patch_path = tmp_path / "reclassify-review.json"
+    patch_path.write_text(json.dumps({
+        "schema_version": "1.0", "patch_id": "reclassify-review-001",
+        "paper_id": snapshot.paper_id, "target_artifact": "digitization.json",
+        "original_result_hash": sha256_file(digitization), "reviewer": "reviewer-b",
+        "changes": [{
+            "series_id": "series-a",
+            "set": {"technique": "XRD", "x_label": "2θ (degree)", "y_label": "Intensity"},
+        }],
+    }), encoding="utf-8")
+
+    result = apply_review_patch(tmp_path, patch_path)
+    assert result["status"] == "REVIEWED_ACCEPTED"
+    updated = json.loads(digitization.read_text(encoding="utf-8"))
+    item = next(series for series in updated["series"] if series["series_id"] == "series-a")
+    classification = item["metadata"]["chart_family_classification"]
+    assert classification["chart_family"] == "SPECTRUM"
+    assert classification["status"] == "RECLASSIFIED_AFTER_REVIEW"
+    assert classification["confidence"] is None
+    assert classification["revision"]["changed_fields"] == ["technique", "x_label", "y_label"]
+    assert classification["revision"]["changed_inputs"]["technique"] == {"before": "CV", "after": "XRD"}
+    assert item["metadata"]["reviewed_axis_labels"] == {
+        "x_label": "2θ (degree)", "y_label": "Intensity",
+        "reviewed_at": classification["revision"]["reviewed_at"],
+    }
+    panel = json.loads((paper_root / "panel_layout.json").read_text(encoding="utf-8"))["panels"][0]
+    assert panel["chart_family"] == "SPECTRUM"
+    assert panel["chart_family_status"] == "REVISED_AFTER_REVIEW"
+
+
+def test_review_patch_rejects_manual_chart_family_without_evidence():
+    from scientific_figure_data.review import _validate_patch
+
+    patch = {
+        "patch_id": "invalid-classification", "paper_id": "paper-1",
+        "target_artifact": "digitization.json", "original_result_hash": "a" * 64,
+        "changes": [{"series_id": "series-a", "set": {"chart_family": "SPECTRUM"}}],
+    }
+    with pytest.raises(ValueError, match="classification_evidence"):
+        _validate_patch(patch)
+
+
+
 def test_stale_review_patch_is_rejected_and_preserved(tmp_path: Path):
     paper_root = tmp_path / "papers" / "paper-1"
     paper_root.mkdir(parents=True)
@@ -1891,6 +2025,7 @@ def test_review_patch_rolls_back_files_when_catalog_transaction_fails(tmp_path: 
         "digitization": sha256_file(digitization),
         "panel_csv": sha256_file(panel_csv),
         "bundle": sha256_file(bundle),
+        "panel_layout": sha256_file(paper_root / "panel_layout.json"),
     }
 
     patch_path = tmp_path / "rollback.json"
@@ -1905,6 +2040,8 @@ def test_review_patch_rolls_back_files_when_catalog_transaction_fails(tmp_path: 
             "series_id": "series-a",
             "set": {
                 "label": "Must roll back",
+                "chart_family": "SPECTRUM",
+                "classification_evidence": "Injected transaction failure after classification revision.",
                 "points": [{
                     "point_index": 0, "x": 9.0, "y": 8.0,
                     "pixel_x": 10.0, "pixel_y": 20.0,
@@ -1926,6 +2063,7 @@ def test_review_patch_rolls_back_files_when_catalog_transaction_fails(tmp_path: 
     assert sha256_file(digitization) == before_hashes["digitization"]
     assert sha256_file(panel_csv) == before_hashes["panel_csv"]
     assert sha256_file(bundle) == before_hashes["bundle"]
+    assert sha256_file(paper_root / "panel_layout.json") == before_hashes["panel_layout"]
 
     catalog = Catalog(tmp_path / "catalog.sqlite")
     row = catalog.query_series({"paper_id": snapshot.paper_id})[0]

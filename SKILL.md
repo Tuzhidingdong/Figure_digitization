@@ -89,6 +89,8 @@ Open review_helper.html in a local browser, select the paper output folder, insp
 
 A patch must match the current digitization.json SHA256. A stale patch is rejected as PATCH_CONFLICT_STALE_BASE; never silently overwrite a changed base.
 
+The reviewer can correct the technique and X/Y axis labels; these edits trigger deterministic chart-family reclassification from the reviewed fields and retained native text evidence. The reviewer may also explicitly choose a chart family (NON_MONOTONIC_CURVE, SPECTRUM, TIME_SERIES, or UNCLASSIFIED), but must provide a short evidence/rationale note. The previous classification and revision history are retained. Panel summaries, the SQLite query index, and canonical bundle hashes are updated with the accepted patch. A manual family selection records no numeric confidence score.
+
 ### 6. Rebuild the catalog
 
     sfd index rebuild --output-root OUTPUT_ROOT

@@ -34,6 +34,20 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <input id="technique"></label>
 <label>Domain
 <input id="domain"></label>
+<label>X-axis label
+<input id="xLabel"></label>
+<label>Y-axis label
+<input id="yLabel"></label>
+<label>Chart family (optional manual revision)
+<select id="chartFamily">
+<option value="">No chart-family change</option>
+<option value="NON_MONOTONIC_CURVE">Non-monotonic curve</option>
+<option value="SPECTRUM">Spectrum</option>
+<option value="TIME_SERIES">Time series</option>
+<option value="UNCLASSIFIED">Unclassified / unresolved</option>
+</select></label>
+<label>Reason / visual or textual evidence for manual chart-family revision
+<textarea id="classificationEvidence" rows="3" maxlength="2000"></textarea></label>
 <label>X-axis numeric anchors (JSON: [{ "pixel": 0, "value": 0 }, ...])
 <textarea id="xAnchorsJson" rows="4" spellcheck="false"></textarea></label>
 <label>Y-axis numeric anchors (JSON: [{ "pixel": 0, "value": 0 }, ...])
@@ -171,7 +185,10 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     currentPanelRows=rows;
     $("label").value=series.label||"";$("axisSide").value=series.y_axis_side||"UNASSIGNED";
     $("technique").value=series.technique||"";$("domain").value=series.domain||"";
-    $("seriesInfo").textContent=series.paper_id+" / "+series.figure_id+" / "+series.panel_id+" · "+series.extraction_status+" · "+series.qc_status;
+    $("xLabel").value=series.x_label||"";$("yLabel").value=series.y_label||"";
+    $("chartFamily").value="";$("classificationEvidence").value="";
+    const classification=series.metadata?.chart_family_classification||{};
+    $("seriesInfo").textContent=series.paper_id+" / "+series.figure_id+" / "+series.panel_id+" · "+series.extraction_status+" · "+series.qc_status+" · chart: "+(classification.chart_family||"UNCLASSIFIED")+" ("+(classification.status||"NEEDS_REVIEW")+")";
     const panel=(panelLayout.panels||[]).find(p=>p.figure_id===series.figure_id&&p.panel_id===series.panel_id)||{};
     $("panelInfo").textContent="Panel bbox: "+JSON.stringify(panel.normalized_bbox||panel.bbox||null)+" · shared legend refs: "+JSON.stringify(panel.shared_legend_refs||[]);
     $("calibrationInfo").textContent="X calibration: "+JSON.stringify(series.metadata?.x_calibration?.anchors||[])+"\nY calibration: "+JSON.stringify(series.metadata?.y_calibration?.anchors||[]);
@@ -248,8 +265,24 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
   $("seriesSelect").addEventListener("change",e=>selectSeries(e.target.value));
   $("addChange").addEventListener("click",()=>{
     const s=currentSeries();if(!s)return;
-    const set={label:$("label").value,y_axis_side:$("axisSide").value,
-               technique:$("technique").value||null,domain:$("domain").value||null};
+    const set={};
+    const editedFields={
+      label:$("label").value||null,
+      y_axis_side:$("axisSide").value,
+      technique:$("technique").value||null,
+      domain:$("domain").value||null,
+      x_label:$("xLabel").value||null,
+      y_label:$("yLabel").value||null
+    };
+    for(const [field,value] of Object.entries(editedFields)){
+      if((s[field]??null)!==(value??null))set[field]=value;
+    }
+    const selectedFamily=$("chartFamily").value;
+    if(selectedFamily){
+      const rationale=$("classificationEvidence").value.trim();
+      if(!rationale){$("patchStatus").textContent="A reason/evidence note is required for a manual chart-family revision.";return;}
+      set.chart_family=selectedFamily;set.classification_evidence=rationale;
+    }
     for(const [field,elementId] of [["x_axis_anchors","xAnchorsJson"],["y_axis_anchors","yAnchorsJson"]]){
       const anchorText=$(elementId).value.trim();
       if(anchorText){
@@ -262,6 +295,7 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
       try{set.points=JSON.parse(pointsText);if(!Array.isArray(set.points))throw new Error("Points JSON must be an array");}
       catch(err){$("patchStatus").textContent="Invalid points JSON: "+String(err);return;}
     }
+    if(!Object.keys(set).length){$("patchStatus").textContent="No changes to stage for "+s.series_id;return;}
     changes=changes.filter(c=>c.series_id!==s.series_id);changes.push({series_id:s.series_id,set});
     $("changeCount").textContent=String(changes.length);
     $("patchStatus").textContent="Correction staged for "+s.series_id;

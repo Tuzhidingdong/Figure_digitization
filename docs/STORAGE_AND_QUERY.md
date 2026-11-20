@@ -21,6 +21,8 @@ catalog.sqlite is a rebuildable query index. Only the parent/scheduler process w
 
 The index stores paper, figure, panel, series, point, entity-link, condition, measurement, observation, job, event, review, and applied-patch tables. The initial reconstruction path rebuilds query-critical series metadata from canonical JSON; the panel CSV remains the point-data source of truth.
 
+Review patches can revise technique and axis labels to recompute preliminary chart-family classification, or provide an explicit chart-family selection with a rationale. Classification history remains in per-series metadata; panel-level summaries are regenerated from all series in the panel, and accepted edits synchronize the SQLite metadata/measurement index and bundle hashes. Conflicting series-level families are surfaced as a panel conflict rather than silently collapsed.
+
 ## Query
 
 The query CLI supports filters for paper_id, technique, domain, entity_id, series_role, QC status, and review state. Filters are combined with AND semantics. Entity links are exact IDs; unresolved aliases are not silently promoted to canonical entities.
