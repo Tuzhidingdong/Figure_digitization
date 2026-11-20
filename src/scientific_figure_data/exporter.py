@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from datetime import datetime, timezone
 from itertools import groupby
 from pathlib import Path
@@ -84,6 +85,23 @@ def _series_compatibility_warnings(record: dict, associations: dict, metadata: d
     return warnings
 
 
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _optional_int(value: Any) -> int | None:
+    number = _optional_float(value)
+    if number is None or not number.is_integer():
+        return None
+    return int(number)
+
+
 def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
     metadata = _decode_json(record.get("metadata_json"), {})
     warnings = _series_compatibility_warnings(record, associations, metadata)
@@ -91,9 +109,14 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         item["entity_id"] for item in associations.get("subject_links", [])
         if item.get("entity_id")
     })
-    x_value = point.get("x_value")
-    x_label = point.get("x_label")
-    y_value = point.get("y_value")
+    x_value = _optional_float(point.get("x_value"))
+    x_label = point.get("x_label") or None
+    y_value = _optional_float(point.get("y_value"))
+    point_index = _optional_int(point.get("point_index"))
+    pixel_x = _optional_float(point.get("pixel_x"))
+    pixel_y = _optional_float(point.get("pixel_y"))
+    y_err_low = _optional_float(point.get("y_err_low"))
+    y_err_high = _optional_float(point.get("y_err_high"))
     return {
         "paper_id": record["paper_id"],
         "input_fingerprint": record.get("input_fingerprint"),
@@ -104,7 +127,7 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         "technique": record["technique"],
         "domain": record["domain"],
         "series_label": record["label"],
-        "point_index": point.get("point_index"),
+        "point_index": point_index,
         "x_value": x_value,
         "x_label": x_label,
         "y_value": y_value,
@@ -117,10 +140,10 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         "y_unit_raw": record["y_unit"],
         "standardization_status": "NOT_PERFORMED",
         "y_axis_side": record["y_axis_side"],
-        "pixel_x": point.get("pixel_x"),
-        "pixel_y": point.get("pixel_y"),
-        "y_err_low": point.get("y_err_low"),
-        "y_err_high": point.get("y_err_high"),
+        "pixel_x": pixel_x,
+        "pixel_y": pixel_y,
+        "y_err_low": y_err_low,
+        "y_err_high": y_err_high,
         "err_type": point.get("err_type") or "UNKNOWN",
         "subject_entity_ids_json": json.dumps(subject_ids, ensure_ascii=False, sort_keys=True),
         "subject_links_json": json.dumps(
