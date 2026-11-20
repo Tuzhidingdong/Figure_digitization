@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import sys
 from collections import Counter
 from importlib import metadata
@@ -67,8 +68,64 @@ def _installed_version(name: str) -> str | None:
         return None
 
 
+def _deduplicate_records(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Collapse duplicate dist-info/egg-info records without hiding conflicting metadata."""
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    duplicate_count = 0
+    list_fields = (
+        "license_classifiers", "license_file_names", "requires_dist", "project_urls",
+    )
+    scalar_fields = ("license_expression", "license_text")
+    for source in records:
+        normalized_name = re.sub(r"[-_.]+", "-", str(source["name"])).casefold()
+        key = (normalized_name, str(source["version"]))
+        if key not in unique:
+            record = dict(source)
+            for field in list_fields:
+                record[field] = list(source.get(field) or [])
+            record["metadata_record_count"] = 1
+            record["metadata_conflicts"] = {}
+            unique[key] = record
+            continue
+
+        duplicate_count += 1
+        record = unique[key]
+        record["metadata_record_count"] += 1
+        for field in list_fields:
+            record[field] = sorted(
+                set(record.get(field, [])) | set(source.get(field, []) or []),
+                key=str.casefold,
+            )
+        for field in scalar_fields:
+            existing = record.get(field)
+            incoming = source.get(field)
+            if existing and incoming and existing != incoming:
+                conflict = set(record["metadata_conflicts"].get(field, []))
+                conflict.update((existing, incoming))
+                record["metadata_conflicts"][field] = sorted(conflict, key=str.casefold)
+            elif incoming and not existing:
+                record[field] = incoming
+
+    for record in unique.values():
+        if record["metadata_conflicts"]:
+            record["status"] = "CONFLICTING_DISTRIBUTION_METADATA_REQUIRES_REVIEW"
+        elif record.get("license_expression"):
+            record["status"] = "SPDX_EXPRESSION_DECLARED"
+        elif record.get("license_text"):
+            record["status"] = "RAW_LICENSE_FIELD_REQUIRES_REVIEW"
+        elif record.get("license_classifiers"):
+            record["status"] = "LICENSE_CLASSIFIERS_ONLY_REQUIRES_REVIEW"
+        elif record.get("license_file_names"):
+            record["status"] = "LICENSE_FILES_ONLY_REQUIRES_REVIEW"
+        else:
+            record["status"] = "LICENSE_METADATA_MISSING"
+
+    return list(unique.values()), duplicate_count
+
+
 def build_inventory() -> dict[str, Any]:
-    packages = [_package_record(item) for item in metadata.distributions()]
+    raw_packages = [_package_record(item) for item in metadata.distributions()]
+    packages, duplicate_count = _deduplicate_records(raw_packages)
     packages.sort(key=lambda item: (item["name"].casefold(), item["version"]))
     counts = Counter(item["status"] for item in packages)
     return {
@@ -85,6 +142,7 @@ def build_inventory() -> dict[str, Any]:
         },
         "summary": {
             "package_count": len(packages),
+            "duplicate_metadata_record_count": duplicate_count,
             "license_status_counts": dict(sorted(counts.items())),
             "manual_review_required_count": sum(
                 count for status, count in counts.items()

@@ -8,7 +8,7 @@ Each workflow run publishes the artifact named windows-py312-dependency-license-
 
 - sbom.cdx.json: CycloneDX 1.6 JSON generated from the installed environment, including package identities, dependency relationships, and license metadata where the installed distributions declare it.
 - resolved-dependencies.txt: exact package versions reported by pip freeze --all.
-- python-license-audit.json: raw distribution metadata, version, dependency declarations, license expression/text/classifiers, and names of packaged license/notice files.
+- python-license-audit.json: raw distribution metadata, version, dependency declarations, license expression/text/classifiers, and names of packaged license/notice files. Duplicate editable-install metadata records are deduplicated by normalized package name and version; the count remains visible in the summary, and conflicting declarations are flagged.
 
 ## Interpreting the license report
 
