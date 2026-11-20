@@ -1305,7 +1305,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             if source_bbox is None and bbox is not None and not bbox_is_normalized:
                 source_bbox = bbox
             bbox_coordinate_space = panel.get("bbox_coordinate_space")
-            if not bbox_coordinate_space:
+            if explicit_normalized_bbox_invalid:
+                bbox_coordinate_space = "INVALID_NORMALIZED_BBOX"
+            elif not bbox_coordinate_space:
                 bbox_coordinate_space = (
                     "NORMALIZED_0_1" if bbox_is_normalized
                     else "UNSPECIFIED_SOURCE_COORDINATES" if bbox is not None
