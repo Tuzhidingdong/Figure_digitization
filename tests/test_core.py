@@ -2601,3 +2601,30 @@ def test_calibrated_qc_thresholds_reject_invalid_numeric_ranges(tmp_path: Path):
     path.write_text(json.dumps(config), encoding="utf-8")
     with pytest.raises(ValueError, match="outside its permitted range"):
         load_thresholds(path)
+
+
+def test_qc_reports_panel_segmentation_state_separately_from_chart_family():
+    from scientific_figure_data.qc import build_series_qc_report
+
+    series = make_series("segmentation-series", "segmentation-measurement", "battery")
+    panel = {
+        "bbox": None,
+        "segmentation_status": "WHOLE_FIGURE_NOT_SEGMENTED",
+        "segmentation_provenance": "SINGLE_PANEL_FALLBACK",
+        "bbox_provenance": "NOT_PROVIDED",
+        "segmentation_confidence": None,
+        "segmentation_confidence_status": "NOT_CALIBRATED",
+    }
+
+    report = build_series_qc_report(series, panel)
+
+    assert report["panel_segmentation"] == {
+        "status": "WHOLE_FIGURE_NOT_SEGMENTED",
+        "provenance": "SINGLE_PANEL_FALLBACK",
+        "bbox_provenance": "NOT_PROVIDED",
+        "boundary_present": False,
+        "confidence": None,
+        "confidence_status": "NOT_CALIBRATED",
+    }
+    assert report["components"]["panel_segmentation"] == "UNKNOWN"
+    assert report["components"]["chart_family"] == "UNKNOWN"

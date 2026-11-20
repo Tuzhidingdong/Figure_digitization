@@ -237,6 +237,19 @@ def build_series_qc_report(series: Any, panel: dict | None = None,
         else "NO_CONVERSION_CLAIMED"
     )
 
+    segmentation_confidence = _number(panel.get("segmentation_confidence"))
+    segmentation = {
+        "status": panel.get("segmentation_status") or "UNKNOWN",
+        "provenance": panel.get("segmentation_provenance") or "UNKNOWN",
+        "bbox_provenance": panel.get("bbox_provenance") or "NOT_PROVIDED",
+        "boundary_present": panel.get("bbox") is not None,
+        "confidence": segmentation_confidence,
+        "confidence_status": panel.get(
+            "segmentation_confidence_status",
+            "PROVIDED_UNCALIBRATED" if segmentation_confidence is not None else "NOT_CALIBRATED",
+        ),
+    }
+
     components = {
         "panel_segmentation": (
             "BOUNDARY_EVIDENCE_PRESENT" if panel.get("bbox") is not None else "UNKNOWN"
@@ -284,6 +297,7 @@ def build_series_qc_report(series: Any, panel: dict | None = None,
         "status": "PROVISIONAL_UNCALIBRATED",
         "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
         "components": components,
+        "panel_segmentation": segmentation,
         "axes": {"x": x_axis, "y": y_axis},
         "trace_metrics": {
             "point_count": point_count,
