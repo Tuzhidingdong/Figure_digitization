@@ -1130,6 +1130,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         panel_path, evidence_image,
                         expected_sha256=figure.get("source_image_asset_sha256"),
                     )
+                    if saved_crop is None:
+                        figure["source_asset_status"] = "COPY_FAILED_OR_HASH_CHANGED_AFTER_INVENTORY"
+                        source_figure["image_asset_status"] = (
+                            "COPY_FAILED_OR_HASH_CHANGED_AFTER_INVENTORY"
+                        )
             if (
                 saved_crop is None
                 and pdf_path

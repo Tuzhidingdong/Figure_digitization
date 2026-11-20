@@ -297,3 +297,49 @@ def test_explicit_panel_geometry_retains_source_normalized_and_provenance_fields
     assert panel["bbox_provenance"] == "UPSTREAM_ANNOTATION"
     assert panel["segmentation_confidence"] == 0.92
     assert panel["segmentation_provenance"] == "HUMAN_ANNOTATION"
+
+
+
+
+def test_main_pdf_changed_after_snapshot_is_not_used_as_verified_source(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root, package, source_pdf, _ = _make_chem_literature_package(tmp_path)
+    snapshot = snapshot_paper(package, input_root)
+    source_pdf.write_bytes(b"%PDF-1.7\nmutated after snapshot\n")
+
+    result = process_paper(
+        input_root,
+        Path("10.1000_demo/01_preprocessing"),
+        tmp_path / "downstream-pdf-race",
+        options={"memory_limit_mb": 0, "temp_disk_limit_mb": 0},
+        input_snapshot=snapshot,
+    )
+
+    assert result["job_state"] == "NEEDS_REVIEW"
+    assert result["snapshot"]["external_sources"][0]["status"] == "CHANGED_AFTER_SNAPSHOT"
+    assert "MAIN_PDF_CHANGED_OR_UNAVAILABLE_AFTER_SNAPSHOT" in result["snapshot"]["warnings"]
+    assert result["figures"][0]["source_pdf_integrity_status"] == "CHANGED_AFTER_SNAPSHOT"
+    assert result["figures"][0]["source_pdf_integrity_status"] != "HASH_VERIFIED"
+
+
+def test_source_figure_asset_changed_after_snapshot_is_not_copied(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root, package, _, image_relative = _make_chem_literature_package(tmp_path)
+    snapshot = snapshot_paper(package, input_root)
+    (package / image_relative).write_bytes(b"mutated after snapshot")
+    output_root = tmp_path / "downstream-image-race"
+
+    result = process_paper(
+        input_root,
+        Path("10.1000_demo/01_preprocessing"),
+        output_root,
+        options={"memory_limit_mb": 0, "temp_disk_limit_mb": 0},
+        input_snapshot=snapshot,
+    )
+
+    evidence = output_root / "papers" / result["snapshot"]["paper_id"] / "evidence"
+    assert not evidence.exists() or not list(evidence.glob("MAIN_FIG_P1_01_1.*"))
+    assert result["figures"][0]["source_asset_status"] == "HASH_MISMATCH"
+    assert result["job_state"] == "NEEDS_REVIEW"
