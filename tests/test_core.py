@@ -2736,7 +2736,10 @@ def test_dimensional_standardization_rejects_non_finite_values(value):
 
 def test_export_compatibility_warnings_include_explicit_pfas_metric_guard():
     from scientific_figure_data.exporter import _series_compatibility_warnings
+    from scientific_figure_data.semantics import pfas_metric_warning
 
+    expected = pfas_metric_warning("parent_removal", "defluorination")
+    assert expected is not None
     record = {
         "domain": "pfas", "technique": "parent_compound_time",
         "qc_status": "CALIBRATED", "review_state": "REVIEWED_ACCEPTED",
@@ -2753,7 +2756,7 @@ def test_export_compatibility_warnings_include_explicit_pfas_metric_guard():
 
     warnings = _series_compatibility_warnings(record, associations, metadata)
 
-    assert warnings == ["PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"]
+    assert warnings == [expected]
 
 
 def test_series_override_preserves_explicit_measurement_semantics():
