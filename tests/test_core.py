@@ -153,6 +153,8 @@ def test_reference_scale_never_guesses_missing_conditions():
     resolved = resolve_reference_scale(0.25, "test-scale", details)
     assert resolved["status"] == "CONVERTED_WITH_EXPLICIT_EVIDENCE"
     assert resolved["value"] == 0.45
+    with pytest.raises(ValueError, match="must be finite"):
+        resolve_reference_scale(0.25, "RHE", {**details, "offset_v": float("nan")})
 
 
 def test_units_battery_comparability_and_pfas_metrics_are_conservative():
@@ -164,7 +166,20 @@ def test_units_battery_comparability_and_pfas_metrics_are_conservative():
          "current_density_basis": "mass", "cycling_protocol": "1C"},
     )
     assert not compatible and mismatches == ["capacity_basis"]
+    unresolved, unresolved_fields = comparable_battery_records({}, {})
+    assert not unresolved
+    assert unresolved_fields == [
+        "capacity_basis:UNRESOLVED", "cell_scope:UNRESOLVED",
+        "current_density_basis:UNRESOLVED", "cycling_protocol:UNRESOLVED",
+    ]
+    assert comparable_battery_records(
+        {"capacity_basis": "Gravimetric", "cell_scope": "full_cell",
+         "current_density_basis": "mass", "cycling_protocol": "1C"},
+        {"capacity_basis": "gravimetric", "cell_scope": "FULL_CELL",
+         "current_density_basis": "mass", "cycling_protocol": "1C"},
+    )[0]
     assert pfas_metric_warning("parent_removal", "defluorination") == "PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"
+    assert pfas_metric_warning(None, "defluorination") == "PFAS_METRIC_UNRESOLVED"
     assert preserve_censored_value("<LOQ")["numeric_value"] is None
     assert preserve_censored_value("<0.1 mg/L")["limit_value"] == 0.1
     assert preserve_censored_value("<0.1 mg/L")["numeric_value"] is None

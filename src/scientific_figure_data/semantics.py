@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 UNIT_FACTORS = {
     ("s", "min"): 1 / 60, ("min", "s"): 60,
     ("min", "h"): 1 / 60, ("h", "min"): 60,
@@ -30,10 +32,16 @@ def resolve_reference_scale(value: float, target_scale: str, details: dict) -> d
                 "missing_conditions": missing, "original_value": float(value)}
     factor = float(details["scale_factor"])
     offset = float(details["offset_v"])
+    original = float(value)
+    if not math.isfinite(original) or not math.isfinite(factor) or not math.isfinite(offset):
+        raise ValueError("Reference conversion value, scale_factor and offset_v must be finite")
     if factor == 0:
         raise ValueError("Reference conversion scale_factor cannot be zero")
+    converted = original * factor + offset
+    if not math.isfinite(converted):
+        raise ValueError("Reference conversion produced a non-finite value")
     return {
-        "value": float(value) * factor + offset,
+        "value": converted,
         "status": "CONVERTED_WITH_EXPLICIT_EVIDENCE",
         "target_scale": target_scale,
         "formula_id": details["formula_id"],
@@ -43,16 +51,30 @@ def resolve_reference_scale(value: float, target_scale: str, details: dict) -> d
 
 
 def comparable_battery_records(a: dict, b: dict) -> tuple[bool, list[str]]:
+    """Return comparable only when every required basis is explicit and equal."""
     keys = ("capacity_basis", "cell_scope", "current_density_basis", "cycling_protocol")
-    mismatches = [key for key in keys if a.get(key) != b.get(key)]
+    mismatches = []
+    for key in keys:
+        value_a = a.get(key)
+        value_b = b.get(key)
+        if value_a in (None, "") or value_b in (None, ""):
+            mismatches.append(f"{key}:UNRESOLVED")
+        elif str(value_a).strip().casefold() != str(value_b).strip().casefold():
+            mismatches.append(key)
     return not mismatches, mismatches
 
 
-def pfas_metric_warning(metric_a: str, metric_b: str) -> str | None:
+def pfas_metric_warning(metric_a: str | None, metric_b: str | None) -> str | None:
     distinct = {"parent_removal", "defluorination", "mineralization", "fluoride_release",
                 "total_fluorine", "organic_fluorine"}
-    if metric_a in distinct and metric_b in distinct and metric_a != metric_b:
+    if not metric_a or not metric_b:
+        return "PFAS_METRIC_UNRESOLVED"
+    left = metric_a.strip().casefold()
+    right = metric_b.strip().casefold()
+    if left in distinct and right in distinct and left != right:
         return "PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"
+    if left != right:
+        return "PFAS_METRIC_COMPARABILITY_NOT_ESTABLISHED"
     return None
 
 
