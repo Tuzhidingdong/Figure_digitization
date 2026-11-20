@@ -19,4 +19,6 @@ This project keeps the core runtime dependency-light. Optional packages are not 
 
 OpenCV is not currently an active dependency. This table is a preliminary engineering inventory, not legal advice or a substitute for scanning the exact resolved dependency tree and binary wheels used for a release.
 
-Before distribution, generate a machine-readable SBOM and preserve all notices from the exact locked package versions. No OCR weights are bundled by this repository.
+The **Dependency and License Inventory** GitHub Actions workflow builds an inventory from the actual Windows/Python 3.12 environment with all declared extras installed. It publishes three artifacts: a CycloneDX 1.6 JSON SBOM, an exact pip-freeze snapshot, and a package-metadata license report (raw License / License-Expression fields, license classifiers, and packaged license-file names). The report separates declared SPDX expressions from raw text, classifier-only declarations, license-file-only packages, and packages with no license metadata.
+
+These generated files are evidence for review, not legal approval. The workflow does not validate whether a declared license is compatible with this project, does not inspect every license text bundled inside native wheels, and does not inventory OCR model weights downloaded separately from Python packages. Before distribution, resolve all missing/ambiguous metadata, inspect bundled notices and model terms, and preserve notices from the exact selected package set. No OCR weights are bundled by this repository.

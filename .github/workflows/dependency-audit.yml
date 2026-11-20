@@ -1,0 +1,44 @@
+name: Dependency and License Inventory
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    name: Windows Python 3.12 dependency inventory
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install all declared extras and pinned SBOM generator
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[pdf,images,ocr,pdf-spike,dev]"
+          python -m pip install cyclonedx-bom==7.5.0
+          python -m pip check
+      - name: Generate resolved environment, CycloneDX SBOM, and license metadata audit
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          python -m pip freeze --all | Set-Content -Path artifacts\resolved-dependencies.txt -Encoding utf8
+          cyclonedx-py environment --spec-version 1.6 --output-format JSON --output-reproducible --output-file artifacts\sbom.cdx.json
+          python scripts/audit_dependency_licenses.py --output artifacts\python-license-audit.json
+      - name: Upload dependency inventory artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-py312-dependency-license-inventory
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
