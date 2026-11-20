@@ -433,8 +433,10 @@ class Catalog:
         condition = filters.get("condition")
         if condition:
             sql += """ AND EXISTS (SELECT 1 FROM conditions c
-                      WHERE c.measurement_id=s.measurement_id AND lower(c.name) LIKE ?)"""
-            args.append(f"%{condition.casefold()}%")
+                      WHERE c.measurement_id=s.measurement_id
+                      AND (lower(c.name) LIKE ? OR lower(c.value_json) LIKE ?))"""
+            needle = f"%{condition.casefold()}%"
+            args.extend((needle, needle))
         sql += " ORDER BY s.paper_id,s.figure_id,s.panel_id,s.series_id"
         if limit is not None:
             sql += " LIMIT ?"

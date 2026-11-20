@@ -2834,3 +2834,24 @@ def test_scheduler_isolates_snapshot_preflight_failure_and_continues_corpus(
     assert report["failed"] == 1
     assert report["completed_with_review"] == 1
     ledger.close()
+
+
+
+
+def test_condition_query_matches_both_condition_name_and_value(tmp_path: Path):
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    with catalog.con:
+        catalog.con.execute(
+            "UPDATE conditions SET value_json=? WHERE name='temperature'",
+            (json.dumps({"value": 298.15, "unit": "K"}),),
+        )
+
+    by_name = catalog.query_series({"condition": "temperature"})
+    by_value = catalog.query_series({"condition": "298.15"})
+    by_unit = catalog.query_series({"condition": "K"})
+
+    assert [row["series_id"] for row in by_name] == ["series-b"]
+    assert [row["series_id"] for row in by_value] == ["series-b"]
+    assert [row["series_id"] for row in by_unit] == ["series-b"]
+    catalog.close()
