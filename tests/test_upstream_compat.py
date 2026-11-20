@@ -164,3 +164,32 @@ def test_unverified_upstream_asset_blocks_source_pdf_bbox_fallback():
     assert _may_use_source_pdf_bbox_fallback(
         {"image_asset_status": "HASH_MISMATCH"}, {"image_path": "manual.png"}
     )
+
+
+def test_validate_rechecks_external_main_pdf_hash_through_upstream_reference(tmp_path: Path):
+    from scientific_figure_data.cli import _validate_external_sources
+
+    input_root, package, source_pdf, _ = _make_chem_literature_package(tmp_path)
+    snapshot = snapshot_paper(package, input_root)
+    snapshot_data = snapshot.to_dict()
+
+    assert _validate_external_sources(input_root, snapshot_data, "paper_manifest") == []
+
+    source_pdf.write_bytes(b"%PDF-1.7\nmutated after scan\n")
+    errors = _validate_external_sources(input_root, snapshot_data, "paper_manifest")
+
+    assert "external MAIN PDF SHA256 changed" in "\n".join(errors)
+    assert "does not match evidence_index SHA256" in "\n".join(errors)
+
+
+def test_validate_flags_unaccepted_external_main_pdf_integrity_state(tmp_path: Path):
+    from scientific_figure_data.cli import _validate_external_sources
+
+    input_root, package, _, _ = _make_chem_literature_package(tmp_path)
+    snapshot = snapshot_paper(package, input_root)
+    snapshot_data = snapshot.to_dict()
+    snapshot_data["external_sources"][0]["status"] = "HASH_MISMATCH"
+
+    errors = _validate_external_sources(input_root, snapshot_data, "paper_manifest")
+
+    assert any("was not accepted (HASH_MISMATCH)" in error for error in errors)

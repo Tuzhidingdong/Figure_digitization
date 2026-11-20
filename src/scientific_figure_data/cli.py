@@ -346,6 +346,122 @@ def _rebuild(args) -> int:
     return 0
 
 
+def _validate_external_sources(
+    input_root: Path, snapshot_data: dict, source_label: str,
+) -> list[str]:
+    """Recheck external upstream references without serializing their absolute paths."""
+    errors: list[str] = []
+    external_sources = snapshot_data.get("external_sources", [])
+    if not isinstance(external_sources, list):
+        return [f"{source_label}: external_sources must be a list"]
+
+    root = input_root.resolve()
+    source_dir_value = snapshot_data.get("source_dir", ".")
+    paper_dir = (root / str(source_dir_value)).resolve()
+    try:
+        paper_dir.relative_to(root)
+    except ValueError:
+        return [f"{source_label}: unsafe paper source_dir for external-source validation"]
+
+    artifacts = snapshot_data.get("artifacts", [])
+    evidence_paths = [
+        (root / item["path"]).resolve()
+        for item in artifacts
+        if isinstance(item, dict) and item.get("role") == "evidence_index"
+        and isinstance(item.get("path"), str)
+    ]
+    if not evidence_paths:
+        evidence_paths = [paper_dir / "evidence_index.json"]
+
+    for record in external_sources:
+        if not isinstance(record, dict):
+            errors.append(f"{source_label}: malformed external source record")
+            continue
+        reference = record.get("reference")
+        if reference != "evidence_index.json#/inventory/main_pdf":
+            errors.append(f"{source_label}: unsupported external source reference {reference!r}")
+            continue
+        if record.get("status") not in {
+            "HASH_VERIFIED", "HASH_COMPUTED_NO_EXPECTED_SHA256",
+        }:
+            errors.append(
+                f"{source_label}: external MAIN PDF was not accepted "
+                f"({record.get('status', 'UNKNOWN')})"
+            )
+            continue
+
+        payload = None
+        for evidence_path in evidence_paths:
+            try:
+                evidence_path.relative_to(root)
+            except ValueError:
+                errors.append(f"{source_label}: unsafe evidence_index path")
+                continue
+            try:
+                with evidence_path.open("r", encoding="utf-8-sig") as stream:
+                    value = json.load(stream)
+                if isinstance(value, dict):
+                    payload = value
+                    break
+            except (OSError, ValueError):
+                continue
+        if payload is None:
+            errors.append(f"{source_label}: evidence_index unavailable for external MAIN PDF check")
+            continue
+
+        inventory = payload.get("inventory")
+        entry = inventory.get("main_pdf") if isinstance(inventory, dict) else None
+        raw_path = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            errors.append(f"{source_label}: evidence_index MAIN PDF path missing")
+            continue
+
+        declared = Path(raw_path).expanduser()
+        if declared.is_absolute():
+            candidate = declared.resolve()
+        else:
+            candidates = [(paper_dir / declared).resolve(), (root / declared).resolve()]
+            candidate = None
+            for item in candidates:
+                try:
+                    item.relative_to(paper_dir)
+                    candidate = item
+                    break
+                except ValueError:
+                    try:
+                        item.relative_to(root)
+                        candidate = item
+                        break
+                    except ValueError:
+                        continue
+            if candidate is None:
+                errors.append(f"{source_label}: relative external MAIN PDF path escapes input tree")
+                continue
+
+        if not candidate.is_file():
+            errors.append(f"{source_label}: external MAIN PDF missing: {candidate}")
+            continue
+        expected_snapshot_hash = str(record.get("sha256") or "").strip().lower()
+        expected_index_hash = str(entry.get("sha256") or "").strip().lower()
+        recorded_expected = str(record.get("expected_sha256") or "").strip().lower()
+        if recorded_expected and expected_index_hash != recorded_expected:
+            errors.append(f"{source_label}: evidence_index MAIN PDF SHA256 declaration changed")
+            continue
+        try:
+            actual_hash = sha256_file(candidate)
+        except OSError as exc:
+            errors.append(
+                f"{source_label}: external MAIN PDF unreadable "
+                f"({type(exc).__name__})"
+            )
+            continue
+        if expected_snapshot_hash and actual_hash != expected_snapshot_hash:
+            errors.append(f"{source_label}: external MAIN PDF SHA256 changed")
+        if expected_index_hash and actual_hash != expected_index_hash:
+            errors.append(f"{source_label}: external MAIN PDF does not match evidence_index SHA256")
+    return errors
+
+
 def _validate(args) -> int:
     root = args.output_root
     errors = []
@@ -398,6 +514,9 @@ def _validate(args) -> int:
                             errors.append(f"{source}: upstream source missing")
                         elif sha256_file(source) != expected:
                             errors.append(f"{source}: upstream SHA256 changed")
+                    errors.extend(_validate_external_sources(
+                        args.input_root, data, str(manifest_path)
+                    ))
                 except Exception as exc:
                     errors.append(f"{manifest_path}: {type(exc).__name__}: {exc}")
     if args.input_root:
