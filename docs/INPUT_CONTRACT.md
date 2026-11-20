@@ -85,3 +85,12 @@ MAIN figure crops are linked from evidence_index.json media_assets to figures by
 
 
 When an upstream evidence index declares a figure asset but it is missing, ambiguous, unreadable, or fails SHA256 validation, the figure is marked with an asset status and routed to review. The pipeline does not use the evidence index figure bbox as a fallback crop because it may describe only the caption. The page-level PDF evidence remains available for manual review.
+
+
+## Source-image and panel-geometry provenance
+
+A figure image linked from an upstream evidence index is used only when its exact figure/document-type association is unique and its SHA256 matches. The downstream worker rechecks the hash when copying that image into its own `papers/<paper_id>/evidence/` folder. It records the original relative upstream path and image hash, but does not modify the upstream file. If the source changes between inventory and copy, the copy is rejected and the figure remains for review. The offline review helper reads the downstream evidence copy, not a path outside the selected paper-output folder.
+
+An untyped Figure-level bbox in an evidence index is preserved as source metadata, but is not assumed to be a Panel boundary or plot-area crop. Panel records separately preserve the original source bbox, an explicit or safely recognized normalized bbox, coordinate-space label, bbox provenance, segmentation provenance/status, and segmentation-confidence status. When only a whole-figure fallback exists, the record states that panel segmentation was not performed rather than fabricating a boundary.
+
+The MAIN PDF is hash-checked when the input snapshot is created and again immediately before worker use. If its content changes between those two points, the worker does not open it using the old snapshot identity; the paper is retained with a `CHANGED_AFTER_SNAPSHOT` provenance status and routed to `NEEDS_REVIEW`. The original snapshot fingerprint is retained so a subsequent scan can detect and reprocess the changed input.
