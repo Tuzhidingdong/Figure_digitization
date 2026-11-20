@@ -66,7 +66,12 @@ def _extract_version_marker(payload: object, depth: int = 0) -> str | None:
     for key in priority:
         value = payload.get(key)
         if isinstance(value, (str, int, float)) and str(value).strip():
-            return str(value).strip()
+            marker = str(value).strip()
+            if key in {"version", "producer_version", "tool_version"}:
+                name = payload.get("name") or payload.get("id")
+                if isinstance(name, str) and name.strip():
+                    return f"{name.strip()} {marker}"
+            return marker
         if isinstance(value, dict):
             nested = value.get("version")
             if isinstance(nested, (str, int, float)) and str(nested).strip():
