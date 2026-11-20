@@ -287,11 +287,11 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     with catalog.con:
         catalog.con.execute(
             "INSERT INTO entities(entity_id,canonical_name,entity_type,domain,aliases_json,evidence_json) VALUES(?,?,?,?,?,?)",
-            ("sample-a", "Sample A", "material", "battery", '["A"]', '{"source":"legend"}'),
+            ("paper-1__sample-a", "Sample A", "material", "battery", '["A"]', '{"source":"legend"}'),
         )
         catalog.con.execute(
             "INSERT INTO series_subject_links(series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope) VALUES(?,?,?,?,?,?)",
-            ("series-a", "sample-a", "tested_material", '{"source":"legend","page":2}', "ASSIGNED_WITH_EVIDENCE"),
+            ("series-a", "paper-1__sample-a", "tested_material", '{"source":"legend","page":2}', "ASSIGNED_WITH_EVIDENCE", "PAPER"),
         )
     output = tmp_path / "ml-export"
     manifest = export_dataset(
