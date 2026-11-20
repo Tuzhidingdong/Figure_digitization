@@ -125,6 +125,13 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 ## Engineering log
 
+### 2026-11-20 — Incremental context cache and cross-platform verification
+
+- Added content-fingerprinted reuse of per-paper context indexes. Unchanged MAIN/SI/table text reuses the prior JSON/SQLite context index; changed inputs rebuild the index. Rebuilds write to a temporary SQLite database and atomically replace the active cache only after closing the DB handle.
+- Added a regression test for unchanged cache reuse and changed-source invalidation, including the disk-backed SQLite path.
+- Fixed Windows SQLite file replacement by explicitly closing validation/search connections. A first CI attempt exposed this Windows-specific handle behavior; the corrected source passed.
+- Windows CI #157 passed all 60 regression tests, compileall and Ruff on Python 3.11, 3.12 and 3.13.
+
 ### 2026-11-20 — Failure recovery and disk-pressure protection
 
 - Added deterministic fault-injection coverage for a BrokenProcessPool worker crash followed by recovery, finite retry exhaustion, and review rollback after the SQLite transaction is forced to fail. The rollback test verifies byte-identical restoration of digitization.json, panel_series.csv and paper_bundle.json, and no catalog commit.
@@ -163,8 +170,7 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 ## Latest verification — 2026-11-20
 
-- The current source is expected to contain 59 regression tests after the new source-immutability fixture is added; the latest completed CI #152 verified 58 tests before that final test addition.
-- Windows CI run #152 passed on Windows Python 3.11, 3.12 and 3.13. Each runner passed package installation, compileall, Ruff (imports/undefined names), and the full pytest suite (58 tests).
+- The current source contains 60 regression tests. Windows CI #157 passed package installation, compileall, Ruff (imports/undefined names), and all 60 tests on Python 3.11, 3.12 and 3.13.
 - The four failures from runs #142/#143 were fixed:
   1. OCR tick extraction now accepts an explicit absolute pixel Plot Box even when the caller supplies OCR rows without a source image; normalized boxes still require image dimensions.
   2. Review-axis test expectations now match the source pixels and pixel-to-value slopes; untouched Series values are asserted unchanged.
