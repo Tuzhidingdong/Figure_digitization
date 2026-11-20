@@ -29,12 +29,12 @@ No GPU or LLM is required. OCR is optional and is not installed by the default p
 ## Quick start
 
     sfd scan --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS --output-root PATH_TO_SFD_DATA
-    sfd run --all --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS --output-root PATH_TO_SFD_DATA --workers 1 --min-free-disk-mb 256
+    sfd run --all --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS --output-root PATH_TO_SFD_DATA --workers 1 --temp-disk-limit 2048 --min-free-disk-mb 256 --min-free-memory-mb 512
     sfd status --output-root PATH_TO_SFD_DATA
     sfd query --output-root PATH_TO_SFD_DATA --technique CV
     sfd export --output-root PATH_TO_SFD_DATA --format csv --out ml-export
 
-Use --dry-run before a first corpus run. Existing upstream files are read-only. The output root should be a separate directory.
+Use --dry-run before a first corpus run. Existing upstream files are read-only. Input and output roots must be disjoint: neither directory may contain the other. The CLI and direct scheduler API reject same-root, nested-output, and ancestor-output layouts before writing.
 
 ## Commands
 
@@ -42,7 +42,7 @@ Use --dry-run before a first corpus run. Existing upstream files are read-only. 
 - run: process eligible papers, with --resume, --failed-only, --paper-id, --dry-run and resource controls. Resume rechecks input, implementation, profile/QC and bundle fingerprints; intact unchanged papers are skipped before a worker starts.
 - status/report: inspect job state and run metrics.
 - query: filter indexed papers, entities, techniques, and domains.
-- export: produce CSV/JSON plus an export manifest with compatibility warnings.
+- export: produce CSV/JSON plus an export manifest with compatibility warnings. Export schema 1.1 is one row per digitized point and carries paper/figure/panel/series IDs, point order, reconstructed axis values, explicit raw-value copies, units, pixel coordinates, error-bar fields, series-level sample/entity links, experimental conditions, evidence/QC/review provenance and comparability warnings. JSON retains numeric types; CSV follows text-cell semantics. Standardization is explicitly `NOT_PERFORMED` and compatibility is `NOT_HARMONIZED`—the exporter never silently converts or merges units, reference scales, capacity bases, cell scopes, or PFAS metrics.
 - review list: find review-required series.
 - review apply --patch PATCH_PATH: apply a hash-matched review patch as a new version.
 - index rebuild: recreate SQLite from canonical paper artifacts.
@@ -52,7 +52,7 @@ Use --dry-run before a first corpus run. Existing upstream files are read-only. 
 
 The default worker count is one. Within a worker, pages and figures are pulled lazily; no internal image queue is created. PDF pages are rendered on demand and released immediately. If multiple workers are explicitly enabled, the scheduler dispatch queue is bounded. Workers write paper-level artifacts and the parent process serializes SQLite writes.
 
-A compact cross-page context index is built from existing main/SI text and extracted tables. Its cache is keyed by source content fingerprints: unchanged inputs reuse the prior JSON/SQLite index, while changed inputs invalidate and rebuild it. Visual resources remain page/figure scoped. If the text context exceeds the in-memory budget, a SQLite-backed lookup is used. Before each new paper is dispatched, the scheduler checks free space on the output filesystem. When free space falls below `--min-free-disk-mb` (default 256 MiB) or available system memory falls below `--min-free-memory-mb` (default 512 MiB), it stops dispatching, lets active work finish, and records the pause reason and observed resource values in `run_report.json`. Use `--resume` after freeing resources; set a threshold to `0` only to disable that guard.
+A compact cross-page context index is built from existing main/SI text and extracted tables. Its cache is keyed by source content fingerprints: unchanged inputs reuse the prior JSON/SQLite index, while changed inputs invalidate and rebuild it. Visual resources remain page/figure scoped. If the text context exceeds the in-memory budget, a SQLite-backed lookup is used. The per-paper `--temp-disk-limit` (default 2048 MiB) bounds the combined evidence/native-evidence and context-index footprint; context-index size is measured once per paper and reused for panel checks. This budget does not include series CSVs, version backups, or the full OS temporary directory. Before each new paper is dispatched, the scheduler checks free space on the output filesystem. When free space falls below `--min-free-disk-mb` (default 256 MiB) or available system memory falls below `--min-free-memory-mb` (default 512 MiB), it stops dispatching, lets active work finish, and records the pause reason and observed resource values in `run_report.json`. Use `--resume` after freeing resources; set a threshold to `0` only to disable that guard.
 
 ## Important limitations
 
@@ -60,7 +60,10 @@ A compact cross-page context index is built from existing main/SI text and extra
 - No real benchmark PDFs are included. The probe reports NO_INPUT_PDFS when no files are supplied.
 - For simple charts, the raster path can provisionally detect a rectangular plot frame and a unique chromatic trace family, then use text/explicit axis anchors. Multiple color families, same-color separated bands, ambiguous frames and branching components route to review. This is a narrow heuristic, not general chart understanding.
 - CV/EIS order is preserved when a trace is explicitly supplied; automatic extraction does not sort paths by X.
+- Series identifiers are namespaced by paper ID, so repeated Figure1/a panel names in different papers do not collide in the global SQLite index.
 - QC defaults are provisional and every such result is labeled PROVISIONAL_UNCALIBRATED.
 - P1/P2 are not claimed complete.
+
+The corpus report records parent/worker CPU time, mean core use, sampled parent-plus-worker peak RSS, free disk and available memory, per-paper evidence/context-index storage, algorithm/profile/QC fingerprints and zero default LLM tokens. Its disk footprint fields are scoped estimates, not full OS temporary-directory accounting or a substitute for target-PC profiling.
 
 See docs/ for the input contract, storage model, backend spike protocol, and Windows usage. See STATUS.md for implementation and acceptance evidence.

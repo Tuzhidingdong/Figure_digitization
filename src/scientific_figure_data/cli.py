@@ -49,7 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--lease-seconds", type=int, default=180)
     run.add_argument("--memory-limit", type=int, default=2048, help="soft per-process memory budget in MiB")
     run.add_argument("--render-scale", type=float, default=1.5)
-    run.add_argument("--temp-disk-limit", type=int, default=2048)
+    run.add_argument("--temp-disk-limit", type=int, default=2048,
+                     help="per-paper evidence + context-index disk budget in MiB; 0 disables the budget")
     run.add_argument("--min-free-disk-mb", type=int, default=256,
                      help="pause new paper dispatch when free disk space falls below this threshold; 0 disables the guard")
     run.add_argument("--min-free-memory-mb", type=int, default=512,
