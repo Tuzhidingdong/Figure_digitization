@@ -107,14 +107,31 @@ $startedAt = Get-Date
 $outputBytesAtStart = Get-DirectoryBytes $outputPath
 $freeDiskAtStart = Get-VolumeFreeBytes $outputPath
 $freeMemoryAtStart = Get-SystemMemoryBytes
-$process = Start-Process -FilePath $resolvedCommand -ArgumentList $argumentLine -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
+$tempBase = if ($previousTemp) { $previousTemp } else { [IO.Path]::GetTempPath() }
+$benchmarkTempRoot = Join-Path $tempBase "sfd-resource-benchmark-$stamp"
+New-Item -ItemType Directory -Path $benchmarkTempRoot -Force | Out-Null
+$temporaryBytesAtStart = Get-DirectoryBytes $benchmarkTempRoot
+$temporaryFreeDiskAtStart = Get-VolumeFreeBytes $benchmarkTempRoot
+try {
+    # The sfd child process and its descendants inherit this isolated temp location.
+    $env:TEMP = $benchmarkTempRoot
+    $env:TMP = $benchmarkTempRoot
+    $process = Start-Process -FilePath $resolvedCommand -ArgumentList $argumentLine -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+} finally {
+    if ($null -eq $previousTemp) { Remove-Item Env:TEMP -ErrorAction SilentlyContinue } else { $env:TEMP = $previousTemp }
+    if ($null -eq $previousTmp) { Remove-Item Env:TMP -ErrorAction SilentlyContinue } else { $env:TMP = $previousTmp }
+}
 
 $peakWorkingSetBytes = [Int64]0
 $minimumFreeDiskBytes = $freeDiskAtStart
+$minimumTemporaryFreeDiskBytes = $temporaryFreeDiskAtStart
 $minimumFreeMemoryBytes = $freeMemoryAtStart
 $cpuByPid = @{}
 $observedPids = New-Object 'System.Collections.Generic.HashSet[int]'
 $outputBytesPeak = $outputBytesAtStart
+$temporaryBytesPeak = $temporaryBytesAtStart
 $sampleCount = 0
 
 while (-not $process.HasExited) {
@@ -142,6 +159,11 @@ while (-not $process.HasExited) {
         ($null -eq $minimumFreeDiskBytes -or $freeDisk -lt $minimumFreeDiskBytes)) {
         $minimumFreeDiskBytes = $freeDisk
     }
+    $temporaryFreeDisk = Get-VolumeFreeBytes $benchmarkTempRoot
+    if ($null -ne $temporaryFreeDisk -and
+        ($null -eq $minimumTemporaryFreeDiskBytes -or $temporaryFreeDisk -lt $minimumTemporaryFreeDiskBytes)) {
+        $minimumTemporaryFreeDiskBytes = $temporaryFreeDisk
+    }
     $freeMemory = Get-SystemMemoryBytes
     if ($null -ne $freeMemory -and
         ($null -eq $minimumFreeMemoryBytes -or $freeMemory -lt $minimumFreeMemoryBytes)) {
@@ -152,6 +174,8 @@ while (-not $process.HasExited) {
     if (($sampleCount % 5) -eq 0) {
         $outputBytes = Get-DirectoryBytes $outputPath
         if ($outputBytes -gt $outputBytesPeak) { $outputBytesPeak = $outputBytes }
+        $temporaryBytes = Get-DirectoryBytes $benchmarkTempRoot
+        if ($temporaryBytes -gt $temporaryBytesPeak) { $temporaryBytesPeak = $temporaryBytes }
     }
     Start-Sleep -Seconds $SampleIntervalSeconds
     $process.Refresh()
@@ -161,6 +185,9 @@ $endedAt = Get-Date
 $outputBytesAtEnd = Get-DirectoryBytes $outputPath
 if ($outputBytesAtEnd -gt $outputBytesPeak) { $outputBytesPeak = $outputBytesAtEnd }
 $freeDiskAtEnd = Get-VolumeFreeBytes $outputPath
+$temporaryBytesAtEnd = Get-DirectoryBytes $benchmarkTempRoot
+if ($temporaryBytesAtEnd -gt $temporaryBytesPeak) { $temporaryBytesPeak = $temporaryBytesAtEnd }
+$temporaryFreeDiskAtEnd = Get-VolumeFreeBytes $benchmarkTempRoot
 $freeMemoryAtEnd = Get-SystemMemoryBytes
 $elapsedSeconds = [Math]::Max(0.001, ($endedAt - $startedAt).TotalSeconds)
 $cpuSeconds = [double](($cpuByPid.Values | Measure-Object -Sum).Sum)
@@ -196,6 +223,13 @@ $result = [ordered]@{
     free_disk_bytes_at_start = $freeDiskAtStart
     minimum_free_disk_bytes_observed = $minimumFreeDiskBytes
     free_disk_bytes_at_end = $freeDiskAtEnd
+    isolated_temp_directory = $benchmarkTempRoot
+    temporary_directory_bytes_at_start = $temporaryBytesAtStart
+    temporary_directory_bytes_peak_sampled = $temporaryBytesPeak
+    temporary_directory_bytes_at_end = $temporaryBytesAtEnd
+    temporary_volume_free_bytes_at_start = $temporaryFreeDiskAtStart
+    minimum_temporary_volume_free_bytes_observed = $minimumTemporaryFreeDiskBytes
+    temporary_volume_free_bytes_at_end = $temporaryFreeDiskAtEnd
     output_directory_bytes_at_start = $outputBytesAtStart
     output_directory_bytes_peak_sampled = $outputBytesPeak
     output_directory_bytes_at_end = $outputBytesAtEnd
@@ -208,7 +242,9 @@ $result = [ordered]@{
     pipeline_run_report = $pipelineReport
     measurement_notes = @(
         "Process-tree RSS is sampled; very short-lived spikes between samples may be missed.",
-        "Output directory bytes are sampled; this is not OS temporary-directory peak usage.",
+        "Output-directory bytes are sampled separately from the isolated TEMP/TMP directory.",
+        "The isolated TEMP/TMP directory is retained for inspection and is not automatically deleted.",
+        "Temporary-directory byte counts are sampled and may miss very short-lived peaks.",
         "The embedded run_report.json supplies per-paper and scheduler resource telemetry.",
         "This is a local engineering measurement, not scientific extraction-accuracy evidence."
     )
