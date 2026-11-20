@@ -27,6 +27,8 @@ The query CLI supports filters for paper_id, technique, domain, entity_id, serie
 
 ## Export
 
-Exports contain a data file and export_manifest.json. The manifest describes filters, schema version, source artifact references, QC/review state, and comparability warnings. The MVP exports one row per series point and includes series metadata columns.
+Exports contain a data file and export_manifest.json. The manifest describes filters, schema version, source artifact references, QC/review state, and comparability warnings. The export uses one row per digitized series point. Each row carries paper/figure/panel/series identity, point index, reconstructed axis values and units, explicit `*_raw` copies, pixel coordinates, available error-bar fields, QC/review/extraction states, source artifact references, series-level subject entity IDs and evidence links, and measurement conditions. Subject links and conditions are JSON columns so each point row remains self-describing; `series_metadata.jsonl` remains a companion audit record.
 
-No automatic harmonization occurs across unresolved reference scales, capacity bases, or scientific metrics. Use filters or exclude unresolved records explicitly.
+`x_value` and `y_value` are reconstructed on the plotted axes. `*_raw` means no subsequent unit/reference-scale normalization has been applied; it does not mean a raw pixel coordinate. `standardization_status` is `NOT_PERFORMED` and `compatibility_status` is `NOT_HARMONIZED`. Pixel coordinates remain separately available. Missing unit, entity, condition, or uncertainty data is not inferred.
+
+No automatic harmonization occurs across unresolved reference scales, capacity bases, cell scopes, analyte metrics, or experimental conditions. The export manifest records this policy and warnings. Use filters or exclude unresolved records explicitly.
