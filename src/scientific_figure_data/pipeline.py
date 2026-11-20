@@ -587,6 +587,14 @@ def _extract_panel(
             relationships.append(relationship)
         if relationships:
             record.metadata["entity_relationships"] = relationships
+        explicit_semantics = definition.get("measurement_semantics")
+        if isinstance(explicit_semantics, dict):
+            record.metadata["measurement_semantics"] = dict(explicit_semantics)
+        explicit_compatibility = definition.get("compatibility_warnings")
+        if isinstance(explicit_compatibility, list):
+            record.metadata["compatibility_warnings"] = [
+                str(item) for item in explicit_compatibility if isinstance(item, str)
+            ]
         classification = classify_chart_family(
             definition.get("technique") or panel.get("technique") or figure.get("technique"),
             definition.get("x_label") or panel.get("x_label"),

@@ -2633,3 +2633,49 @@ def test_qc_reports_panel_segmentation_state_separately_from_chart_family():
     }
     assert report["components"]["panel_segmentation"] == "UNKNOWN"
     assert report["components"]["chart_family"] == "UNKNOWN"
+
+
+
+
+def test_aop_metric_guard_keeps_removal_kinetics_and_mineralization_distinct():
+    from scientific_figure_data.semantics import aop_metric_warning, domain_semantic_warnings
+
+    assert aop_metric_warning("removal_efficiency", "rate_constant") == (
+        "AOP_METRICS_ARE_NOT_INTERCHANGEABLE"
+    )
+    assert domain_semantic_warnings("aop", {}) == ["AOP_METRIC_UNRESOLVED"]
+    assert domain_semantic_warnings(
+        "aop",
+        {"measurement_semantics": {
+            "metric": "parent_concentration",
+            "comparison_target_metric": "mineralization",
+        }},
+    ) == ["AOP_METRICS_ARE_NOT_INTERCHANGEABLE"]
+
+
+def test_pfas_metric_guard_is_applied_to_export_metadata():
+    from scientific_figure_data.semantics import domain_semantic_warnings
+
+    assert domain_semantic_warnings("pfas", {}) == ["PFAS_METRIC_UNRESOLVED"]
+    assert domain_semantic_warnings(
+        "pfas",
+        {"measurement_semantics": {
+            "metric": "parent_removal",
+            "comparison_target_metric": "defluorination",
+        }},
+    ) == ["PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"]
+
+
+def test_battery_capacity_export_requires_explicit_comparability_bases():
+    from scientific_figure_data.semantics import domain_semantic_warnings
+
+    warnings = domain_semantic_warnings(
+        "battery", {"measurement_semantics": {"metric": "specific_capacity"}}
+    )
+
+    assert warnings == [
+        "BATTERY_BASIS_UNRESOLVED:capacity_basis",
+        "BATTERY_BASIS_UNRESOLVED:cell_scope",
+        "BATTERY_BASIS_UNRESOLVED:current_density_basis",
+        "BATTERY_BASIS_UNRESOLVED:cycling_protocol",
+    ]

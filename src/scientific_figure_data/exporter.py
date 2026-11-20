@@ -10,6 +10,7 @@ from typing import Any
 
 from .hashing import atomic_write_json
 from .storage import Catalog
+from .semantics import domain_semantic_warnings
 
 FIELDS = [
     "paper_id", "input_fingerprint", "series_id", "measurement_id", "figure_id", "panel_id",
@@ -80,6 +81,9 @@ def _series_compatibility_warnings(record: dict, associations: dict, metadata: d
         warnings.append("CONDITIONS_NOT_LINKED")
     if "REFERENCE_CONVERSION_UNRESOLVED" in json.dumps(metadata, ensure_ascii=False):
         warnings.append("REFERENCE_CONVERSION_UNRESOLVED")
+    for warning in domain_semantic_warnings(record.get("domain"), metadata):
+        if warning not in warnings:
+            warnings.append(warning)
     explicit = metadata.get("compatibility_warnings", [])
     if isinstance(explicit, list):
         for warning in explicit:

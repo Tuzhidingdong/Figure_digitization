@@ -78,6 +78,80 @@ def pfas_metric_warning(metric_a: str | None, metric_b: str | None) -> str | Non
     return None
 
 
+def aop_metric_warning(metric_a: str | None, metric_b: str | None) -> str | None:
+    """Keep AOP concentration, efficiency, kinetics and mineralization metrics distinct."""
+    distinct = {
+        "parent_concentration", "removal_efficiency", "rate_constant",
+        "toc", "cod", "mineralization",
+    }
+    if not metric_a or not metric_b:
+        return "AOP_METRIC_UNRESOLVED"
+    left = metric_a.strip().casefold()
+    right = metric_b.strip().casefold()
+    if left in distinct and right in distinct and left != right:
+        return "AOP_METRICS_ARE_NOT_INTERCHANGEABLE"
+    if left != right:
+        return "AOP_METRIC_COMPARABILITY_NOT_ESTABLISHED"
+    return None
+
+
+def domain_semantic_warnings(domain: str | None, metadata: dict) -> list[str]:
+    """Validate only explicit per-series semantics; never infer missing scientific fields."""
+    semantics = metadata.get("measurement_semantics")
+    if not isinstance(semantics, dict):
+        semantics = {}
+    metric = (
+        semantics.get("metric") or semantics.get("measurement_metric")
+        or metadata.get("metric") or metadata.get("measurement_metric")
+    )
+    comparison_target = (
+        semantics.get("comparison_target_metric")
+        or metadata.get("comparison_target_metric")
+    )
+    normalized_domain = str(domain or "").strip().casefold()
+    warnings: list[str] = []
+
+    if normalized_domain in {"aop", "advanced_oxidation", "advanced oxidation"}:
+        if not metric:
+            warnings.append("AOP_METRIC_UNRESOLVED")
+        elif comparison_target:
+            warning = aop_metric_warning(str(metric), str(comparison_target))
+            if warning:
+                warnings.append(warning)
+
+    elif normalized_domain in {"pfas", "pfoa"}:
+        if not metric:
+            warnings.append("PFAS_METRIC_UNRESOLVED")
+        elif comparison_target:
+            warning = pfas_metric_warning(str(metric), str(comparison_target))
+            if warning:
+                warnings.append(warning)
+
+    elif normalized_domain in {"battery", "energy_storage"}:
+        metric_text = str(metric or "").strip().casefold()
+        if not metric_text:
+            warnings.append("BATTERY_MEASUREMENT_METRIC_UNRESOLVED")
+        elif any(token in metric_text for token in ("capacity", "specific_capacity")):
+            required = (
+                "capacity_basis", "cell_scope", "current_density_basis", "cycling_protocol",
+            )
+            for key in required:
+                value = semantics.get(key, metadata.get(key))
+                if value in (None, ""):
+                    warnings.append(f"BATTERY_BASIS_UNRESOLVED:{key}")
+        comparison_basis = semantics.get("comparison_basis")
+        if isinstance(comparison_basis, dict):
+            comparable, mismatches = comparable_battery_records(semantics, comparison_basis)
+            if not comparable:
+                category = (
+                    "BATTERY_COMPARABILITY_UNRESOLVED"
+                    if any(item.endswith(":UNRESOLVED") for item in mismatches)
+                    else "BATTERY_COMPARABILITY_MISMATCH"
+                )
+                warnings.append(category + ":" + ",".join(mismatches))
+    return warnings
+
+
 def preserve_censored_value(raw_value: str) -> dict:
     import re
     censored = re.fullmatch(r"\s*(<|<=|>|>=)\s*(LOD|LOQ)\s*", raw_value, re.I)
