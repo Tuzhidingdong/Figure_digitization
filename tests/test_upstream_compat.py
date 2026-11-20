@@ -384,3 +384,46 @@ def test_main_pdf_mutation_during_processing_marks_results_needs_review(
     assert result["figures"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"
     assert result["panels"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"
     assert result["series"][0]["evidence"][0]["source_pdf_integrity_status"] == "CHANGED_DURING_PROCESSING"
+
+
+
+
+def _make_legacy_figure_inventory_package(tmp_path: Path):
+    input_root = tmp_path / "legacy-input"
+    paper = input_root / "legacy-paper"
+    image_path = paper / "assets" / "Figure1.png"
+    image_path.parent.mkdir(parents=True)
+    image_bytes = b"legacy-figure-image-bytes"
+    image_path.write_bytes(image_bytes)
+    inventory = {
+        "figures": [{
+            "figure_id": "Figure1",
+            "page": 1,
+            "image_path": "assets/Figure1.png",
+            "caption": "Figure 1. Legacy input layout",
+        }]
+    }
+    (paper / "figure_inventory.json").write_text(json.dumps(inventory), encoding="utf-8")
+    return input_root, paper, image_path
+
+
+def test_legacy_figure_inventory_image_path_is_verified_against_input_snapshot(tmp_path: Path):
+    input_root, paper, image_path = _make_legacy_figure_inventory_package(tmp_path)
+    snapshot = snapshot_paper(paper, input_root)
+
+    figures, _ = _inventory(paper, snapshot)
+
+    assert figures[0]["image_asset_status"] == "LOCAL_PATH_HASH_VERIFIED"
+    assert figures[0]["image_asset_sha256"] == _sha256(image_path.read_bytes())
+    assert figures[0]["image_path"] == "assets/Figure1.png"
+
+
+def test_legacy_figure_inventory_image_changed_after_snapshot_is_rejected(tmp_path: Path):
+    input_root, paper, image_path = _make_legacy_figure_inventory_package(tmp_path)
+    snapshot = snapshot_paper(paper, input_root)
+    image_path.write_bytes(b"changed-after-snapshot")
+
+    figures, _ = _inventory(paper, snapshot)
+
+    assert figures[0]["image_asset_status"] == "HASH_MISMATCH"
+    assert "image_path" not in figures[0]

@@ -234,6 +234,46 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
                         figure["image_path"] = asset["relative_path"]
                         figure["image_asset_sha256"] = asset.get("sha256")
                         figure["image_asset_id"] = asset.get("asset_id")
+            for figure in normalized:
+                if not figure.get("image_path"):
+                    continue
+                if figure.get("image_asset_status") not in {
+                    None, "LOCAL_PATH_VERIFIED", "NO_EXACT_ASSET",
+                }:
+                    continue
+                local_image = _safe_local_file(paper_dir, str(figure["image_path"]))
+                if local_image is None:
+                    figure["image_asset_status"] = "MISSING_FILE"
+                    figure.pop("image_path", None)
+                    continue
+                relative_image = local_image.relative_to(paper_dir.resolve()).as_posix()
+                source_prefix = (
+                    "" if snapshot.source_dir in {"", ".", "root-paper"}
+                    else snapshot.source_dir.replace("\\", "/").strip("/")
+                )
+                snapshot_path = "/".join(
+                    part for part in (source_prefix, relative_image) if part
+                )
+                artifact = next(
+                    (item for item in snapshot.artifacts if item.path == snapshot_path),
+                    None,
+                )
+                if artifact is None:
+                    figure["image_asset_status"] = "UNTRACKED_SOURCE_IMAGE"
+                    figure.pop("image_path", None)
+                    continue
+                try:
+                    actual_hash = sha256_file(local_image)
+                except OSError:
+                    figure["image_asset_status"] = "UNREADABLE"
+                    figure.pop("image_path", None)
+                    continue
+                figure["image_asset_sha256"] = artifact.sha256
+                if actual_hash != artifact.sha256:
+                    figure["image_asset_status"] = "HASH_MISMATCH"
+                    figure.pop("image_path", None)
+                elif figure.get("image_asset_status") in {None, "LOCAL_PATH_VERIFIED", "NO_EXACT_ASSET"}:
+                    figure["image_asset_status"] = "LOCAL_PATH_HASH_VERIFIED"
             return normalized, path
     return [], None
 
