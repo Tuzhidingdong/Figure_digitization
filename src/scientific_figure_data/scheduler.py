@@ -308,6 +308,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                             missing_roles=snapshot_data.get("missing_roles", []),
                             warnings=snapshot_data.get("warnings", []),
                             input_fingerprint=snapshot_data["input_fingerprint"],
+                            external_sources=snapshot_data.get("external_sources", []),
                         )
                         series = []
                         for item in result.get("series", []):
