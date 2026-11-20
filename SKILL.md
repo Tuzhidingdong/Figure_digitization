@@ -111,6 +111,15 @@ Profiles are inherited YAML configurations. Initial profile families:
 
 The profile schema is extensible. Do not embed one paper's sample names, values, or reference conditions as production rules.
 
+
+### Explicit measurement semantics in series overrides
+
+A series override may include a measurement_semantics object alongside its label, technique, and domain. This object is evidence supplied by the user, not an invitation to infer missing fields.
+
+For battery capacity series, provide metric, capacity_basis, cell_scope, current_density_basis, and cycling_protocol when known. Missing required fields produce BATTERY_BASIS_UNRESOLVED warnings; XRD/Raman/FTIR/XPS series are not treated as capacity measurements just because their domain is battery.
+
+For AOP/PFAS series, provide metric. An optional comparison_target_metric enables an explicit non-interchangeability check. Missing metrics remain unresolved; different metric roles produce comparability warnings. These warnings never authorize conversion, pooling, or harmonization. ML exports remain NOT_HARMONIZED.
+
 ## Execution tracking and governance
 
 - The frozen user-owned requirements baseline is TASK_PLAN_v1.4.1.md. Do not edit it.

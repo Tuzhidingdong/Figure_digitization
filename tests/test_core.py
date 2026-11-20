@@ -2730,3 +2730,59 @@ def test_dimensional_standardization_rejects_non_finite_values(value):
     result = standardize_measurement_value(value, "mg/L", "g/L")
     assert result["standardized_value"] is None
     assert result["standardization_status"] == "UNRESOLVED_NON_FINITE_VALUE"
+
+
+
+
+def test_export_compatibility_warnings_include_explicit_pfas_metric_guard():
+    from scientific_figure_data.exporter import _series_compatibility_warnings
+
+    record = {
+        "domain": "pfas", "technique": "parent_compound_time",
+        "qc_status": "CALIBRATED", "review_state": "REVIEWED_ACCEPTED",
+        "y_axis_side": "LEFT",
+    }
+    associations = {
+        "subject_links": [{"link_status": "ASSIGNED_WITH_EVIDENCE"}],
+        "conditions": [{"name": "pH"}],
+    }
+    metadata = {"measurement_semantics": {
+        "metric": "parent_removal",
+        "comparison_target_metric": "defluorination",
+    }}
+
+    warnings = _series_compatibility_warnings(record, associations, metadata)
+
+    assert warnings == ["PFAS_METRICS_ARE_NOT_INTERCHANGEABLE"]
+
+
+def test_series_override_preserves_explicit_measurement_semantics():
+    from scientific_figure_data.pipeline import _series_overrides
+
+    payload = {
+        "figures": {
+            "F1": {
+                "panels": {
+                    "a": {
+                        "series": [{
+                            "series_id": "s1",
+                            "measurement_semantics": {
+                                "metric": "specific_capacity",
+                                "capacity_basis": "gravimetric",
+                                "cell_scope": "half_cell",
+                                "current_density_basis": "active_material_mass",
+                                "cycling_protocol": "constant_current",
+                            },
+                        }]
+                    }
+                }
+            }
+        }
+    }
+
+    semantics = _series_overrides(payload, "F1", "a")[0]["measurement_semantics"]
+
+    assert semantics["capacity_basis"] == "gravimetric"
+    assert semantics["cell_scope"] == "half_cell"
+    assert semantics["current_density_basis"] == "active_material_mass"
+    assert semantics["cycling_protocol"] == "constant_current"
