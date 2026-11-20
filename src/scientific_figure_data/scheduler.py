@@ -14,7 +14,7 @@ from typing import Iterable
 
 from .models import JobState, PaperSnapshot, utc_now
 from .manifest import storage_paper_id
-from .adapter import snapshot_paper
+from .adapter import snapshot_paper, validate_disjoint_roots
 from .storage import connect_catalog, Catalog
 from .hashing import atomic_write_json, sha256_json
 
@@ -149,8 +149,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     if max_open_pdfs < 1:
         raise ValueError("max_open_pdfs must be at least 1")
     workers = min(workers, max_open_pdfs)
-    input_root = input_root.resolve()
-    output_root = output_root.resolve()
+    input_root, output_root = validate_disjoint_roots(input_root, output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     started_at = time.perf_counter()
     parent_cpu_started = time.process_time()

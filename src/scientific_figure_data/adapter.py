@@ -96,3 +96,17 @@ def ensure_unique_paper_ids(papers: Iterator[Path], input_root: Path) -> Iterato
             )
         seen[paper_id] = relative
         yield paper
+
+
+
+def validate_disjoint_roots(input_root: Path, output_root: Path) -> tuple[Path, Path]:
+    """Require input and output roots to be disjoint trees."""
+    source = input_root.resolve()
+    destination = output_root.resolve()
+    if (source == destination
+            or source in destination.parents
+            or destination in source.parents):
+        raise ValueError(
+            "Input and output roots must be separate, non-overlapping directory trees"
+        )
+    return source, destination

@@ -2255,3 +2255,28 @@ def test_series_ids_are_globally_unique_across_papers_with_same_figure_panel(tmp
     assert report["failed"] == 0
     assert report["completed_with_review"] == 2
     catalog.close()
+
+
+
+@pytest.mark.parametrize("relationship", ["same", "ancestor", "descendant"])
+def test_scheduler_rejects_overlapping_input_output_roots(tmp_path: Path, relationship: str):
+    from scientific_figure_data.scheduler import run_corpus
+
+    input_root = tmp_path / "source"
+    input_root.mkdir()
+    source_file = input_root / "figure_inventory.json"
+    source_file.write_text('{"figures":[]}', encoding="utf-8")
+    source_hash = sha256_file(source_file)
+
+    if relationship == "same":
+        output_root = input_root
+    elif relationship == "ancestor":
+        output_root = tmp_path
+    else:
+        output_root = input_root / "downstream"
+
+    with pytest.raises(ValueError, match="non-overlapping directory trees"):
+        run_corpus(input_root, output_root, [], workers=1)
+
+    assert source_file.is_file()
+    assert sha256_file(source_file) == source_hash

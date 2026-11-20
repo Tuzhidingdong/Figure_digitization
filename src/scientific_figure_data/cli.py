@@ -6,7 +6,9 @@ import sys
 import time
 from pathlib import Path
 
-from .adapter import discover_papers, ensure_unique_paper_ids, snapshot_paper
+from .adapter import (
+    discover_papers, ensure_unique_paper_ids, snapshot_paper, validate_disjoint_roots,
+)
 from .exporter import export_dataset
 from .hashing import atomic_write_json, sha256_file
 from .manifest import storage_paper_id
@@ -125,10 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _scan(args) -> int:
     if not args.input_root:
         raise ValueError("--input-root is required")
-    input_root = args.input_root.resolve()
-    output_root = args.output_root.resolve()
-    if output_root == input_root or input_root in output_root.parents:
-        raise ValueError("Output root must be separate from, and outside, the upstream input root")
+    input_root, output_root = validate_disjoint_roots(args.input_root, args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     jsonl_path = output_root / "corpus_manifest.jsonl"
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
