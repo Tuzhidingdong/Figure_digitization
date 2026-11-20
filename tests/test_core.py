@@ -385,8 +385,9 @@ def test_reviewed_technique_change_recomputes_preliminary_classification(tmp_pat
         "reviewed_at": classification["revision"]["reviewed_at"],
     }
     panel = json.loads((paper_root / "panel_layout.json").read_text(encoding="utf-8"))["panels"][0]
-    assert panel["chart_family"] == "SPECTRUM"
-    assert panel["chart_family_status"] == "REVISED_AFTER_REVIEW"
+    assert panel["chart_family"] == "UNCLASSIFIED"
+    assert panel["chart_family_status"] == "CONFLICTING_SERIES_CLASSIFICATIONS"
+    assert panel["chart_family_conflicts"] == ["NON_MONOTONIC_CURVE", "SPECTRUM"]
 
 
 def test_review_patch_rejects_manual_chart_family_without_evidence():
