@@ -2114,7 +2114,7 @@ def test_adapter_rejects_paper_id_normalization_collisions(tmp_path: Path):
 
 def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     from scientific_figure_data.adapter import discover_papers
-    from scientific_figure_data.scheduler import run_corpus
+    from scientific_figure_data.scheduler import JobLedger, run_corpus
 
     input_root = tmp_path / "input"
     input_root.mkdir()
@@ -2129,7 +2129,7 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     job = JobLedger(output_root / "catalog.sqlite")
     row = job.con.execute("SELECT paper_id,state,input_fingerprint,worker_id,started_at,worker_pid FROM jobs").fetchone()
     assert row["paper_id"] == "root-paper"
-    assert row["state"] == "COMPLETED_WITH_REVIEW"
+    assert row["state"] == "NEEDS_REVIEW"
     assert row["input_fingerprint"]
     assert row["worker_id"].startswith("pool-")
     assert row["started_at"]
