@@ -48,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--memory-limit", type=int, default=2048, help="soft per-process memory budget in MiB")
     run.add_argument("--render-scale", type=float, default=1.5)
     run.add_argument("--temp-disk-limit", type=int, default=2048)
+    run.add_argument("--min-free-disk-mb", type=int, default=256,
+                     help="pause new paper dispatch when free disk space falls below this threshold; 0 disables the guard")
     run.add_argument("--context-memory-budget", type=int, default=500000)
     run.add_argument("--max-render-pixels", type=int, default=12000000)
     run.add_argument("--max-open-pdfs", type=int, default=1)
@@ -156,6 +158,7 @@ def _run(args) -> int:
         "memory_limit_mb": args.memory_limit,
         "render_scale": args.render_scale,
         "temp_disk_limit_mb": args.temp_disk_limit,
+        "min_free_disk_mb": args.min_free_disk_mb,
         "context_memory_budget": args.context_memory_budget,
         "max_render_pixels": args.max_render_pixels,
         "max_open_pdfs": args.max_open_pdfs,
