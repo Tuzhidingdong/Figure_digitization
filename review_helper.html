@@ -15,6 +15,10 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
 <section>
 <label>Paper output folder
 <input id="folder" type="file" webkitdirectory multiple></label>
+<div id="dropZone" tabindex="0" role="button" aria-label="Drop a paper output folder here"
+     style="border:2px dashed #888;padding:1rem;border-radius:8px;text-align:center">
+  Or drag a paper output folder here
+</div>
 <div id="loadStatus" class="status">No paper folder selected.</div>
 </section>
 <section id="editor" hidden>
@@ -75,7 +79,11 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
   };
   const load = async files => {
     fileMap.clear(); seriesById.clear(); currentPanelRows=[]; changes=[];
-    for(const f of files){const rel=f.webkitRelativePath.split("/").slice(1).join("/");fileMap.set(rel,f);}
+    for(const f of files){
+      const provided=f.__sfdRelativePath||f.webkitRelativePath||f.name;
+      const rel=provided.includes("/")?provided.split("/").slice(1).join("/"):provided;
+      fileMap.set(rel,f);
+    }
     const entries=[...fileMap.entries()];
     const item=entries.find(([p])=>p.endsWith("digitization.json"));
     if(!item) throw new Error("digitization.json not found in selected folder");
@@ -181,8 +189,58 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
     })),null,2);
     draw(series,currentPanelRows);
   }
+  const readAllDirectoryEntries = reader => new Promise((resolve,reject)=>{
+    const all=[];
+    const readBatch=()=>reader.readEntries(batch=>{
+      if(!batch.length){resolve(all);return;}
+      all.push(...batch);readBatch();
+    },reject);
+    readBatch();
+  });
+  async function collectDroppedEntry(entry, prefix, output){
+    if(entry.isFile){
+      const file=await new Promise((resolve,reject)=>entry.file(resolve,reject));
+      file.__sfdRelativePath=prefix+entry.name;
+      output.push(file);
+      return;
+    }
+    if(entry.isDirectory){
+      const children=await readAllDirectoryEntries(entry.createReader());
+      for(const child of children) await collectDroppedEntry(child,prefix+entry.name+"/",output);
+    }
+  }
+  async function loadDroppedFolder(dataTransfer){
+    const entries=[...dataTransfer.items||[]]
+      .map(item=>item.webkitGetAsEntry?.()).filter(Boolean);
+    const dropped=[];
+    if(entries.length){
+      for(const entry of entries) await collectDroppedEntry(entry,"",dropped);
+    }else{
+      dropped.push(...[...dataTransfer.files||[]]);
+    }
+    if(!dropped.length) throw new Error("No local files were found in the dropped folder.");
+    await load(dropped);
+  }
   $("folder").addEventListener("change",async e=>{
     try{await load([...e.target.files]);}catch(err){$("loadStatus").textContent=String(err);$("editor").hidden=true;}
+  });
+  const dropZone=$("dropZone");
+  ["dragenter","dragover"].forEach(type=>dropZone.addEventListener(type,e=>{
+    e.preventDefault();dropZone.style.background="#8882";
+  }));
+  ["dragleave","drop"].forEach(type=>dropZone.addEventListener(type,e=>{
+    e.preventDefault();dropZone.style.background="";
+  }));
+  dropZone.addEventListener("drop",async e=>{
+    try{
+      $("loadStatus").textContent="Reading the dropped local folder…";
+      await loadDroppedFolder(e.dataTransfer);
+    }catch(err){
+      $("loadStatus").textContent=String(err);$("editor").hidden=true;
+    }
+  });
+  dropZone.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){e.preventDefault();$("folder").click();}
   });
   $("seriesSelect").addEventListener("change",e=>selectSeries(e.target.value));
   $("addChange").addEventListener("click",()=>{
