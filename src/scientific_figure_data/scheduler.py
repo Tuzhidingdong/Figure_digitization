@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 import json
 import traceback
@@ -32,6 +33,13 @@ def _worker_initializer():
 def _process_paper_task(input_root: str, paper_relative: str, output_root: str, options: dict) -> dict:
     from .pipeline import process_paper
     return process_paper(Path(input_root), Path(paper_relative), Path(output_root), options)
+
+
+def _free_disk_bytes(path: Path) -> int | None:
+    try:
+        return int(shutil.disk_usage(path).free)
+    except OSError:
+        return None
 
 
 class JobLedger:
@@ -118,6 +126,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     output_root.mkdir(parents=True, exist_ok=True)
     started_at = time.perf_counter()
     peak_rss_bytes = 0
+    options = options or {}
+    min_free_disk_mb = max(0, int(options.get("min_free_disk_mb", 256)))
+    free_disk_start = _free_disk_bytes(output_root)
+    minimum_free_disk_bytes_observed = free_disk_start
+    resource_paused = False
+    resource_pause_reason = None
     if dry_run:
         count = sum(1 for _ in paper_paths)
         already_cached = int((options or {}).get("resume_cached_skipped", 0))
@@ -136,7 +150,6 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     retry_queue = deque()
     source_exhausted = False
     total_seen = 0
-    options = options or {}
     context = get_context("spawn")
 
     def new_executor():
@@ -147,7 +160,25 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     running = {}
     try:
         while running or retry_queue or not source_exhausted:
+            if resource_paused and not running:
+                break
             while len(running) < workers:
+                if min_free_disk_mb > 0:
+                    free_bytes = _free_disk_bytes(output_root)
+                    if free_bytes is not None:
+                        minimum_free_disk_bytes_observed = (
+                            free_bytes if minimum_free_disk_bytes_observed is None
+                            else min(minimum_free_disk_bytes_observed, free_bytes)
+                        )
+                    threshold_bytes = min_free_disk_mb * 1024 * 1024
+                    if free_bytes is None or free_bytes < threshold_bytes:
+                        resource_paused = True
+                        source_exhausted = True
+                        resource_pause_reason = (
+                            "DISK_USAGE_UNAVAILABLE" if free_bytes is None
+                            else f"FREE_DISK_BELOW_{min_free_disk_mb}_MB"
+                        )
+                        break
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
                     paper_relative = paper.relative_to(input_root).as_posix()
@@ -268,6 +299,12 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "elapsed_seconds": round(elapsed, 3),
         "throughput_papers_per_minute": round((total_seen / elapsed) * 60, 3) if elapsed else 0.0,
         "peak_parent_and_worker_rss_bytes": peak_rss_bytes or None,
+        "min_free_disk_mb": min_free_disk_mb,
+        "free_disk_bytes_at_start": free_disk_start,
+        "minimum_free_disk_bytes_observed": minimum_free_disk_bytes_observed,
+        "free_disk_bytes_at_end": _free_disk_bytes(output_root),
+        "paused_for_resource_pressure": resource_paused,
+        "resource_pressure_reason": resource_pause_reason,
         "default_llm_tokens": 0,
         "algorithm_version": "0.1.0",
         "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
