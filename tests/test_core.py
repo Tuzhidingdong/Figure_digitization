@@ -2192,7 +2192,8 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert report["total_paper_evidence_bytes"] >= 0
     assert report["total_context_index_bytes"] >= 0
     assert report["peak_budgeted_paper_storage_bytes"] >= 0
-    assert "does not include the full OS temporary directory" in report["disk_usage_measurement_scope"]
+    assert report["total_returned_paper_output_bytes"] >= report["peak_single_paper_output_bytes"] >= 0
+    assert "not OS temporary-directory peak usage" in report["disk_usage_measurement_scope"]
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
     job.close()

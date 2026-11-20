@@ -707,6 +707,7 @@ def _paper_disk_usage(paper_output: Path) -> dict[str, int]:
         "evidence_bytes": evidence_bytes,
         "context_index_bytes": context_bytes,
         "budgeted_storage_bytes": evidence_bytes + context_bytes,
+        "paper_output_bytes": _directory_size(paper_output),
     }
 
 

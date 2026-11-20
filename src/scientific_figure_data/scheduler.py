@@ -159,6 +159,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     total_context_index_bytes = 0
     peak_context_index_bytes = 0
     peak_budgeted_paper_storage_bytes = 0
+    total_returned_paper_output_bytes = 0
+    peak_single_paper_output_bytes = 0
     peak_rss_bytes = 0
     options = options or {}
     min_free_disk_mb = max(0, int(options.get("min_free_disk_mb", 256)))
@@ -285,6 +287,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     evidence_bytes = max(0, int(usage.get("evidence_bytes", 0)))
                     context_bytes = max(0, int(usage.get("context_index_bytes", 0)))
                     budgeted_bytes = max(0, int(usage.get("budgeted_storage_bytes", evidence_bytes + context_bytes)))
+                    paper_output_bytes = max(0, int(usage.get("paper_output_bytes", 0)))
+                    total_returned_paper_output_bytes += paper_output_bytes
+                    peak_single_paper_output_bytes = max(peak_single_paper_output_bytes, paper_output_bytes)
                     total_paper_evidence_bytes += evidence_bytes
                     peak_paper_evidence_bytes = max(peak_paper_evidence_bytes, evidence_bytes)
                     total_context_index_bytes += context_bytes
@@ -391,9 +396,13 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "total_context_index_bytes": total_context_index_bytes,
         "peak_context_index_bytes": peak_context_index_bytes,
         "peak_budgeted_paper_storage_bytes": peak_budgeted_paper_storage_bytes,
+        "total_returned_paper_output_bytes": total_returned_paper_output_bytes,
+        "peak_single_paper_output_bytes": peak_single_paper_output_bytes,
         "disk_usage_measurement_scope": (
-            "Per-paper evidence and context-index artifacts for workers that returned results; "
-            "does not include the full OS temporary directory, series CSVs or version backups."
+            "Paper-output footprint is measured after each returned paper and includes its "
+            "canonical JSON, series CSVs, evidence, context index and version directories. "
+            "Evidence/context subtotals are reported separately. This is not OS temporary-directory "
+            "peak usage and excludes transient renderer/native-library memory and temp files."
         ),
         "cached": results["cached"] + resume_cached_skipped,
         "resume_cached_skipped": resume_cached_skipped,
