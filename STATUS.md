@@ -142,6 +142,14 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Added root-paper Spawn integration coverage for actual worker PID, worker slot ID, start time, input fingerprint, job state and canonical output directory.
 - CI #170 passed all 65 tests, compileall and Ruff on Python 3.11, 3.12 and 3.13.
 
+### 2026-11-20 — Job ledger, worker identity and corpus identity consistency
+
+- Extended `jobs` with `worker_id`, `worker_pid`, `started_at` and `input_fingerprint`, using additive SQLite migrations for existing catalogs.
+- Parent scheduler creates the input snapshot once and passes it to the spawned worker, avoiding duplicate full artifact hashing in the worker. The worker returns its PID; only the parent writes that PID to SQLite.
+- Normalized single-paper-root runs to the same `root-paper` storage ID for Job Ledger, canonical output and resume. Added a collision detector that preserves established storage IDs but fails before scan/run when two source directories would map to the same output ID.
+- Added root-paper Spawn integration coverage for actual worker PID, worker slot ID, start time, input fingerprint, job state and canonical output directory.
+- CI #170 passed all 65 tests, compileall and Ruff on Python 3.11, 3.12 and 3.13.
+
 ### 2026-11-20 — Incremental context cache and cross-platform verification
 
 - Added content-fingerprinted reuse of per-paper context indexes. Unchanged MAIN/SI/table text reuses the prior JSON/SQLite context index; changed inputs rebuild the index. Rebuilds write to a temporary SQLite database and atomically replace the active cache only after closing the DB handle.
