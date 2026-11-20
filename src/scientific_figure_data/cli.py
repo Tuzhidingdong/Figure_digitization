@@ -216,7 +216,7 @@ def _run(args) -> int:
     def selected_papers():
         for paper in ensure_unique_paper_ids(discover_papers(input_root), input_root):
             relative = paper.relative_to(input_root).as_posix()
-            storage_id = storage_paper_id(relative)
+            storage_id = storage_paper_id("root-paper" if relative == "." else relative)
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
                 options["skipped_by_selection"] += 1
                 continue
@@ -241,7 +241,7 @@ def _run(args) -> int:
                     continue
                 current_snapshot = snapshot_paper(paper, input_root)
                 if current_snapshot.input_fingerprint != previous_fingerprint:
-                    yield paper
+                    yield (paper, current_snapshot)
                     continue
                 paper_root = output_root / "papers" / storage_id
                 bundle_path = paper_root / "paper_bundle.json"
@@ -252,7 +252,7 @@ def _run(args) -> int:
                 except (OSError, ValueError, TypeError):
                     same_stage = False
                 if not same_stage or not bundle_is_intact(paper_root):
-                    yield paper
+                    yield (paper, current_snapshot)
                     continue
                 if args.force_recompute_reviewed:
                     digitization_path = paper_root / "digitization.json"
@@ -265,7 +265,7 @@ def _run(args) -> int:
                     except (OSError, ValueError, TypeError):
                         reviewed = False
                     if reviewed:
-                        yield paper
+                        yield (paper, current_snapshot)
                         continue
                 options["resume_cached_skipped"] += 1
                 continue

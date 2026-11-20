@@ -87,7 +87,7 @@ def ensure_unique_paper_ids(papers: Iterator[Path], input_root: Path) -> Iterato
     root = input_root.resolve()
     for paper in papers:
         relative = paper.resolve().relative_to(root).as_posix()
-        paper_id = storage_paper_id(relative)
+        paper_id = storage_paper_id("root-paper" if relative == "." else relative)
         previous = seen.get(paper_id)
         if previous is not None and previous != relative:
             raise ValueError(

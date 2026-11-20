@@ -720,7 +720,7 @@ def _crop_local_image(source_path: Path, bbox: Any, output_path: Path) -> Path |
 
 
 def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
-                  options: dict | None = None) -> dict:
+                  options: dict | None = None, input_snapshot: PaperSnapshot | None = None) -> dict:
     """Process one paper with lazy pages, compact text context, and immutable inputs."""
     options = options or {}
     input_root = input_root.resolve()
@@ -730,7 +730,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         paper_dir.relative_to(input_root)
     except ValueError as exc:
         raise ValueError("Paper path escapes input root") from exc
-    snapshot = snapshot_paper(paper_dir, input_root)
+    relative_source = paper_dir.relative_to(input_root).as_posix()
+    if input_snapshot is not None:
+        if input_snapshot.source_dir != relative_source:
+            raise ValueError("Supplied input snapshot does not match the requested paper directory")
+        snapshot = input_snapshot
+    else:
+        snapshot = snapshot_paper(paper_dir, input_root)
     paper_output = output_root / "papers" / snapshot.paper_id
     existing = paper_output / "digitization.json"
     force_reviewed = bool(options.get("force_recompute_reviewed", False))

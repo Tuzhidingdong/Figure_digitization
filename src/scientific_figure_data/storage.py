@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS observations(
 );
 CREATE TABLE IF NOT EXISTS jobs(
  paper_id TEXT PRIMARY KEY, state TEXT NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0,
+ worker_id TEXT, worker_pid INTEGER, started_at TEXT, input_fingerprint TEXT,
  lease_expires_at REAL, heartbeat_at REAL, current_stage TEXT, last_error TEXT,
  updated_at TEXT NOT NULL
 );
@@ -101,6 +102,15 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     series_columns = {row[1] for row in con.execute("PRAGMA table_info(series)").fetchall()}
     if "measurement_id" not in series_columns:
         con.execute("ALTER TABLE series ADD COLUMN measurement_id TEXT")
+    job_columns = {row[1] for row in con.execute("PRAGMA table_info(jobs)").fetchall()}
+    for name, declaration in (
+        ("worker_id", "TEXT"),
+        ("worker_pid", "INTEGER"),
+        ("started_at", "TEXT"),
+        ("input_fingerprint", "TEXT"),
+    ):
+        if name not in job_columns:
+            con.execute(f"ALTER TABLE jobs ADD COLUMN {name} {declaration}")
     # Migrate entity aliases for catalogs created before the exact-alias index existed.
     import unicodedata
     for entity in con.execute(

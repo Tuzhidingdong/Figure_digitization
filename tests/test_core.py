@@ -564,7 +564,13 @@ def test_job_ledger_recovers_only_expired_running_leases(tmp_path: Path):
 
     ledger = JobLedger(tmp_path / "catalog.sqlite", lease_seconds=600)
     assert ledger.prepare("paper-active") is True
-    ledger.start("paper-active")
+    ledger.start("paper-active", "test-worker-slot-1", "a" * 64)
+    running_row = ledger.con.execute(
+        "SELECT worker_id,started_at,input_fingerprint FROM jobs WHERE paper_id='paper-active'"
+    ).fetchone()
+    assert running_row["worker_id"] == "test-worker-slot-1"
+    assert running_row["started_at"]
+    assert running_row["input_fingerprint"] == "a" * 64
     assert ledger.prepare("paper-active") is False
     with ledger.con:
         ledger.con.execute(
@@ -2103,3 +2109,32 @@ def test_adapter_rejects_paper_id_normalization_collisions(tmp_path: Path):
 
     with pytest.raises(ValueError, match="Paper ID normalization collision"):
         list(ensure_unique_paper_ids(discover_papers(tmp_path), tmp_path))
+
+
+
+def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import run_corpus
+
+    input_root = tmp_path / "input"
+    input_root.mkdir()
+    (input_root / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    output_root = tmp_path / "output"
+
+    report = run_corpus(
+        input_root, output_root, discover_papers(input_root), workers=1,
+        max_attempts=1, lease_seconds=30, options={"memory_limit_mb": 0},
+    )
+
+    job = JobLedger(output_root / "catalog.sqlite")
+    row = job.con.execute("SELECT paper_id,state,input_fingerprint,worker_id,started_at,worker_pid FROM jobs").fetchone()
+    assert row["paper_id"] == "root-paper"
+    assert row["state"] == "COMPLETED_WITH_REVIEW"
+    assert row["input_fingerprint"]
+    assert row["worker_id"].startswith("pool-")
+    assert row["started_at"]
+    assert isinstance(row["worker_pid"], int)
+    assert report["completed_with_review"] == 1
+    paper_root = output_root / "papers" / "root-paper"
+    assert (paper_root / "paper_manifest.json").is_file()
+    job.close()

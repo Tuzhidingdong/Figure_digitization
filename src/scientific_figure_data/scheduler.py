@@ -12,8 +12,9 @@ from multiprocessing import get_context
 from pathlib import Path
 from typing import Iterable
 
-from .models import JobState, utc_now
+from .models import JobState, PaperSnapshot, utc_now
 from .manifest import storage_paper_id
+from .adapter import snapshot_paper
 from .storage import connect_catalog, Catalog
 from .hashing import atomic_write_json, sha256_json
 
@@ -30,9 +31,15 @@ def _worker_initializer():
         pass
 
 
-def _process_paper_task(input_root: str, paper_relative: str, output_root: str, options: dict) -> dict:
+def _process_paper_task(input_root: str, paper_relative: str, output_root: str,
+                        options: dict, input_snapshot: PaperSnapshot) -> dict:
     from .pipeline import process_paper
-    return process_paper(Path(input_root), Path(paper_relative), Path(output_root), options)
+    result = process_paper(
+        Path(input_root), Path(paper_relative), Path(output_root), options,
+        input_snapshot=input_snapshot,
+    )
+    result["_worker_pid"] = os.getpid()
+    return result
 
 
 def _free_disk_bytes(path: Path) -> int | None:
@@ -82,16 +89,22 @@ class JobLedger:
             )
         return True
 
-    def start(self, paper_id: str):
+    def start(self, paper_id: str, worker_id: str | None = None,
+              input_fingerprint: str | None = None):
         now = time.time()
         with self.con:
             self.con.execute(
-                """UPDATE jobs SET state=?,attempt_count=attempt_count+1,heartbeat_at=?,
-                   lease_expires_at=?,current_stage=?,last_error=NULL,updated_at=? WHERE paper_id=?""",
-                (JobState.RUNNING.value, now, now + self.lease_seconds,
+                """UPDATE jobs SET state=?,attempt_count=attempt_count+1,worker_id=?,worker_pid=NULL,
+                   started_at=?,input_fingerprint=?,heartbeat_at=?,lease_expires_at=?,
+                   current_stage=?,last_error=NULL,updated_at=? WHERE paper_id=?""",
+                (JobState.RUNNING.value, worker_id or f"scheduler-{os.getpid()}",
+                 utc_now(), input_fingerprint, now, now + self.lease_seconds,
                  "PAPER_PROCESSING", utc_now(), paper_id),
             )
-            self.event(paper_id, "JOB_STARTED", {})
+            self.event(paper_id, "JOB_STARTED", {
+                "worker_id": worker_id or f"scheduler-{os.getpid()}",
+                "input_fingerprint": input_fingerprint,
+            })
 
     def heartbeat(self, paper_id: str):
         now = time.time()
@@ -100,12 +113,17 @@ class JobLedger:
                 "UPDATE jobs SET heartbeat_at=?,lease_expires_at=?,updated_at=? WHERE paper_id=?",
                 (now, now + self.lease_seconds, utc_now(), paper_id))
 
-    def finish(self, paper_id: str, state: str, error: str | None = None):
+    def finish(self, paper_id: str, state: str, error: str | None = None,
+               worker_pid: int | None = None):
         with self.con:
             self.con.execute(
-                "UPDATE jobs SET state=?,lease_expires_at=NULL,updated_at=?,last_error=? WHERE paper_id=?",
-                (state, utc_now(), error, paper_id))
-            self.event(paper_id, state, {"error": error} if error else {})
+                """UPDATE jobs SET state=?,worker_pid=COALESCE(?,worker_pid),
+                   lease_expires_at=NULL,updated_at=?,last_error=? WHERE paper_id=?""",
+                (state, worker_pid, utc_now(), error, paper_id))
+            payload = {"error": error} if error else {}
+            if worker_pid is not None:
+                payload["worker_pid"] = worker_pid
+            self.event(paper_id, state, payload)
 
     def attempt_count(self, paper_id: str) -> int:
         row = self.con.execute("SELECT attempt_count FROM jobs WHERE paper_id=?", (paper_id,)).fetchone()
@@ -171,6 +189,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         return ProcessPoolExecutor(max_workers=workers, mp_context=context,
                                    initializer=_worker_initializer, max_tasks_per_child=5)
 
+    executor_generation = 1
     executor = new_executor()
     running = {}
     try:
@@ -212,25 +231,37 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         break
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
-                    paper_relative = paper.relative_to(input_root).as_posix()
+                    input_snapshot = snapshot_paper(paper, input_root)
                 elif not source_exhausted:
                     try:
-                        paper = next(source)
+                        candidate = next(source)
                     except StopIteration:
                         source_exhausted = True
                         break
+                    if (isinstance(candidate, tuple) and len(candidate) == 2
+                            and isinstance(candidate[1], PaperSnapshot)):
+                        paper, input_snapshot = candidate
+                    else:
+                        paper = candidate
+                        input_snapshot = snapshot_paper(paper, input_root)
                     paper_relative = paper.relative_to(input_root).as_posix()
-                    paper_id = storage_paper_id(paper_relative)
+                    paper_id = input_snapshot.paper_id
                     if not ledger.prepare(paper_id):
                         results["active_jobs_skipped"] += 1
                         continue
                     total_seen += 1
                 else:
                     break
-                ledger.start(paper_id)
-                future = executor.submit(_process_paper_task, str(input_root), paper_relative,
-                                         str(output_root), options)
-                running[future] = (paper, paper_id)
+                paper_relative = paper.relative_to(input_root).as_posix()
+                occupied_slots = {slot for _, _, slot in running.values()}
+                worker_slot = next(slot for slot in range(workers) if slot not in occupied_slots)
+                worker_id = f"pool-{executor_generation}-slot-{worker_slot + 1}"
+                ledger.start(paper_id, worker_id, input_snapshot.input_fingerprint)
+                future = executor.submit(
+                    _process_paper_task, str(input_root), paper_relative,
+                    str(output_root), options, input_snapshot,
+                )
+                running[future] = (paper, paper_id, worker_slot)
             if not running:
                 continue
 
@@ -238,7 +269,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             for future in tuple(done):
                 if future not in running:
                     continue
-                paper, paper_id = running.pop(future)
+                paper, paper_id, worker_slot = running.pop(future)
                 try:
                     result = future.result()
                     if result.get("cached"):
@@ -265,7 +296,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                                             paper_root=output_root / "papers" / snapshot.paper_id,
                                             batch_size=int(options.get("batch_size", 1000)))
                     state = result.get("job_state", JobState.COMPLETED.value)
-                    ledger.finish(paper_id, state)
+                    ledger.finish(paper_id, state, worker_pid=result.get("_worker_pid"))
                     if state == JobState.BLOCKED.value:
                         results["blocked_review_locked"] += 1
                     elif state in {JobState.NEEDS_REVIEW.value, JobState.COMPLETED_WITH_REVIEW.value}:
@@ -286,7 +317,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     if isinstance(exc, BrokenProcessPool):
                         # A broken executor cannot accept more tasks. Unfinished tasks are
                         # requeued; completed canonical artifacts are reused on their retry.
-                        for pending_future, (pending_paper, pending_id) in tuple(running.items()):
+                        for pending_future, (pending_paper, pending_id, pending_slot) in tuple(running.items()):
                             pending_future.cancel()
                             ledger.finish(pending_id, JobState.RETRY_WAIT.value, "WORKER_POOL_BROKEN")
                             if ledger.attempt_count(pending_id) < max_attempts:
@@ -298,8 +329,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                                 results["failed"] += 1
                             running.pop(pending_future, None)
                         executor.shutdown(wait=False, cancel_futures=True)
+                        executor_generation += 1
                         executor = new_executor()
-            for _, paper_id in running.values():
+            for _, paper_id, _ in running.values():
                 ledger.heartbeat(paper_id)
             try:
                 import psutil
