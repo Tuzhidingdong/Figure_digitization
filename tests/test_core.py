@@ -1932,3 +1932,31 @@ def test_process_paper_preserves_all_upstream_paths_and_hashes(tmp_path: Path):
 
     assert after_paths == before_paths
     assert after_hashes == before_hashes
+
+
+
+def test_context_index_reuses_unchanged_cache_and_invalidates_changed_sources(tmp_path: Path):
+    from scientific_figure_data.context_index import PaperContextIndex
+
+    paper = tmp_path / "paper"
+    paper.mkdir()
+    source = paper / "main_analysis.md"
+    source.write_text("Sample-A is tested against Ag/AgCl.\n", encoding="utf-8")
+    output = tmp_path / "output" / "context"
+
+    first = PaperContextIndex.build(paper, output, memory_budget_bytes=1)
+    assert first.db_path is not None
+    first_db_hash = sha256_file(first.db_path)
+    first_fingerprint = first.fingerprint
+
+    second = PaperContextIndex.build(paper, output, memory_budget_bytes=1)
+    assert second.fingerprint == first_fingerprint
+    assert second.db_path == first.db_path
+    assert sha256_file(second.db_path) == first_db_hash
+    assert second.search("sample_alias", "Sample-A")
+
+    source.write_text("Sample-A is tested against Ag/AgCl.\nSample-B is used as control.\n",
+                      encoding="utf-8")
+    third = PaperContextIndex.build(paper, output, memory_budget_bytes=1)
+    assert third.fingerprint != first_fingerprint
+    assert third.search("sample_alias", "Sample-B")
