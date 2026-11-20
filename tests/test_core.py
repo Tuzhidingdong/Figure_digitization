@@ -1971,6 +1971,8 @@ def test_same_figure_series_link_to_distinct_subjects_and_query_shared_sample_te
     cv_sample_a.technique = "CV"
     cv_sample_b = make_series("cv-sample-b", "measurement-cv-b", "scan rate")
     cv_sample_b.technique = "CV"
+    for item in (xrd_sample_a, cv_sample_a, cv_sample_b):
+        item.paper_id = snapshot.paper_id
 
     sample_a_link = {
         "entity_id": "sample-a",

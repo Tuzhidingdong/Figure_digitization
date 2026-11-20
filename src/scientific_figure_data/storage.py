@@ -214,6 +214,11 @@ class Catalog:
     def index_paper(self, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
                     series: list[SeriesRecord], status: str, artifact_paths: dict | None = None,
                     paper_root: Path | None = None, batch_size: int = 1000):
+        mismatched = [item.series_id for item in series if item.paper_id != snapshot.paper_id]
+        if mismatched:
+            raise ValueError(
+                f"Series paper_id must match snapshot paper_id {snapshot.paper_id!r}: {mismatched[:10]}"
+            )
         with self.con:
             self.register_paper(snapshot, status, artifact_paths)
             self.con.execute(
