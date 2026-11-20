@@ -1896,3 +1896,39 @@ def test_scheduler_pauses_dispatch_when_free_disk_is_low(monkeypatch, tmp_path: 
     assert report["minimum_free_disk_bytes_observed"] == 10
     assert report["failed"] == 0
     assert report["papers_seen"] == 0
+
+
+
+def test_process_paper_preserves_all_upstream_paths_and_hashes(tmp_path: Path):
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "upstream"
+    paper = input_root / "paper-immutable"
+    tables = paper / "extracted_tables"
+    tables.mkdir(parents=True)
+    (paper / "figure_inventory.json").write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "panels": [{"panel_id": "a", "technique": "CV", "domain": "battery"}],
+        }]
+    }), encoding="utf-8")
+    (paper / "main_analysis.md").write_text("Existing upstream context.\n", encoding="utf-8")
+    (tables / "table_1.csv").write_text("sample,value\nA,1\n", encoding="utf-8")
+
+    def tree_snapshot():
+        paths = {
+            item.relative_to(input_root).as_posix()
+            for item in input_root.rglob("*")
+        }
+        hashes = {
+            item.relative_to(input_root).as_posix(): sha256_file(item)
+            for item in input_root.rglob("*") if item.is_file()
+        }
+        return paths, hashes
+
+    before_paths, before_hashes = tree_snapshot()
+    process_paper(input_root, Path("paper-immutable"), tmp_path / "downstream")
+    after_paths, after_hashes = tree_snapshot()
+
+    assert after_paths == before_paths
+    assert after_hashes == before_hashes

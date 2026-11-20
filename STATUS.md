@@ -11,7 +11,7 @@
 - User-selected implementation repository: \`Tuzhidingdong/Figure_digitization\`
 - Note: the frozen plan names \`Tuzhidingdong/scientific-figure-data\` as its target repository. The user subsequently explicitly selected \`Figure_digitization\` for implementation. This execution follows that later repository instruction; the frozen plan file remains unchanged.
 - Implementation branch: \`main\`
-- Implementation status: IN PROGRESS — NOT READY FOR LOCAL ACCEPTANCE
+- Implementation status: IN PROGRESS — P0 ENGINEERING BASELINE; REAL-PAPER AND TARGET-HARDWARE ACCEPTANCE PENDING
 - Release status: NOT AUTHORIZED
 - Default runtime: Windows 10/11; 8 GB RAM; 4 logical CPU cores; no GPU
 - Default worker mode: one spawned paper worker; lazy sequential page/panel processing
@@ -38,7 +38,7 @@ Status key:
 |---|---|---|
 | Frozen Task Plan | COMPLETE — IMMUTABLE | \`TASK_PLAN_v1.4.1.md\`; no implementation edits have been made to it |
 | Repository/package/Skill entry | CODE PRESENT — TEST PENDING | \`pyproject.toml\`, \`SKILL.md\`, \`README.md\`, package under \`src/scientific_figure_data\` |
-| Windows installation/CI | PARTIAL | Windows Actions workflow covers Python 3.11–3.13; no successful run result has been retrieved yet |
+| Windows installation/CI | VERIFIED IN CI | Windows CI #152 passed package install, compileall, Ruff, and 58 pytest tests on Python 3.11, 3.12, and 3.13; hosted-runner CI is not the user's 8 GB target-machine measurement |
 | Read-only upstream adapter | PARTIAL | Recognizes common chem-literature output files and hashes inputs; actual upstream layout/version compatibility needs representative corpus fixtures |
 | Corpus manifest/fingerprints | CODE PRESENT — TEST PENDING | Lazy file iteration, SHA256 snapshots, JSONL corpus manifest, POSIX internal paths, Windows-safe paper IDs |
 | MAIN/SI text context | CODE PRESENT — TEST PENDING | Line-streamed MAIN/SI/table index; spills to SQLite above configured in-memory budget; preserves source snippets/line numbers |
@@ -55,11 +55,11 @@ Status key:
 | QC/evidence chain | PARTIAL | Source PDF/input hashes, extraction channel, algorithm version, calibration metadata, and component QC states are recorded; QC metrics/thresholds require benchmark calibration |
 | Provisional/calibrated thresholds | PARTIAL | Provisional YAML is present and selected thresholds enter cache fingerprints; no calibrated threshold file is generated because no annotated benchmark exists |
 | Streaming persistence | CODE PRESENT — TEST PENDING | Panel CSV point batches; paper JSON/bundle; batched SQLite point indexing and rebuild; scheduler single writer |
-| Resume/idempotency/review lock | PARTIAL | Leases, retries, content/stage fingerprints, cache artifact hash checks, version backup, reviewed-result protection; crash-recovery tests remain pending |
+| Resume/idempotency/review lock | PARTIAL — FAULT-INJECTION COVERED | Leases, retries, content/stage fingerprints, bundle integrity checks and reviewed-result lock; CI injects BrokenProcessPool, verifies retry success and finite retry exhaustion. Actual OS-level worker termination on the target PC remains unmeasured |
 | Query and ML export | PARTIAL | Cursor-based query, panel-streamed CSV/JSON export, subject/condition/provenance/QC fields and warnings; full scientific comparability rules need further integration |
-| Offline review helper | PARTIAL | Folder selection, source crop/overlay, metadata correction and review-patch export; direct point editing, axis-anchor editing and full visual QC workflow remain incomplete |
-| Review patch apply | CODE PRESENT — TEST PENDING | Schema allowlist, base SHA256, stale conflict, idempotent patch ID, version backup, bundle hash refresh and SQLite update |
-| Corpus reporting | PARTIAL | Job counts, retries, elapsed time, throughput, sampled RSS, failure distribution, and zero LLM token field; complete eligible/skipped/disk metrics need more verification |
+| Offline review helper | PARTIAL — MANUAL ACCEPTANCE PENDING | Folder selection, lazy Panel CSV loading, source crop/curve overlay, X/Y anchor editing, ordered point correction and patch export are implemented; manual Windows browser acceptance/readback remains outstanding |
+| Review patch apply | VERIFIED BY REGRESSION AND FAILURE INJECTION | Schema allowlist, base SHA256, stale conflict, idempotent patch ID, version backup, Bundle hash refresh, SQLite synchronization, and rollback of CSV/JSON/Bundle when the catalog transaction fails |
+| Corpus reporting | PARTIAL | Job counts, retries, elapsed time, throughput, sampled RSS, failure distribution, zero-token declaration, and free-disk start/minimum/end plus pressure-pause reason are reported; full eligible/skipped classification and peak temporary-disk accounting still need completion |
 | Real-paper P0 acceptance | BLOCKED ON USER INPUT | Requires user-approved Battery/AOP/PFAS PDFs and annotated reference points/anchors |
 | P1 | DEFERRED | Tables, bar/scatter/marker/error-bar automation and complex tables are not claimed |
 | P2 | DEFERRED | Heatmap matrix reconstruction, advanced LC-MS/MS and specialized image reconstruction are not claimed |
@@ -69,18 +69,20 @@ Status key:
 
 The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This summary does not replace or modify that checklist.
 
-### Code is present; automated verification is pending
+### Regression-tested code paths
 
-- Input/model foundation: AC-01, AC-02, AC-04 (partial input-schema coverage), AC-07–AC-13, AC-18–AC-23.
-- Core figure/storage/query plumbing: AC-26, AC-28, AC-33–AC-35, AC-38, AC-40–AC-41, AC-46 (conservative fallback only), AC-47, AC-49–AC-50, AC-52–AC-54, AC-58–AC-59, AC-61–AC-65, AC-71–AC-80, AC-85–AC-91, AC-95–AC-98.
-- Review patch behavior is implemented but still requires test execution: AC-82–AC-83 and AC-86–AC-88.
+- Windows matrix: Python 3.11, 3.12 and 3.13 each pass package installation, compileall, Ruff and the 58-test suite in CI #152.
+- Scheduler fault injection: AC-24 retry behavior and retry exhaustion are covered by injected `BrokenProcessPool` exceptions; Lease recovery and cache reuse are also covered by tests.
+- Review transaction: AC-86–AC-88 schema/base-hash/idempotency behavior plus cross-artifact rollback on injected SQLite failure are covered by tests.
+- A new synthetic source-immutability test is included in the next CI commit; passing it will still not replace target-corpus/release evidence for AC-06.
+- The remaining AC checklist in the frozen plan is not implicitly accepted by passing this regression suite.
 
 ### Partial or not yet accepted
 
 - Adapter/version compatibility and failure isolation: AC-03, AC-05.
 - Upstream immutability proof: AC-06.
-- Full resource controls, pressure handling, and Windows measurements: AC-14–AC-17.
-- Worker crash recovery and valid stage-level reuse under failure: AC-24–AC-25.
+- Full resource controls and target-Windows measurements: AC-14–AC-16; AC-17 now includes a tested low-free-disk dispatch pause, while memory pressure and target-machine measurements remain partial.
+- Stage-level reuse under all failure modes: AC-25; AC-24 has synthetic BrokenProcessPool retry/retry-exhaustion coverage, not a destructive real-process kill on the target PC.
 - Normalized panel geometry, independent segmentation confidence, and revision of chart classification: AC-27, AC-29–AC-30.
 - Real backend comparison and final backend selection: AC-31–AC-32.
 - Dependency/license verification: AC-36.
@@ -89,9 +91,9 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Full domain-specific comparability semantics: AC-55–AC-57.
 - Original/standardized measurement values and comprehensive unit interpretation: AC-60.
 - Multi-dimensional QC and benchmark-calibrated metrics: AC-66–AC-70.
-- Review visualization and complete review editing: AC-81.
+- Review visualization and complete review editing: AC-81; local-browser manual acceptance remains pending.
 - Full ML comparability and provenance contract: AC-92–AC-93.
-- Full corpus report fields: AC-94.
+- Full corpus report fields: AC-94; free-disk metrics are present, but the complete eligible/skipped and peak temporary-disk breakdown is not yet satisfied.
 
 ### Blocked or deferred
 
@@ -110,17 +112,25 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 ### Verification state
 
-- Test source files have been committed.
+- Test source files have been committed; the source-immutability test added in the 2026-11-20 update brings the suite to 59 tests and is awaiting the next Windows CI run.
 - The Windows CI workflow has been committed.
 - Windows CI run #39 passed package install, compileall, Ruff, and all 15 tests on Python 3.11, 3.12, and 3.13.
 - Windows CI run #45 passed package install, compileall, Ruff, and all 17 tests on Python 3.11, 3.12, and 3.13. This run included the full CLI workflow and scheduler cache-reuse tests.
-- Windows CI run #49 compiled and passed Ruff on Python 3.11, 3.12, and 3.13, but pytest failed on the new PDFium text-object test because the page-evidence wrapper referenced a nonexistent `PdfPageView.name`.
-- Fixed that test-discovered issue in commit `3ce320628e0efb8f9376d6ca29b0a379a136be90`; the latest code needs a fresh Windows CI run.
+- Windows CI #152 passed the 58-test suite on Windows Python 3.11, 3.12 and 3.13; each job passed installation, compileall, Ruff and pytest.
+- Windows CI #149 passed the injected Worker-pool crash/retry, retry-exhaustion, and review-rollback tests on all three Python versions.
+- Windows CI #150–#152 passed the low-free-disk dispatch guard and CLI parameter tests; #152 is the latest completed full matrix before the source-immutability addition.
 - Added an optional backend spike that performs per-page measurements with PDFium, PDFMiner, and pikepdf/QPDF. The extra libraries are not part of the default installation.
 - The assistant-side environment could not retrieve the repository archive for an independent local execution; GitHub file operations remain available.
 - Synthetic tests, even when they pass, do not count as real-paper scientific acceptance.
 
 ## Engineering log
+
+### 2026-11-20 — Failure recovery and disk-pressure protection
+
+- Added deterministic fault-injection coverage for a BrokenProcessPool worker crash followed by recovery, finite retry exhaustion, and review rollback after the SQLite transaction is forced to fail. The rollback test verifies byte-identical restoration of digitization.json, panel_series.csv and paper_bundle.json, and no catalog commit.
+- Added `--min-free-disk-mb` (default 256 MiB). The scheduler checks available space before each new dispatch, stops scheduling below the threshold, allows active work to drain, and records start/minimum/end free-space values and pause reason in run_report.json. `0` disables the guard.
+- Windows CI #149–#152 passed the 58-test source state on Python 3.11, 3.12 and 3.13; #152 also passed compileall and Ruff.
+- Added a synthetic source immutability regression test; its CI verification is pending in this update.
 
 ### 2026-11-19 — M1 corpus/P0 verification increment
 
@@ -151,10 +161,10 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 - Post-run-45: added a fake-PDFium test for TextPage lifetime; run #49 exposed a missing backend identifier on PdfPageView and the fix is committed, pending rerun.
 - Extended the backend probe to measure PDFium native object evidence, PDFMiner layout/text objects, and pikepdf/QPDF content-stream operations page by page; real PDF measurements remain blocked on user-approved sample PDFs.
 
-## Latest verification — 2026-11-19
+## Latest verification — 2026-11-20
 
-- Latest source contains 54 regression tests.
-- Windows CI run #146 passed on Windows Python 3.11, 3.12 and 3.13. Each runner passed package installation, compileall, Ruff (imports/undefined names), and the full pytest suite (54 tests).
+- The current source is expected to contain 59 regression tests after the new source-immutability fixture is added; the latest completed CI #152 verified 58 tests before that final test addition.
+- Windows CI run #152 passed on Windows Python 3.11, 3.12 and 3.13. Each runner passed package installation, compileall, Ruff (imports/undefined names), and the full pytest suite (58 tests).
 - The four failures from runs #142/#143 were fixed:
   1. OCR tick extraction now accepts an explicit absolute pixel Plot Box even when the caller supplies OCR rows without a source image; normalized boxes still require image dimensions.
   2. Review-axis test expectations now match the source pixels and pixel-to-value slopes; untouched Series values are asserted unchanged.
@@ -167,9 +177,10 @@ The canonical checklist remains AC-01–AC-102 in the frozen Task Plan. This sum
 
 1. Run the PDF backend technical spike on 3–5 user-approved real PDFs. Compare PDFium, PDFMiner and pikepdf/QPDF for text, vector paths, embedded images, clipping, rotation, Form XObjects, path fragmentation and text-as-path; record per-page time, Peak RSS and licensing.
 2. Validate P0 extraction against user-approved, human-annotated Battery, AOP and PFAS figures. Measure axis calibration residuals and curve point errors before setting QC thresholds or claiming scientific accuracy.
-3. Add fault-injection tests for BrokenProcessPool/worker crashes, retry exhaustion, memory/disk pressure, review rollback across CSV/JSON/SQLite, and source immutability.
+3. Measure memory, CPU, disk and recovery behavior on the user's Windows 10/11 target configuration (8 GB RAM, 4 logical cores); hosted CI and synthetic pressure tests are not substitutes.
 4. Manually validate the offline review helper in a Windows browser, including local folder selection, source overlay, axis/point edits, patch export and CLI apply/readback.
-5. Keep P1/P2 deferred until P0 has real-paper accuracy and operational acceptance.
+5. Complete the remaining corpus report breakdown (eligible/skipped states and peak temporary disk usage), expand upstream layout compatibility checks, and collect source immutability evidence on representative corpus folders.
+6. Keep P1/P2 deferred until P0 has real-paper accuracy and operational acceptance.
 
 ## Non-negotiable constraints
 
