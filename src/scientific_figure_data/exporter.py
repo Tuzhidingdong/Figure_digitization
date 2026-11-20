@@ -126,7 +126,13 @@ def _standardize_axis(value: float | None, source_unit: Any, target_unit: Any) -
         return {"standardized_value": None, "standardized_unit": None,
                 "standardization_status": "UNRESOLVED_MISSING_NUMERIC_VALUE",
                 "method_id": None, "evidence_id": None}
-    return standardize_measurement_value(value, source_unit, target_unit.strip())
+    result = standardize_measurement_value(value, source_unit, target_unit.strip())
+    if result["standardization_status"] != "DETERMINISTIC_DIMENSIONAL_CONVERSION":
+        result["standardized_value"] = None
+        result["standardized_unit"] = None
+        result["method_id"] = None
+        result["evidence_id"] = None
+    return result
 
 
 def _standardization_summary(
