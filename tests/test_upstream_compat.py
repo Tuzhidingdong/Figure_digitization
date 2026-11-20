@@ -242,6 +242,13 @@ def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
     assert result["panels"][0]["bbox_provenance"] == "NOT_PROVIDED"
     assert result["panels"][0]["segmentation_provenance"] == "SINGLE_PANEL_FALLBACK"
     assert result["panels"][0]["segmentation_status"] == "WHOLE_FIGURE_NOT_SEGMENTED"
+    copied_image = (
+        tmp_path / "downstream" / "papers" / result["snapshot"]["paper_id"]
+        / "evidence" / "MAIN_FIG_P1_01_1.png"
+    )
+    assert copied_image.is_file()
+    assert _sha256(copied_image.read_bytes()) == _sha256(image_path.read_bytes())
+    assert result["figures"][0]["source_image_asset_path"] == image_relative
     assert after == before
 
 

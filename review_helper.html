@@ -111,8 +111,11 @@ label{display:block;margin:.5rem 0}input,select,textarea,button{font:inherit;pad
   }
   function draw(series, rows){
     const canvas=$("plot"),ctx=canvas.getContext("2d");
-    const expected=series.figure_id+"_"+series.panel_id+".png";
-    const imageEntry=[...fileMap.entries()].find(([p])=>p.endsWith(expected));
+    const fallback=series.figure_id+"_"+series.panel_id+".png";
+    const expected=series.evidence?.find(item=>item.source_image)?.source_image||fallback;
+    const entries=[...fileMap.entries()];
+    const imageEntry=entries.find(([p])=>p.endsWith(expected))
+      ||entries.find(([p])=>p.endsWith(fallback));
     const drawOverlay=(scale)=>{
       const points=rows.filter(p=>p.pixel_x!==""&&p.pixel_y!=="");
       if(points.length>=2){

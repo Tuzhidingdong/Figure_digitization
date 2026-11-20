@@ -238,6 +238,22 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
     return [], None
 
 
+def _copy_image_asset_to_evidence(source_path: Path, destination: Path) -> Path | None:
+    """Copy a source image into downstream evidence atomically without modifying its source."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".tmp")
+    try:
+        shutil.copyfile(source_path, temporary)
+        temporary.replace(destination)
+        return destination
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        return None
+
+
 def _may_use_source_pdf_bbox_fallback(source_figure: dict, panel: dict) -> bool:
     """Do not guess a PDF crop when an upstream evidence_index asset is unresolved."""
     return not source_figure.get("image_asset_status") or bool(panel.get("image_path"))
@@ -443,6 +459,7 @@ def _extract_panel(
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
         "source_image_asset_status": figure.get("source_asset_status"),
         "source_image": image_path.name if image_path else None,
+        "source_image_upstream_path": figure.get("source_image_asset_path"),
         "source_image_sha256": sha256_file(image_path) if image_path and image_path.is_file() else None,
         "source_pdf_sha256": source_pdf_sha256,
         "paper_input_fingerprint": input_fingerprint,
@@ -1003,6 +1020,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             "figure_id": figure_id, "page": int(page_number) if page_number else None,
             "source_doc_type": source_doc_type,
             "source_asset_status": source_figure.get("image_asset_status"),
+            "source_image_asset_path": source_figure.get("image_path"),
+            "source_image_asset_sha256": source_figure.get("image_asset_sha256"),
+            "source_image_asset_id": source_figure.get("image_asset_id"),
             "source_bbox": source_figure.get("bbox") or source_figure.get("bounding_box"),
             "source_bbox_role": (
                 "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED"
@@ -1066,7 +1086,14 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     saved_crop = _crop_local_image(
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
-                saved_crop = panel_path
+                if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
+                    suffix = panel_path.suffix.lower()
+                    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+                        suffix = ".img"
+                    evidence_image = (
+                        paper_output / "evidence" / f"{figure_id}_{panel_id}{suffix}"
+                    )
+                    saved_crop = _copy_image_asset_to_evidence(panel_path, evidence_image)
             if (
                 saved_crop is None
                 and pdf_path
