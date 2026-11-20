@@ -75,6 +75,21 @@ def _make_chem_literature_package(tmp_path: Path):
     return input_root, package, source_pdf, image_relative
 
 
+def _write_valid_figure_png(package: Path, image_relative: str) -> Path:
+    from PIL import Image
+
+    image_path = package / image_relative
+    with Image.new("RGB", (24, 16), "white") as image:
+        image.save(image_path, format="PNG")
+    evidence_index = package / "evidence_index.json"
+    payload = json.loads(evidence_index.read_text(encoding="utf-8"))
+    for asset in payload.get("media_assets", []):
+        if asset.get("relative_path") == image_relative:
+            asset["sha256"] = _sha256(image_path.read_bytes())
+    evidence_index.write_text(json.dumps(payload), encoding="utf-8")
+    return image_path
+
+
 def test_current_chem_literature_package_is_discovered_as_one_paper(tmp_path: Path):
     input_root, package, source_pdf, _ = _make_chem_literature_package(tmp_path)
 
@@ -198,19 +213,10 @@ def test_validate_flags_unaccepted_external_main_pdf_integrity_state(tmp_path: P
 def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
     tmp_path: Path,
 ):
-    from PIL import Image
     from scientific_figure_data.pipeline import process_paper
 
     input_root, package, source_pdf, image_relative = _make_chem_literature_package(tmp_path)
-    image_path = package / image_relative
-    with Image.new("RGB", (24, 16), "white") as image:
-        image.save(image_path, format="PNG")
-    evidence_index = package / "evidence_index.json"
-    evidence_payload = json.loads(evidence_index.read_text(encoding="utf-8"))
-    for asset in evidence_payload["media_assets"]:
-        if asset.get("figure_id") == "MAIN_FIG_P1_01":
-            asset["sha256"] = _sha256(image_path.read_bytes())
-    evidence_index.write_text(json.dumps(evidence_payload), encoding="utf-8")
+    image_path = _write_valid_figure_png(package, image_relative)
 
     def upstream_snapshot():
         package_paths = {
@@ -304,7 +310,8 @@ def test_explicit_panel_geometry_retains_source_normalized_and_provenance_fields
 def test_main_pdf_changed_after_snapshot_is_not_used_as_verified_source(tmp_path: Path):
     from scientific_figure_data.pipeline import process_paper
 
-    input_root, package, source_pdf, _ = _make_chem_literature_package(tmp_path)
+    input_root, package, source_pdf, image_relative = _make_chem_literature_package(tmp_path)
+    _write_valid_figure_png(package, image_relative)
     snapshot = snapshot_paper(package, input_root)
     source_pdf.write_bytes(b"%PDF-1.7\nmutated after snapshot\n")
 
@@ -327,8 +334,9 @@ def test_source_figure_asset_changed_after_snapshot_is_not_copied(tmp_path: Path
     from scientific_figure_data.pipeline import process_paper
 
     input_root, package, _, image_relative = _make_chem_literature_package(tmp_path)
+    image_path = _write_valid_figure_png(package, image_relative)
     snapshot = snapshot_paper(package, input_root)
-    (package / image_relative).write_bytes(b"mutated after snapshot")
+    image_path.write_bytes(b"mutated after snapshot")
     output_root = tmp_path / "downstream-image-race"
 
     result = process_paper(
