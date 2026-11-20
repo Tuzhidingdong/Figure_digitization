@@ -40,3 +40,18 @@ def test_worker_initializer_redirects_all_temp_variables_to_run_scope(tmp_path: 
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+
+
+def test_paper_disk_budget_includes_projected_image_copy_bytes(tmp_path: Path):
+    from scientific_figure_data.pipeline import _within_paper_disk_budget
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "existing.bin").write_bytes(b"existing")
+
+    assert _within_paper_disk_budget(
+        tmp_path, 1, context_index_bytes=100, additional_bytes=100
+    )
+    assert not _within_paper_disk_budget(
+        tmp_path, 1, context_index_bytes=100, additional_bytes=1024 * 1024
+    )

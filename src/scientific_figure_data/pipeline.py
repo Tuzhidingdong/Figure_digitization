@@ -866,11 +866,15 @@ def _paper_disk_usage(paper_output: Path) -> dict[str, int]:
 
 def _within_paper_disk_budget(
     paper_output: Path, budget_mb: int, context_index_bytes: int,
+    additional_bytes: int = 0,
 ) -> bool:
     if budget_mb <= 0:
         return True
     evidence_bytes = _directory_size(paper_output / "evidence")
-    return evidence_bytes + max(0, context_index_bytes) < budget_mb * 1024 * 1024
+    projected_bytes = (
+        evidence_bytes + max(0, context_index_bytes) + max(0, int(additional_bytes))
+    )
+    return projected_bytes < budget_mb * 1024 * 1024
 
 
 def _crop_local_image(source_path: Path, bbox: Any, output_path: Path) -> Path | None:
@@ -1086,7 +1090,14 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     saved_crop = _crop_local_image(
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
-                if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
+                try:
+                    source_image_bytes = int(panel_path.stat().st_size)
+                except OSError:
+                    source_image_bytes = -1
+                if source_image_bytes >= 0 and _within_paper_disk_budget(
+                    paper_output, temp_disk_limit_mb, context_index_bytes,
+                    additional_bytes=source_image_bytes,
+                ):
                     suffix = panel_path.suffix.lower()
                     if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
                         suffix = ".img"
