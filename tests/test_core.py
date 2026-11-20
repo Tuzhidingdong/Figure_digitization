@@ -292,6 +292,16 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     first = next(row for row in rows if row["series_id"] == "series-a")
     assert first["input_fingerprint"] == snapshot.input_fingerprint
     assert first["qc_status"] == "PROVISIONAL_UNCALIBRATED"
+    assert first["standardization_status"] == "NOT_PERFORMED"
+    assert first["compatibility_status"] == "NOT_HARMONIZED"
+    assert json.loads(first["subject_entity_ids_json"]) == ["sample-a"]
+    point_subjects = json.loads(first["subject_links_json"])
+    assert point_subjects[0]["canonical_name"] == "Sample A"
+    point_conditions = json.loads(first["conditions_json"])
+    assert any(item["name"] == "electrolyte" for item in point_conditions)
+    assert first["x_value_raw"] == first["x_value"]
+    assert first["x_unit_raw"] == first["x_unit"]
+    assert "pixel_x" in first and "y_err_low" in first
     metadata_rows = [
         json.loads(line) for line in (output / "series_metadata.jsonl").read_text(encoding="utf-8").splitlines()
     ]
@@ -299,6 +309,12 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert any(link["canonical_name"] == "Sample A" for link in first_metadata["subject_links"])
     assert any("electrolyte" in item["name"] for item in first_metadata["conditions"])
     assert first_metadata["input_fingerprint"] == snapshot.input_fingerprint
+    assert first_metadata["standardization_status"] == "NOT_PERFORMED"
+    assert first_metadata["subject_links"][0]["evidence"]["source"] == "legend"
+    assert isinstance(first_metadata["conditions"][0]["value"], dict)
+    assert manifest["schema_version"] == "1.1"
+    assert manifest["row_granularity"] == "one_row_per_digitized_series_point"
+    assert manifest["raw_value_policy"]
     assert (output / "warnings.jsonl").is_file()
     assert manifest["streaming"]["point_rows_buffered"] == 1
 
