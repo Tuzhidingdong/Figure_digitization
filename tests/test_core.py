@@ -1704,3 +1704,157 @@ def test_hybrid_pipeline_falls_back_to_unique_raster_when_vector_candidates_are_
     assert record.metadata["vector_fallback"] == "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
     assert record.metadata["vector_selection"]["reason"] == "MULTIPLE_VECTOR_CANDIDATES"
     assert len(record.points) > 0
+
+
+def test_scheduler_recovers_broken_worker_and_retries_paper(monkeypatch, tmp_path: Path):
+    from concurrent.futures import Future
+    from concurrent.futures.process import BrokenProcessPool
+
+    import scientific_figure_data.scheduler as scheduler
+    from scientific_figure_data.models import JobState
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-crash"
+    paper.mkdir(parents=True)
+    output_root = tmp_path / "output"
+
+    class FakeExecutor:
+        created = 0
+
+        def __init__(self, **kwargs):
+            self.instance = FakeExecutor.created
+            FakeExecutor.created += 1
+
+        def submit(self, *args, **kwargs):
+            future = Future()
+            if self.instance == 0:
+                future.set_exception(BrokenProcessPool("injected worker crash"))
+            else:
+                future.set_result({"job_state": JobState.BLOCKED.value})
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            return None
+
+    monkeypatch.setattr(scheduler, "ProcessPoolExecutor", FakeExecutor)
+    report = scheduler.run_corpus(
+        input_root, output_root, [paper], workers=1, max_attempts=2,
+        lease_seconds=30, options={"memory_limit_mb": 0},
+    )
+
+    assert report["retried"] == 1
+    assert report["blocked_review_locked"] == 1
+    assert report["failed"] == 0
+    ledger = scheduler.JobLedger(output_root / "catalog.sqlite")
+    row = ledger.con.execute(
+        "SELECT state,attempt_count FROM jobs WHERE paper_id='paper-crash'"
+    ).fetchone()
+    assert row["state"] == JobState.BLOCKED.value
+    assert row["attempt_count"] == 2
+    event_types = [
+        row["event_type"] for row in ledger.con.execute(
+            "SELECT event_type FROM job_events WHERE paper_id='paper-crash' ORDER BY event_id"
+        )
+    ]
+    assert "RETRY_WAIT" in event_types
+    assert JobState.BLOCKED.value in event_types
+    ledger.close()
+
+
+def test_scheduler_stops_after_broken_worker_retry_exhaustion(monkeypatch, tmp_path: Path):
+    from concurrent.futures import Future
+    from concurrent.futures.process import BrokenProcessPool
+
+    import scientific_figure_data.scheduler as scheduler
+    from scientific_figure_data.models import JobState
+
+    input_root = tmp_path / "input"
+    paper = input_root / "paper-permanent"
+    paper.mkdir(parents=True)
+    output_root = tmp_path / "output"
+
+    class AlwaysBrokenExecutor:
+        def __init__(self, **kwargs):
+            pass
+
+        def submit(self, *args, **kwargs):
+            future = Future()
+            future.set_exception(BrokenProcessPool("injected persistent crash"))
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            return None
+
+    monkeypatch.setattr(scheduler, "ProcessPoolExecutor", AlwaysBrokenExecutor)
+    report = scheduler.run_corpus(
+        input_root, output_root, [paper], workers=1, max_attempts=2,
+        lease_seconds=30, options={"memory_limit_mb": 0},
+    )
+
+    assert report["retried"] == 1
+    assert report["failed"] == 1
+    ledger = scheduler.JobLedger(output_root / "catalog.sqlite")
+    row = ledger.con.execute(
+        "SELECT state,attempt_count,last_error FROM jobs WHERE paper_id='paper-permanent'"
+    ).fetchone()
+    assert row["state"] == JobState.FAILED_PERMANENT.value
+    assert row["attempt_count"] == 2
+    assert "BrokenProcessPool" in row["last_error"]
+    ledger.close()
+
+
+def test_review_patch_rolls_back_files_when_catalog_transaction_fails(tmp_path: Path):
+    import sqlite3
+
+    snapshot, paper_root = make_output_with_series(tmp_path)
+    digitization = paper_root / "digitization.json"
+    panel_csv = paper_root / "series" / "Figure1__a" / "panel_series.csv"
+    bundle = paper_root / "paper_bundle.json"
+    before_hashes = {
+        "digitization": sha256_file(digitization),
+        "panel_csv": sha256_file(panel_csv),
+        "bundle": sha256_file(bundle),
+    }
+
+    patch_path = tmp_path / "rollback.json"
+    patch_path.write_text(json.dumps({
+        "schema_version": "1.0",
+        "patch_id": "rollback-injected",
+        "paper_id": snapshot.paper_id,
+        "target_artifact": "digitization.json",
+        "original_result_hash": before_hashes["digitization"],
+        "reviewer": "fault-injection-test",
+        "changes": [{
+            "series_id": "series-a",
+            "set": {
+                "label": "Must roll back",
+                "points": [{
+                    "point_index": 0, "x": 9.0, "y": 8.0,
+                    "pixel_x": 10.0, "pixel_y": 20.0,
+                }],
+            },
+        }],
+    }), encoding="utf-8")
+
+    connection = connect_catalog(tmp_path / "catalog.sqlite")
+    connection.execute(
+        """CREATE TRIGGER fail_review_commit BEFORE INSERT ON applied_patches
+           BEGIN SELECT RAISE(ABORT, 'injected catalog failure'); END"""
+    )
+    connection.close()
+
+    with pytest.raises(sqlite3.IntegrityError, match="injected catalog failure"):
+        apply_review_patch(tmp_path, patch_path)
+
+    assert sha256_file(digitization) == before_hashes["digitization"]
+    assert sha256_file(panel_csv) == before_hashes["panel_csv"]
+    assert sha256_file(bundle) == before_hashes["bundle"]
+
+    catalog = Catalog(tmp_path / "catalog.sqlite")
+    row = catalog.query_series({"paper_id": snapshot.paper_id})[0]
+    assert row["label"] == "series-a"
+    assert row["review_state"] == "NEEDS_REVIEW"
+    assert catalog.con.execute(
+        "SELECT COUNT(*) FROM applied_patches WHERE patch_id='rollback-injected'"
+    ).fetchone()[0] == 0
+    catalog.close()
