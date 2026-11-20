@@ -275,7 +275,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     if result.get("cached"):
                         results["cached"] += 1
                     if result.get("job_state") != JobState.BLOCKED.value:
-                        from .models import PaperSnapshot, InputArtifact, SeriesRecord, SeriesPoint
+                        from .models import InputArtifact, SeriesRecord, SeriesPoint
                         snapshot_data = result["snapshot"]
                         snapshot = PaperSnapshot(
                             paper_id=snapshot_data["paper_id"], source_dir=snapshot_data["source_dir"],
