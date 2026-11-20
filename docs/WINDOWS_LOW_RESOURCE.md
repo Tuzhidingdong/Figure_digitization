@@ -26,7 +26,7 @@ The input and output root trees must be disjoint: do not use the same directory,
 
 The hosted Windows CI matrix is a software regression check, not a substitute for a measurement on the target 8 GB / 4-core computer. The repository provides a local sampler:
 
-    powershell -ExecutionPolicy Bypass -File scripts/measure_windows_resource.ps1 -InputRoot "D:\\chem-literature-outputs" -OutputRoot "D:\\figure-data-output"
+    powershell -ExecutionPolicy Bypass -File scripts/measure_windows_resource.ps1 -InputRoot "D:\\chem-literature-outputs\runs\preprocessed" -OutputRoot "D:\\figure-data-output"
 
 The script runs the default one-worker pipeline with conservative rendering, samples the sfd parent/child process tree, records peak sampled working set, CPU time/utilization, available physical memory, free disk space, output-directory growth, and samples `OUTPUT_ROOT/.sfd-runtime-tmp`. It embeds the pipeline run_report.json, which records the scheduler's internal per-run TEMP/TMP/TMPDIR peak and cleanup result. Add -Resume to measure a resume run. The source root is checked to be disjoint from the output root.
 
