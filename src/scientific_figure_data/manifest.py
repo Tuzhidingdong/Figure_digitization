@@ -13,25 +13,16 @@ ADAPTER_VERSION = "0.1.0"
 
 
 def storage_paper_id(paper_id: str) -> str:
-    """Normalize a corpus-relative paper path into a Windows-safe collision-resistant ID."""
-    canonical = str(paper_id).replace("\\", "/")
-    raw_storage_id = canonical.replace("/", "__")
-    storage_id = re.sub(r'[<>:"|?*\x00-\x1f]', "_", raw_storage_id).rstrip(" .")
+    """Normalize a corpus-relative paper path into the stable Windows-safe storage ID."""
+    storage_id = str(paper_id).replace("/", "__").replace("\\", "__")
+    storage_id = re.sub(r'[<>:"|?*\x00-\x1f]', "_", storage_id).rstrip(" .")
     reserved = {"CON", "PRN", "AUX", "NUL",
                 *(f"COM{i}" for i in range(1, 10)),
                 *(f"LPT{i}" for i in range(1, 10))}
-    normalized_or_reserved = (
-        not storage_id
-        or storage_id != raw_storage_id
-        or "/" in canonical
-        or storage_id.upper() in reserved
-    )
-    if not storage_id:
-        storage_id = "paper"
+    if not storage_id or storage_id.upper() in reserved:
+        storage_id = "_" + (storage_id or "paper")
     if len(storage_id) > 120:
-        return storage_id[:100] + "_" + sha256_json(canonical)[:12]
-    if normalized_or_reserved:
-        return storage_id[:107] + "_" + sha256_json(canonical)[:12]
+        storage_id = storage_id[:100] + "_" + sha256_json(paper_id)[:12]
     return storage_id
 
 

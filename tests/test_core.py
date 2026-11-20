@@ -1120,12 +1120,9 @@ def test_adapter_allows_a_single_pdf_paper_at_the_root(tmp_path: Path):
 def test_canonical_paper_id_is_stable_and_windows_safe():
     from scientific_figure_data.manifest import storage_paper_id
 
-    nested_posix = storage_paper_id("nested/paper-001")
-    nested_windows = storage_paper_id("nested\\paper-001")
-    assert nested_posix == nested_windows
-    assert nested_posix != storage_paper_id("nested__paper-001")
-    assert storage_paper_id("a:b") != storage_paper_id("a_b")
-    assert storage_paper_id("NUL").startswith("NUL_")
+    assert storage_paper_id("nested/paper-001") == "nested__paper-001"
+    assert storage_paper_id("nested\\paper-001") == "nested__paper-001"
+    assert storage_paper_id("NUL") == "_NUL"
     assert storage_paper_id("a" * 140).startswith("a" * 100 + "_")
 
 
@@ -2087,3 +2084,17 @@ def test_scheduler_pauses_dispatch_when_available_memory_is_low(monkeypatch, tmp
     assert report["minimum_free_memory_bytes_observed"] == 10
     assert report["failed"] == 0
     assert report["papers_seen"] == 0
+
+
+
+def test_adapter_rejects_paper_id_normalization_collisions(tmp_path: Path):
+    from scientific_figure_data.adapter import ensure_unique_paper_ids
+
+    nested = tmp_path / "nested" / "paper"
+    literal = tmp_path / "nested__paper"
+    for paper in (nested, literal):
+        paper.mkdir(parents=True)
+        (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Paper ID normalization collision"):
+        list(ensure_unique_paper_ids(discover_papers(tmp_path), tmp_path))

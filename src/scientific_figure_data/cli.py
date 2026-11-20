@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from .adapter import discover_papers, snapshot_paper
+from .adapter import discover_papers, ensure_unique_paper_ids, snapshot_paper
 from .exporter import export_dataset
 from .hashing import atomic_write_json, sha256_file
 from .manifest import storage_paper_id
@@ -134,7 +134,7 @@ def _scan(args) -> int:
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
     count = 0
     with temporary.open("w", encoding="utf-8") as stream:
-        for paper_dir in discover_papers(input_root):
+        for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
             snapshot = snapshot_paper(paper_dir, input_root)
             stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
             count += 1
@@ -170,7 +170,7 @@ def _run(args) -> int:
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
         "resume_cached_skipped": 0,
-        "discovered_papers": sum(1 for _ in discover_papers(input_root)),
+        "discovered_papers": sum(1 for _ in ensure_unique_paper_ids(discover_papers(input_root), input_root)),
         "eligible_papers": 0,
         "skipped_by_selection": 0,
     }
@@ -214,7 +214,7 @@ def _run(args) -> int:
             selected_states = None
 
     def selected_papers():
-        for paper in discover_papers(input_root):
+        for paper in ensure_unique_paper_ids(discover_papers(input_root), input_root):
             relative = paper.relative_to(input_root).as_posix()
             storage_id = storage_paper_id(relative)
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:

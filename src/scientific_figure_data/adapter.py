@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Iterator
 
-from .manifest import create_snapshot
+from .manifest import create_snapshot, storage_paper_id
 from .models import PaperSnapshot
 
 PAPER_MARKERS = {
@@ -78,3 +78,21 @@ def locate_pdf(paper_dir: Path, input_root: Path, snapshot: PaperSnapshot) -> Pa
             if candidate.is_file():
                 return candidate
     return None
+
+
+
+def ensure_unique_paper_ids(papers: Iterator[Path], input_root: Path) -> Iterator[Path]:
+    """Fail before writes if two source paths normalize to the same output paper ID."""
+    seen: dict[str, str] = {}
+    root = input_root.resolve()
+    for paper in papers:
+        relative = paper.resolve().relative_to(root).as_posix()
+        paper_id = storage_paper_id(relative)
+        previous = seen.get(paper_id)
+        if previous is not None and previous != relative:
+            raise ValueError(
+                f"Paper ID normalization collision: {previous!r} and {relative!r} "
+                f"both map to {paper_id!r}; rename or separate one source directory."
+            )
+        seen[paper_id] = relative
+        yield paper
