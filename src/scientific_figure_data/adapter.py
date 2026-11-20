@@ -7,6 +7,7 @@ from typing import Iterator
 
 from .manifest import create_snapshot, storage_paper_id
 from .models import PaperSnapshot
+from .hashing import sha256_file
 
 PAPER_MARKERS = {
     "paper_manifest.json",
@@ -79,10 +80,25 @@ def locate_pdf(paper_dir: Path, input_root: Path, snapshot: PaperSnapshot) -> Pa
         except ValueError:
             continue
         if candidate.is_file() and candidate.suffix.lower() == ".pdf":
-            return candidate
+            try:
+                if sha256_file(candidate) == artifact.sha256:
+                    return candidate
+            except OSError:
+                pass
+            return None
     candidate = snapshot.resolved_main_pdf
     if candidate and candidate.is_file() and candidate.suffix.lower() == ".pdf":
-        return candidate.resolve()
+        expected = next(
+            (str(source.get("sha256")) for source in snapshot.external_sources
+             if source.get("status") in {"HASH_VERIFIED", "HASH_COMPUTED_NO_EXPECTED_SHA256"}
+             and source.get("sha256")),
+            None,
+        )
+        try:
+            if expected and sha256_file(candidate) == expected:
+                return candidate.resolve()
+        except OSError:
+            pass
     return None
 
 
