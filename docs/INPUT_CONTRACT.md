@@ -103,3 +103,6 @@ An override may supply a `measurement_semantics` object for a Series. Export com
 For battery capacity metrics, the recognized fields are `capacity_basis`, `cell_scope`, `current_density_basis`, and `cycling_protocol`. When a GCD/GITT or battery-performance series has no explicit metric, export marks the metric unresolved. Spectral characterization techniques are not assigned battery-capacity basis warnings.
 
 AOP and PFAS series require an explicit metric for comparability. If `comparison_target_metric` is supplied, distinct metric roles (for example parent-compound removal versus defluorination) generate an incompatibility warning. All exports remain `NOT_HARMONIZED`; these warnings do not authorize automatic value conversion or merging.
+
+
+Reference-electrode conversion outputs preserve every required input condition (including pH), the formula/evidence identifiers, and the exact scale factor and offset used. Dimensional standardization rejects NaN/Infinity and non-finite conversion results; unresolved numeric values are not labeled as successfully standardized.

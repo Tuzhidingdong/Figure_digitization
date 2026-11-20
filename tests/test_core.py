@@ -2690,3 +2690,43 @@ def test_battery_capacity_warnings_do_not_apply_to_spectral_characterization():
     assert domain_semantic_warnings("battery", {}, technique="GCD") == [
         "BATTERY_MEASUREMENT_METRIC_UNRESOLVED"
     ]
+
+
+
+
+def test_reference_conversion_preserves_all_required_conditions_and_formula_parameters():
+    from scientific_figure_data.semantics import resolve_reference_scale
+
+    details = {
+        "reference_electrode": "Ag/AgCl",
+        "filling_solution": "KCl",
+        "filling_concentration": "3 M",
+        "temperature_k": 298.15,
+        "electrolyte": "1 M KOH",
+        "pH": 14.0,
+        "formula_id": "formula-1",
+        "formula_evidence_id": "source-equation-1",
+        "scale_factor": 1.0,
+        "offset_v": 0.197,
+    }
+    result = resolve_reference_scale(0.5, "RHE", details)
+
+    assert result["status"] == "CONVERTED_WITH_EXPLICIT_EVIDENCE"
+    assert result["conditions"]["pH"] == 14.0
+    assert result["conversion"] == {"scale_factor": 1.0, "offset_v": 0.197}
+    assert result["formula_id"] == "formula-1"
+    assert result["formula_evidence_id"] == "source-equation-1"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_dimensional_standardization_rejects_non_finite_values(value):
+    from scientific_figure_data.semantics import (
+        convert_dimensionally, standardize_measurement_value,
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        convert_dimensionally(value, "mg/L", "g/L")
+
+    result = standardize_measurement_value(value, "mg/L", "g/L")
+    assert result["standardized_value"] is None
+    assert result["standardization_status"] == "UNRESOLVED_NON_FINITE_VALUE"

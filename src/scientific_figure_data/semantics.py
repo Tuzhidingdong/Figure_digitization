@@ -12,13 +12,19 @@ UNIT_FACTORS = {
 
 
 def convert_dimensionally(value: float, source_unit: str, target_unit: str) -> float:
+    original = float(value)
+    if not math.isfinite(original):
+        raise ValueError("Dimensional conversion requires a finite numeric value")
     if source_unit == target_unit:
-        return float(value)
+        return original
     try:
         factor = UNIT_FACTORS[(source_unit, target_unit)]
     except KeyError as exc:
         raise ValueError(f"No approved deterministic conversion: {source_unit} -> {target_unit}") from exc
-    return float(value) * factor
+    converted = original * factor
+    if not math.isfinite(converted):
+        raise ValueError("Dimensional conversion produced a non-finite value")
+    return converted
 
 
 def resolve_reference_scale(value: float, target_scale: str, details: dict) -> dict:
@@ -46,7 +52,8 @@ def resolve_reference_scale(value: float, target_scale: str, details: dict) -> d
         "target_scale": target_scale,
         "formula_id": details["formula_id"],
         "formula_evidence_id": details["formula_evidence_id"],
-        "conditions": {key: details[key] for key in required[:5]},
+        "conversion": {"scale_factor": factor, "offset_v": offset},
+        "conditions": {key: details[key] for key in required[:6]},
     }
 
 
@@ -189,6 +196,9 @@ def standardize_measurement_value(value: float, original_unit: str | None,
         "evidence_id": None,
     }
     if not target_unit:
+        return result
+    if not math.isfinite(original_value):
+        result["standardization_status"] = "UNRESOLVED_NON_FINITE_VALUE"
         return result
     if not original_unit:
         result["standardization_status"] = "UNRESOLVED_MISSING_ORIGINAL_UNIT"
