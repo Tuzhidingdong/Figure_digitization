@@ -1044,7 +1044,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 and figure["page"]
                 and is_main_pdf_figure
                 and _may_use_source_pdf_bbox_fallback(source_figure, panel)
-                and _within_paper_disk_budget(paper_dir, options, estimated_crop_bytes)
+                and _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes)
             ):
                 if backend is None:
                     backend = PdfiumBackend()
