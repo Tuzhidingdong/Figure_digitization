@@ -165,47 +165,82 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
             figures = None
         if figures is not None:
             normalized = [dict(item) for item in figures if isinstance(item, dict)]
-            # Chem-Literature stores MAIN figure crops in media_assets and references
-            # them by figure_id; the figure bbox itself may only be the caption bbox.
-            if isinstance(data, dict):
-                assets_by_figure: dict[tuple[str, str], dict[str, Any]] = {}
+            # Chem-Literature links MAIN figure crops through media_assets. The
+            # figure bbox may be a caption bbox, so failed asset verification must
+            # not fall back to cropping that bbox from the source PDF.
+            if isinstance(data, dict) and path.name == "evidence_index.json":
+                assets_by_figure: dict[tuple[str, str], list[dict[str, Any]]] = {}
                 media_assets = data.get("media_assets")
                 if isinstance(media_assets, list):
                     for asset in media_assets:
                         if not isinstance(asset, dict) or asset.get("asset_type") != "figure":
                             continue
                         figure_id = str(asset.get("figure_id") or "").strip()
-                        relative_path = asset.get("relative_path")
+                        if not figure_id:
+                            continue
                         doc_type = str(asset.get("doc_type") or "MAIN").upper()
-                        if not figure_id or not isinstance(relative_path, str):
-                            continue
+                        relative_path = asset.get("relative_path")
+                        status = "VERIFIED"
                         asset_path = _safe_local_file(paper_dir, relative_path)
-                        if asset_path is None:
-                            continue
-                        expected_hash = str(asset.get("sha256") or "").strip().lower()
-                        try:
-                            if expected_hash and sha256_file(asset_path) != expected_hash:
-                                continue
-                        except OSError:
-                            continue
-                        key = (figure_id, doc_type)
-                        if key not in assets_by_figure:
-                            assets_by_figure[key] = asset
+                        if not isinstance(relative_path, str) or not relative_path:
+                            status = "MISSING_PATH"
+                        elif asset_path is None:
+                            candidate = (paper_dir / relative_path).resolve()
+                            try:
+                                candidate.relative_to(paper_dir.resolve())
+                                status = "MISSING_FILE"
+                            except ValueError:
+                                status = "PATH_OUTSIDE_PACKAGE"
                         else:
-                            previous = assets_by_figure[key]
-                            if (previous.get("sha256") != asset.get("sha256")
-                                    or previous.get("relative_path") != relative_path):
-                                assets_by_figure[key] = {}
+                            expected_hash = str(asset.get("sha256") or "").strip().lower()
+                            if not expected_hash:
+                                status = "MISSING_SHA256"
+                            else:
+                                try:
+                                    if sha256_file(asset_path) != expected_hash:
+                                        status = "HASH_MISMATCH"
+                                except OSError:
+                                    status = "UNREADABLE"
+                        key = (figure_id, doc_type)
+                        assets_by_figure.setdefault(key, []).append({
+                            "asset": asset, "status": status,
+                        })
+
                 for figure in normalized:
                     key = (str(figure.get("figure_id") or figure.get("id") or "").strip(),
                            str(figure.get("doc_type") or "MAIN").upper())
-                    asset = assets_by_figure.get(key)
-                    if asset and asset.get("relative_path") and not figure.get("image_path"):
+                    candidates = assets_by_figure.get(key, [])
+                    if not candidates:
+                        if figure.get("image_path"):
+                            local_image = _safe_local_file(paper_dir, str(figure["image_path"]))
+                            figure["image_asset_status"] = (
+                                "LOCAL_PATH_VERIFIED" if local_image else "MISSING_FILE"
+                            )
+                        else:
+                            figure["image_asset_status"] = "NO_EXACT_ASSET"
+                        continue
+                    unique_claims = {
+                        (item["asset"].get("relative_path"), item["asset"].get("sha256"))
+                        for item in candidates
+                    }
+                    if len(unique_claims) > 1:
+                        figure["image_asset_status"] = "AMBIGUOUS"
+                        continue
+                    selected = candidates[0]
+                    asset = selected["asset"]
+                    status = selected["status"]
+                    figure["image_asset_status"] = status
+                    if status == "VERIFIED" and asset.get("relative_path") and not figure.get("image_path"):
                         figure["image_path"] = asset["relative_path"]
                         figure["image_asset_sha256"] = asset.get("sha256")
                         figure["image_asset_id"] = asset.get("asset_id")
             return normalized, path
     return [], None
+
+
+def _may_use_source_pdf_bbox_fallback(source_figure: dict, panel: dict) -> bool:
+    """Do not guess a PDF crop when an upstream evidence_index asset is unresolved."""
+    return not source_figure.get("image_asset_status") or bool(panel.get("image_path"))
 
 
 def _safe_local_file(paper_dir: Path, value: str | None) -> Path | None:
@@ -384,6 +419,7 @@ def _extract_panel(
         }]
     evidence = {
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
+        "source_image_asset_status": figure.get("source_asset_status"),
         "source_image": image_path.name if image_path else None,
         "source_image_sha256": sha256_file(image_path) if image_path and image_path.is_file() else None,
         "source_pdf_sha256": source_pdf_sha256,
@@ -944,6 +980,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         figure = {
             "figure_id": figure_id, "page": int(page_number) if page_number else None,
             "source_doc_type": source_doc_type,
+            "source_asset_status": source_figure.get("image_asset_status"),
             "caption": source_figure.get("caption") or source_figure.get("title"),
             "shared_legends": source_figure.get("shared_legends") or source_figure.get("legend") or [],
             "technique": source_figure.get("technique"), "domain": source_figure.get("domain"),
@@ -1001,7 +1038,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
                 saved_crop = panel_path
-            if saved_crop is None and pdf_path and figure["page"] and is_main_pdf_figure and _within_paper_disk_budget(
+            if (saved_crop is None and pdf_path and figure["page"] and is_main_pdf_figure
+                    and _may_use_source_pdf_bbox_fallback(source_figure, panel)
+                    and _within_paper_disk_budget(
                 paper_output, temp_disk_limit_mb, context_index_bytes):
                 if backend is None:
                     backend = PdfiumBackend()

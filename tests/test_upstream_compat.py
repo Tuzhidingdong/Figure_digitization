@@ -134,3 +134,33 @@ def test_inventory_does_not_attach_tampered_upstream_figure_crop(tmp_path: Path)
     figures, _ = _inventory(package, snapshot)
 
     assert "image_path" not in figures[0]
+    assert figures[0]["image_asset_status"] == "HASH_MISMATCH"
+
+
+def test_evidence_index_without_unique_figure_asset_routes_to_review(tmp_path: Path):
+    input_root, package, _, _ = _make_chem_literature_package(tmp_path)
+    evidence_path = package / "evidence_index.json"
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    payload["media_assets"] = []
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+    snapshot = snapshot_paper(package, input_root)
+
+    figures, _ = _inventory(package, snapshot)
+
+    assert figures[0]["image_asset_status"] == "NO_EXACT_ASSET"
+    assert "image_path" not in figures[0]
+
+
+def test_unverified_upstream_asset_blocks_source_pdf_bbox_fallback():
+    from scientific_figure_data.pipeline import _may_use_source_pdf_bbox_fallback
+
+    assert not _may_use_source_pdf_bbox_fallback(
+        {"image_asset_status": "HASH_MISMATCH"}, {}
+    )
+    assert not _may_use_source_pdf_bbox_fallback(
+        {"image_asset_status": "VERIFIED"}, {}
+    )
+    assert _may_use_source_pdf_bbox_fallback({}, {})
+    assert _may_use_source_pdf_bbox_fallback(
+        {"image_asset_status": "HASH_MISMATCH"}, {"image_path": "manual.png"}
+    )
