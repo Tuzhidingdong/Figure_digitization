@@ -1038,10 +1038,14 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
             elif panel_path:
                 saved_crop = panel_path
-            if (saved_crop is None and pdf_path and figure["page"] and is_main_pdf_figure
-                    and _may_use_source_pdf_bbox_fallback(source_figure, panel)
-                    and _within_paper_disk_budget(
-                paper_output, temp_disk_limit_mb, context_index_bytes):
+            if (
+                saved_crop is None
+                and pdf_path
+                and figure["page"]
+                and is_main_pdf_figure
+                and _may_use_source_pdf_bbox_fallback(source_figure, panel)
+                and _within_paper_disk_budget(paper_dir, options, estimated_crop_bytes)
+            ):
                 if backend is None:
                     backend = PdfiumBackend()
                 with backend.open(pdf_path) as doc:
