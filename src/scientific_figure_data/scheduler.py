@@ -301,7 +301,17 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         break
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
-                    input_snapshot = snapshot_paper(paper, input_root)
+                    try:
+                        input_snapshot = snapshot_paper(paper, input_root)
+                        paper_relative = paper.relative_to(input_root).as_posix()
+                    except Exception as exc:
+                        ledger.finish(
+                            paper_id,
+                            JobState.FAILED_PERMANENT.value,
+                            f"INPUT_SNAPSHOT_FAILED_ON_RETRY: {type(exc).__name__}: {exc}",
+                        )
+                        results["failed"] += 1
+                        continue
                 elif not source_exhausted:
                     try:
                         candidate = next(source)
@@ -355,10 +365,34 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 worker_slot = next(slot for slot in range(workers) if slot not in occupied_slots)
                 worker_id = f"pool-{executor_generation}-slot-{worker_slot + 1}"
                 ledger.start(paper_id, worker_id, input_snapshot.input_fingerprint)
-                future = executor.submit(
-                    _process_paper_task, str(input_root), paper_relative,
-                    str(output_root), options, input_snapshot,
-                )
+                try:
+                    future = executor.submit(
+                        _process_paper_task, str(input_root), paper_relative,
+                        str(output_root), options, input_snapshot,
+                    )
+                except BrokenProcessPool as exc:
+                    error = f"WORKER_POOL_SUBMIT_FAILED: {type(exc).__name__}: {exc}"
+                    attempt = ledger.attempt_count(paper_id)
+                    if attempt < max_attempts:
+                        ledger.finish(paper_id, JobState.RETRY_WAIT.value, error)
+                        retry_queue.append((paper, paper_id))
+                        results["retried"] += 1
+                    else:
+                        ledger.finish(paper_id, JobState.FAILED_PERMANENT.value, error)
+                        results["failed"] += 1
+                    if not running:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor_generation += 1
+                        executor = new_executor()
+                    break
+                except Exception as exc:
+                    ledger.finish(
+                        paper_id,
+                        JobState.FAILED_PERMANENT.value,
+                        f"WORKER_SUBMIT_FAILED: {type(exc).__name__}: {exc}",
+                    )
+                    results["failed"] += 1
+                    continue
                 running[future] = (paper, paper_id, worker_slot)
             if not running:
                 continue
