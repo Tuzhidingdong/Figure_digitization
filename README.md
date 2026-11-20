@@ -29,7 +29,7 @@ No GPU or LLM is required. OCR is optional and is not installed by the default p
 ## Quick start
 
     sfd scan --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA
-    sfd run --all --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS --output-root PATH_TO_SFD_DATA --workers 1 --temp-disk-limit 2048 --min-free-disk-mb 256 --min-free-memory-mb 512
+    sfd run --all --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA --workers 1 --temp-disk-limit 2048 --min-free-disk-mb 256 --min-free-memory-mb 512
     sfd status --output-root PATH_TO_SFD_DATA
     sfd query --output-root PATH_TO_SFD_DATA --technique CV
     sfd export --output-root PATH_TO_SFD_DATA --format csv --out ml-export
