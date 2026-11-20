@@ -329,6 +329,10 @@ class Catalog:
                 identity_scope = "PAPER"
                 entity_id = namespaced_id(item.paper_id, source_entity_id)
             canonical = str(link.get("canonical_name") or link.get("entity_name") or entity_id)
+            link_evidence = dict(link.get("evidence") or {})
+            if link.get("source_entity_id"):
+                link_evidence.setdefault("source_entity_id", link.get("source_entity_id"))
+            link_evidence.setdefault("identity_scope", identity_scope)
             existing = self.con.execute(
                 "SELECT canonical_name,entity_type FROM entities WHERE entity_id=?",
                 (entity_id,),
@@ -346,14 +350,14 @@ class Catalog:
                    VALUES(?,?,?,?,?,?) ON CONFLICT(entity_id) DO NOTHING""",
                 (entity_id, canonical, link.get("entity_type"), item.domain,
                  json.dumps(link.get("aliases", []), ensure_ascii=False),
-                 json.dumps(link.get("evidence", {}), ensure_ascii=False)),
+                 json.dumps(link_evidence, ensure_ascii=False)),
             )
             self.con.execute(
                 """INSERT OR REPLACE INTO series_subject_links
                    (series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope)
                    VALUES(?,?,?,?,?,?)""",
                 (item.series_id, entity_id, link.get("role_in_series", "unknown"),
-                 json.dumps(link.get("evidence", {}), ensure_ascii=False),
+                 json.dumps(link_evidence, ensure_ascii=False),
                  link.get("status", "UNASSIGNED"), identity_scope),
             )
             import unicodedata
@@ -455,7 +459,7 @@ class Catalog:
     def series_associations(self, series_id: str) -> dict:
         entity_rows = self.con.execute(
             """SELECT e.entity_id,e.canonical_name,e.entity_type,e.domain,e.aliases_json,
-                      l.role_in_series,l.link_status,l.evidence_json
+                      l.role_in_series,l.link_status,l.identity_scope,l.evidence_json
                FROM series_subject_links l LEFT JOIN entities e ON e.entity_id=l.entity_id
                WHERE l.series_id=? ORDER BY l.role_in_series,e.canonical_name""",
             (series_id,),

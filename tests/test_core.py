@@ -290,7 +290,7 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
             ("sample-a", "Sample A", "material", "battery", '["A"]', '{"source":"legend"}'),
         )
         catalog.con.execute(
-            "INSERT INTO series_subject_links(series_id,entity_id,role_in_series,evidence_json,link_status) VALUES(?,?,?,?,?)",
+            "INSERT INTO series_subject_links(series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope) VALUES(?,?,?,?,?,?)",
             ("series-a", "sample-a", "tested_material", '{"source":"legend","page":2}', "ASSIGNED_WITH_EVIDENCE"),
         )
     output = tmp_path / "ml-export"
@@ -309,7 +309,7 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert first["qc_status"] == "PROVISIONAL_UNCALIBRATED"
     assert first["standardization_status"] == "NOT_PERFORMED"
     assert first["compatibility_status"] == "NOT_HARMONIZED"
-    assert json.loads(first["subject_entity_ids_json"]) == ["sample-a"]
+    assert json.loads(first["subject_entity_ids_json"]) == ["paper-1__sample-a"]
     point_subjects = json.loads(first["subject_links_json"])
     assert point_subjects[0]["canonical_name"] == "Sample A"
     point_conditions = json.loads(first["conditions_json"])
@@ -2072,8 +2072,9 @@ def test_same_figure_series_link_to_distinct_subjects_and_query_shared_sample_te
 
     associations_a = catalog.series_associations("xrd-sample-a")
     associations_b = catalog.series_associations("cv-sample-b")
-    assert associations_a["subject_links"][0]["entity_id"] == "sample-a"
-    assert associations_b["subject_links"][0]["entity_id"] == "sample-b"
+    assert associations_a["subject_links"][0]["entity_id"] == "paper-shared-samples__sample-a"
+    assert associations_b["subject_links"][0]["entity_id"] == "paper-shared-samples__sample-b"
+    assert associations_a["subject_links"][0]["identity_scope"] == "PAPER"
     assert associations_a["subject_links"][0]["evidence_json"] != associations_b["subject_links"][0]["evidence_json"]
     catalog.close()
 

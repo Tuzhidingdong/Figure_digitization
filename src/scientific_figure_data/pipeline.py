@@ -366,7 +366,9 @@ def _extract_panel(
             label=definition.get("label"), x_label=definition.get("x_label"),
             y_label=definition.get("y_label"), x_unit=definition.get("x_unit"),
             y_unit=definition.get("y_unit"),
-            measurement_id=definition.get("measurement_id") or f"measurement:{series_id}",
+            measurement_id=namespaced_id(
+                paper_id, str(definition.get("measurement_id") or f"measurement:{series_id}")
+            ),
             y_axis_side=definition.get("y_axis_side", "UNASSIGNED"),
             extraction_method="UNRESOLVED", extraction_status="NEEDS_REVIEW",
             qc_status="PROVISIONAL_UNCALIBRATED", review_state="NEEDS_REVIEW",
@@ -400,7 +402,27 @@ def _extract_panel(
                 linked["identity_scope"] = "GLOBAL" if requested_scope == "GLOBAL" else "PAPER"
                 linked["source_entity_id"] = source_entity_id
             record.subject_links.append(linked)
-        record.conditions = definition.get("conditions", [])
+        record.conditions = []
+        for condition_index, source_condition in enumerate(definition.get("conditions", [])):
+            condition = dict(source_condition)
+            local_condition_id = str(
+                condition.get("condition_id") or f"{series_id}:condition:{condition_index}"
+            )
+            condition["source_condition_id"] = local_condition_id
+            condition["condition_id"] = namespaced_id(paper_id, local_condition_id)
+            record.conditions.append(condition)
+        relationships = []
+        for source_relationship in definition.get("entity_relationships", []):
+            relationship = dict(source_relationship)
+            scope = str(relationship.get("identity_scope") or "PAPER").upper()
+            for id_key in ("parent_entity_id", "child_entity_id"):
+                if relationship.get(id_key) and scope != "GLOBAL":
+                    relationship[f"source_{id_key}"] = relationship[id_key]
+                    relationship[id_key] = namespaced_id(paper_id, relationship[id_key])
+            relationship["identity_scope"] = "GLOBAL" if scope == "GLOBAL" else "PAPER"
+            relationships.append(relationship)
+        if relationships:
+            record.metadata["entity_relationships"] = relationships
         classification = classify_chart_family(
             definition.get("technique") or panel.get("technique") or figure.get("technique"),
             definition.get("x_label") or panel.get("x_label"),
