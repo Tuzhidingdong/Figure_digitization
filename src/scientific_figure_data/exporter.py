@@ -16,6 +16,8 @@ FIELDS = [
     "technique", "domain", "series_label", "point_index",
     "x_value", "x_label", "y_value", "x_unit", "y_unit",
     "x_value_raw", "x_label_raw", "y_value_raw", "x_unit_raw", "y_unit_raw",
+    "x_value_standardized", "y_value_standardized", "x_unit_standardized", "y_unit_standardized",
+    "standardization_method_id", "standardization_evidence_id",
     "standardization_status", "y_axis_side",
     "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type",
     "subject_entity_ids_json", "subject_links_json", "conditions_json",
@@ -106,6 +108,14 @@ def _optional_int(value: Any) -> int | None:
 def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
     metadata = _decode_json(record.get("metadata_json"), {})
     warnings = _series_compatibility_warnings(record, associations, metadata)
+    standardization = metadata.get("standardization") if isinstance(metadata.get("standardization"), dict) else {}
+    standardization_status = standardization.get("status", "NOT_PERFORMED")
+    standardization_method = standardization.get("method_id")
+    standardization_evidence = standardization.get("evidence_id")
+    standardization_is_evidenced = (
+        standardization_status == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+        and bool(standardization_method) and bool(standardization_evidence)
+    )
     subject_ids = sorted({
         item["entity_id"] for item in associations.get("subject_links", [])
         if item.get("entity_id")
@@ -139,7 +149,21 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         "y_value_raw": y_value,
         "x_unit_raw": record["x_unit"],
         "y_unit_raw": record["y_unit"],
-        "standardization_status": "NOT_PERFORMED",
+        "x_value_standardized": (
+            _optional_float(point.get("x_value_standardized")) if standardization_is_evidenced else None
+        ),
+        "y_value_standardized": (
+            _optional_float(point.get("y_value_standardized")) if standardization_is_evidenced else None
+        ),
+        "x_unit_standardized": (
+            point.get("x_unit_standardized") if standardization_is_evidenced else None
+        ),
+        "y_unit_standardized": (
+            point.get("y_unit_standardized") if standardization_is_evidenced else None
+        ),
+        "standardization_method_id": standardization_method if standardization_is_evidenced else None,
+        "standardization_evidence_id": standardization_evidence if standardization_is_evidenced else None,
+        "standardization_status": standardization_status if standardization_is_evidenced else "NOT_PERFORMED",
         "y_axis_side": record["y_axis_side"],
         "pixel_x": pixel_x,
         "pixel_y": pixel_y,
@@ -238,6 +262,12 @@ def export_dataset(catalog: Catalog, output_root: Path, destination: Path,
                         "x_unit_raw": record.get("x_unit"),
                         "y_unit_raw": record.get("y_unit"),
                         "standardization_status": "NOT_PERFORMED",
+                        "x_value_standardized": None,
+                        "y_value_standardized": None,
+                        "x_unit_standardized": None,
+                        "y_unit_standardized": None,
+                        "standardization_method_id": None,
+                        "standardization_evidence_id": None,
                         "y_axis_side": record.get("y_axis_side"),
                         "subject_links": associations["subject_links"],
                         "conditions": associations["conditions"],

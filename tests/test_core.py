@@ -308,6 +308,10 @@ def test_ml_export_streams_points_with_subject_condition_and_provenance(tmp_path
     assert first["input_fingerprint"] == snapshot.input_fingerprint
     assert first["qc_status"] == "PROVISIONAL_UNCALIBRATED"
     assert first["standardization_status"] == "NOT_PERFORMED"
+    assert first["x_value_standardized"] == ""
+    assert first["y_value_standardized"] == ""
+    assert first["x_unit_standardized"] == ""
+    assert first["standardization_method_id"] == ""
     assert first["compatibility_status"] == "NOT_HARMONIZED"
     assert json.loads(first["subject_entity_ids_json"]) == ["paper-1__sample-a"]
     point_subjects = json.loads(first["subject_links_json"])
@@ -2369,3 +2373,53 @@ def test_pipeline_persists_qc_dimensions_for_extracted_series(tmp_path: Path):
     assert metadata["qc_report"]["aggregate_score"] is None
     assert metadata["qc_report"]["trace_metrics"]["point_count"] == 3
     assert metadata["qc_components"]["subject_link"] == "ASSIGNED_WITH_EVIDENCE"
+
+
+
+def test_standardize_measurement_value_preserves_original_and_refuses_guesses():
+    from scientific_figure_data.semantics import standardize_measurement_value
+
+    converted = standardize_measurement_value(2500, "mg/L", "g/L")
+    assert converted["original_value"] == 2500
+    assert converted["original_unit"] == "mg/L"
+    assert converted["standardized_value"] == 2.5
+    assert converted["standardized_unit"] == "g/L"
+    assert converted["standardization_status"] == "DETERMINISTIC_DIMENSIONAL_CONVERSION"
+    assert converted["method_id"] == "DIMENSIONAL_FACTOR_TABLE_V1"
+    assert converted["evidence_id"] == "unit-factor:mg/L->g/L"
+
+    unresolved = standardize_measurement_value(0.25, "V vs Ag/AgCl", "V vs RHE")
+    assert unresolved["original_value"] == 0.25
+    assert unresolved["standardized_value"] is None
+    assert unresolved["standardization_status"] == "UNRESOLVED_UNSUPPORTED_CONVERSION"
+
+
+def test_new_domain_profile_can_be_added_without_core_engine_changes(tmp_path: Path):
+    profile_root = tmp_path / "profiles"
+    common = profile_root / "common_chemistry"
+    custom = profile_root / "electrocatalysis"
+    common.mkdir(parents=True)
+    custom.mkdir(parents=True)
+    (common / "profile.yaml").write_text(
+        "name: common_chemistry\nversion: '1.0'\ninherits: []\ndomain: chemistry\n",
+        encoding="utf-8",
+    )
+    (common / "techniques.yaml").write_text(
+        "techniques:\n  XRD: {family: spectrum}\nmetrics:\n  shared: [temperature]\n",
+        encoding="utf-8",
+    )
+    (custom / "profile.yaml").write_text(
+        "name: electrocatalysis\nversion: '1.0'\ninherits: [common_chemistry]\ndomain: electrocatalysis\n",
+        encoding="utf-8",
+    )
+    (custom / "techniques.yaml").write_text(
+        "techniques:\n  LSV: {family: non_monotonic_curve, preserve_point_order: true}\n"
+        "metrics:\n  distinct: [overpotential, tafel_slope]\n",
+        encoding="utf-8",
+    )
+    profile = load_profile("electrocatalysis", profile_root)
+    assert profile["domain"] == "electrocatalysis"
+    assert profile["techniques"]["XRD"]["family"] == "spectrum"
+    assert profile["techniques"]["LSV"]["preserve_point_order"] is True
+    assert profile["metrics"]["shared"] == ["temperature"]
+    assert profile["metrics"]["distinct"] == ["overpotential", "tafel_slope"]

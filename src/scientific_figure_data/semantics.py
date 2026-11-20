@@ -91,3 +91,36 @@ def preserve_censored_value(raw_value: str) -> dict:
                 "limit_value": float(match.group(2)), "unit": match.group(3).strip(),
                 "numeric_value": None, "status": "CENSORED_VALUE"}
     return {"raw": raw_value, "status": "UNPARSED_RAW_VALUE"}
+
+
+
+def standardize_measurement_value(value: float, original_unit: str | None,
+                                  target_unit: str | None) -> dict:
+    """Return original and optional standardized values without guessing conversions."""
+    original_value = float(value)
+    result = {
+        "original_value": original_value,
+        "original_unit": original_unit,
+        "standardized_value": None,
+        "standardized_unit": target_unit,
+        "standardization_status": "NOT_REQUESTED" if not target_unit else "UNRESOLVED",
+        "method_id": None,
+        "evidence_id": None,
+    }
+    if not target_unit:
+        return result
+    if not original_unit:
+        result["standardization_status"] = "UNRESOLVED_MISSING_ORIGINAL_UNIT"
+        return result
+    try:
+        standardized = convert_dimensionally(original_value, original_unit, target_unit)
+    except ValueError:
+        result["standardization_status"] = "UNRESOLVED_UNSUPPORTED_CONVERSION"
+        return result
+    result.update({
+        "standardized_value": standardized,
+        "standardization_status": "DETERMINISTIC_DIMENSIONAL_CONVERSION",
+        "method_id": "DIMENSIONAL_FACTOR_TABLE_V1",
+        "evidence_id": f"unit-factor:{original_unit}->{target_unit}",
+    })
+    return result
