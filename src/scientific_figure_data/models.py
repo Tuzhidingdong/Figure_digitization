@@ -168,7 +168,11 @@ def namespaced_id(namespace: str, value: str, max_length: int = 120) -> str:
 
     if max_length < 20:
         raise ValueError("max_length must be at least 20")
-    raw = f"{namespace}__{value}"
+    value_text = str(value)
+    existing_prefix = f"{namespace}__"
+    if value_text.startswith(existing_prefix) and len(value_text) <= max_length:
+        return value_text
+    raw = f"{namespace}__{value_text}"
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw.strip()).strip("-.") or "unnamed"
     if cleaned == raw and len(cleaned) <= max_length:
         return cleaned
