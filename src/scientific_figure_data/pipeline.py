@@ -238,12 +238,20 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
     return [], None
 
 
-def _copy_image_asset_to_evidence(source_path: Path, destination: Path) -> Path | None:
-    """Copy a source image into downstream evidence atomically without modifying its source."""
+def _copy_image_asset_to_evidence(
+    source_path: Path, destination: Path, expected_sha256: str | None = None,
+) -> Path | None:
+    """Copy a source image atomically, rechecking its upstream content hash."""
     temporary = destination.with_name(destination.name + ".tmp")
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
+        source_hash = sha256_file(source_path)
+        if expected_sha256 and source_hash != expected_sha256:
+            return None
         shutil.copyfile(source_path, temporary)
+        if expected_sha256 and sha256_file(temporary) != expected_sha256:
+            temporary.unlink()
+            return None
         temporary.replace(destination)
         return destination
     except OSError:
@@ -460,6 +468,7 @@ def _extract_panel(
         "source_image_asset_status": figure.get("source_asset_status"),
         "source_image": image_path.name if image_path else None,
         "source_image_upstream_path": figure.get("source_image_asset_path"),
+        "source_pdf_integrity_status": figure.get("source_pdf_integrity_status"),
         "source_image_sha256": sha256_file(image_path) if image_path and image_path.is_file() else None,
         "source_pdf_sha256": source_pdf_sha256,
         "paper_input_fingerprint": input_fingerprint,
@@ -989,7 +998,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     )
     context_index_bytes = _directory_size(paper_output / "context")
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
+    pdf_expected = "main_pdf" not in snapshot.missing_roles
     pdf_path = locate_pdf(paper_dir, input_root, snapshot)
+    pdf_integrity_issue = pdf_path is None and pdf_expected
+    if pdf_integrity_issue:
+        snapshot.warnings.append("MAIN_PDF_CHANGED_OR_UNAVAILABLE_AFTER_SNAPSHOT")
+        if "main_pdf" not in snapshot.missing_roles:
+            snapshot.missing_roles.append("main_pdf")
+        for source in snapshot.external_sources:
+            if source.get("status") in {"HASH_VERIFIED", "HASH_COMPUTED_NO_EXPECTED_SHA256"}:
+                source["status"] = "CHANGED_AFTER_SNAPSHOT"
     pdf_sha256 = None
     if pdf_path is not None:
         resolved_pdf = pdf_path.resolve()
@@ -1010,7 +1028,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     figures: list[dict] = []
     panels: list[dict] = []
     series: list[SeriesRecord] = []
-    review_needed = False
+    review_needed = pdf_integrity_issue or "main_pdf" in snapshot.missing_roles
     backend = None
     native_evidence_by_page: dict[int, dict] = {}
     for figure_index, source_figure in enumerate(figures_raw, 1):
@@ -1024,6 +1042,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             "figure_id": figure_id, "page": int(page_number) if page_number else None,
             "source_doc_type": source_doc_type,
             "source_asset_status": source_figure.get("image_asset_status"),
+            "source_pdf_integrity_status": (
+                "CHANGED_AFTER_SNAPSHOT" if pdf_integrity_issue
+                else "HASH_VERIFIED" if pdf_path is not None else "NOT_AVAILABLE"
+            ),
             "source_image_asset_path": source_figure.get("image_path"),
             "source_image_asset_sha256": source_figure.get("image_asset_sha256"),
             "source_image_asset_id": source_figure.get("image_asset_id"),
@@ -1104,7 +1126,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     evidence_image = (
                         paper_output / "evidence" / f"{figure_id}_{panel_id}{suffix}"
                     )
-                    saved_crop = _copy_image_asset_to_evidence(panel_path, evidence_image)
+                    saved_crop = _copy_image_asset_to_evidence(
+                        panel_path, evidence_image,
+                        expected_sha256=figure.get("source_image_asset_sha256"),
+                    )
             if (
                 saved_crop is None
                 and pdf_path
