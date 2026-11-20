@@ -54,8 +54,11 @@ def _cached_index(index_path: Path, db_path: Path, fingerprint: str,
         if storage == "sqlite":
             if not db_path.is_file():
                 return None
-            with sqlite3.connect(db_path) as con:
-                check = con.execute("PRAGMA quick_check").fetchone()
+            connection = sqlite3.connect(db_path)
+            try:
+                check = connection.execute("PRAGMA quick_check").fetchone()
+            finally:
+                connection.close()
             if not check or check[0] != "ok":
                 return None
             return PaperContextIndex([], fingerprint, db_path)
@@ -182,11 +185,14 @@ class PaperContextIndex:
 
     def search(self, kind: str, text: str = "") -> list[dict]:
         if self.db_path and self.db_path.exists():
-            with sqlite3.connect(self.db_path) as con:
-                rows = con.execute(
+            connection = sqlite3.connect(self.db_path)
+            try:
+                rows = connection.execute(
                     "SELECT kind,value,source_path,line_number,snippet FROM entries WHERE kind=? AND value LIKE ? LIMIT 100",
                     (kind, f"%{text}%"),
                 ).fetchall()
+            finally:
+                connection.close()
             return [dict(zip(("kind", "value", "source_path", "line_number", "snippet"), row))
                     for row in rows]
         return [asdict(entry) for entry in self.entries
