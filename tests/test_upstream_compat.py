@@ -193,3 +193,47 @@ def test_validate_flags_unaccepted_external_main_pdf_integrity_state(tmp_path: P
     errors = _validate_external_sources(input_root, snapshot_data, "paper_manifest")
 
     assert any("was not accepted (HASH_MISMATCH)" in error for error in errors)
+
+
+def test_downstream_processing_preserves_upstream_package_and_external_main_pdf(
+    tmp_path: Path,
+):
+    from PIL import Image
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root, package, source_pdf, image_relative = _make_chem_literature_package(tmp_path)
+    image_path = package / image_relative
+    with Image.new("RGB", (24, 16), "white") as image:
+        image.save(image_path, format="PNG")
+
+    def upstream_snapshot():
+        package_paths = {
+            item.relative_to(input_root).as_posix()
+            for item in input_root.rglob("*")
+        }
+        package_hashes = {
+            item.relative_to(input_root).as_posix(): _sha256(item.read_bytes())
+            for item in input_root.rglob("*") if item.is_file()
+        }
+        return (
+            package_paths,
+            package_hashes,
+            source_pdf.stat().st_size,
+            _sha256(source_pdf.read_bytes()),
+        )
+
+    before = upstream_snapshot()
+    snapshot = snapshot_paper(package, input_root)
+    result = process_paper(
+        input_root,
+        Path("10.1000_demo/01_preprocessing"),
+        tmp_path / "downstream",
+        options={"memory_limit_mb": 0, "temp_disk_limit_mb": 0},
+        input_snapshot=snapshot,
+    )
+    after = upstream_snapshot()
+
+    assert result["snapshot"]["external_sources"][0]["status"] == "HASH_VERIFIED"
+    assert result["snapshot"]["external_sources"][0]["sha256"] == before[3]
+    assert result["job_state"] in {"NEEDS_REVIEW", "COMPLETED", "COMPLETED_WITH_REVIEW"}
+    assert after == before
