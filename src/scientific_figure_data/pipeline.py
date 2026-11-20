@@ -699,8 +699,19 @@ def _directory_size(path: Path) -> int:
     return total
 
 
+def _paper_disk_usage(paper_output: Path) -> dict[str, int]:
+    evidence_bytes = _directory_size(paper_output / "evidence")
+    context_bytes = _directory_size(paper_output / "context")
+    return {
+        "evidence_bytes": evidence_bytes,
+        "context_index_bytes": context_bytes,
+        "budgeted_storage_bytes": evidence_bytes + context_bytes,
+    }
+
+
 def _within_evidence_budget(paper_output: Path, budget_mb: int) -> bool:
-    return budget_mb <= 0 or _directory_size(paper_output / "evidence") < budget_mb * 1024 * 1024
+    usage = _paper_disk_usage(paper_output)
+    return budget_mb <= 0 or usage["budgeted_storage_bytes"] < budget_mb * 1024 * 1024
 
 
 def _crop_local_image(source_path: Path, bbox: Any, output_path: Path) -> Path | None:
@@ -757,6 +768,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     "manifest_path": str(paper_output / "paper_manifest.json"),
                     "bundle_path": str(paper_output / "paper_bundle.json"),
                 }
+                cached["resource_usage"] = _paper_disk_usage(paper_output)
                 return cached
         elif accepted and not force_reviewed:
             locked = _cached_result(paper_output, snapshot, locked=True)
@@ -765,6 +777,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     "manifest_path": str(paper_output / "paper_manifest.json"),
                     "bundle_path": str(paper_output / "paper_bundle.json"),
                 }
+                locked["resource_usage"] = _paper_disk_usage(paper_output)
                 return locked
             # A broken or mismatched bundle must never cause accepted data to be
             # silently recomputed. Stop and preserve the reviewed files for recovery.
@@ -775,6 +788,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 "status": "BLOCKED_REVIEW_LOCKED",
                 "job_state": JobState.BLOCKED.value,
                 "reason": "REVIEWED_ARTIFACT_INTEGRITY_FAILURE",
+                "resource_usage": _paper_disk_usage(paper_output),
             }
     if existing.is_file() and (force_reviewed or not accepted or old.get("input_fingerprint") != snapshot.input_fingerprint
                                 or old.get("algorithm_version") != ALGORITHM_VERSION):
@@ -992,6 +1006,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     else:
         status = "COMPLETED_WITH_REVIEW" if review_needed else "COMPLETED"
     job_state = JobState.NEEDS_REVIEW.value if review_needed else JobState.COMPLETED.value
+    disk_usage = _paper_disk_usage(paper_output)
     artifacts = write_paper_artifacts(
         output_root, snapshot, figures, panels, series, status,
         extra={"context_index_fingerprint": context.fingerprint,
@@ -1001,7 +1016,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "stage_fingerprint": stage_fingerprint,
                "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
                "temp_disk_limit_mb": temp_disk_limit_mb,
-               "evidence_bytes": _directory_size(paper_output / "evidence"),
+               "evidence_bytes": disk_usage["evidence_bytes"],
+               "context_index_bytes": disk_usage["context_index_bytes"],
+               "budgeted_storage_bytes": disk_usage["budgeted_storage_bytes"],
                "qc_threshold_status": thresholds["status"],
                "qc_thresholds": thresholds,
                "algorithm_implementation_fingerprint": stage_state["algorithm_implementation_fingerprint"],
@@ -1016,5 +1033,6 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             "bundle_path": str(Path(artifacts["paper_root"]) / "paper_bundle.json"),
         },
         "context_fingerprint": context.fingerprint,
+        "resource_usage": disk_usage,
         "figure_count": len(figures), "panel_count": len(panels), "series_count": len(series),
     }

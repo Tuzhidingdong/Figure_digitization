@@ -34,11 +34,13 @@ def _worker_initializer():
 def _process_paper_task(input_root: str, paper_relative: str, output_root: str,
                         options: dict, input_snapshot: PaperSnapshot) -> dict:
     from .pipeline import process_paper
+    cpu_started = time.process_time()
     result = process_paper(
         Path(input_root), Path(paper_relative), Path(output_root), options,
         input_snapshot=input_snapshot,
     )
     result["_worker_pid"] = os.getpid()
+    result["_worker_cpu_seconds"] = max(0.0, time.process_time() - cpu_started)
     return result
 
 
@@ -151,6 +153,13 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     started_at = time.perf_counter()
+    parent_cpu_started = time.process_time()
+    completed_worker_cpu_seconds = 0.0
+    total_paper_evidence_bytes = 0
+    peak_paper_evidence_bytes = 0
+    total_context_index_bytes = 0
+    peak_context_index_bytes = 0
+    peak_budgeted_paper_storage_bytes = 0
     peak_rss_bytes = 0
     options = options or {}
     min_free_disk_mb = max(0, int(options.get("min_free_disk_mb", 256)))
@@ -272,6 +281,16 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 paper, paper_id, worker_slot = running.pop(future)
                 try:
                     result = future.result()
+                    completed_worker_cpu_seconds += max(0.0, float(result.get("_worker_cpu_seconds", 0.0)))
+                    usage = result.get("resource_usage") or {}
+                    evidence_bytes = max(0, int(usage.get("evidence_bytes", 0)))
+                    context_bytes = max(0, int(usage.get("context_index_bytes", 0)))
+                    budgeted_bytes = max(0, int(usage.get("budgeted_storage_bytes", evidence_bytes + context_bytes)))
+                    total_paper_evidence_bytes += evidence_bytes
+                    peak_paper_evidence_bytes = max(peak_paper_evidence_bytes, evidence_bytes)
+                    total_context_index_bytes += context_bytes
+                    peak_context_index_bytes = max(peak_context_index_bytes, context_bytes)
+                    peak_budgeted_paper_storage_bytes = max(peak_budgeted_paper_storage_bytes, budgeted_bytes)
                     if result.get("cached"):
                         results["cached"] += 1
                     if result.get("job_state") != JobState.BLOCKED.value:
@@ -357,8 +376,26 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
 
     qc_threshold_path = Path(options["qc_thresholds"]) if options.get("qc_thresholds") else None
     qc_thresholds = load_thresholds(qc_threshold_path)
+    parent_cpu_seconds = max(0.0, time.process_time() - parent_cpu_started)
+    combined_cpu_seconds = parent_cpu_seconds + completed_worker_cpu_seconds
     report = {
         **results,
+        "parent_cpu_seconds": round(parent_cpu_seconds, 3),
+        "completed_worker_cpu_seconds": round(completed_worker_cpu_seconds, 3),
+        "combined_cpu_seconds": round(combined_cpu_seconds, 3),
+        "average_cpu_cores": round(combined_cpu_seconds / elapsed, 4) if elapsed else 0.0,
+        "average_cpu_percent_of_worker_capacity": (
+            round(combined_cpu_seconds / (elapsed * max(1, workers)) * 100, 2) if elapsed else 0.0
+        ),
+        "total_paper_evidence_bytes": total_paper_evidence_bytes,
+        "peak_paper_evidence_bytes": peak_paper_evidence_bytes,
+        "total_context_index_bytes": total_context_index_bytes,
+        "peak_context_index_bytes": peak_context_index_bytes,
+        "peak_budgeted_paper_storage_bytes": peak_budgeted_paper_storage_bytes,
+        "disk_usage_measurement_scope": (
+            "Per-paper evidence and context-index artifacts for workers that returned results; "
+            "does not include the full OS temporary directory, series CSVs or version backups."
+        ),
         "cached": results["cached"] + resume_cached_skipped,
         "resume_cached_skipped": resume_cached_skipped,
         "papers_seen": total_seen + results["active_jobs_skipped"] + resume_cached_skipped,
