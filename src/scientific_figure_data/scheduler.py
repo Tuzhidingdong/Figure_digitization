@@ -308,18 +308,46 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     except StopIteration:
                         source_exhausted = True
                         break
-                    if (isinstance(candidate, tuple) and len(candidate) == 2
-                            and isinstance(candidate[1], PaperSnapshot)):
-                        paper, input_snapshot = candidate
-                    else:
-                        paper = candidate
-                        input_snapshot = snapshot_paper(paper, input_root)
-                    paper_relative = paper.relative_to(input_root).as_posix()
-                    paper_id = input_snapshot.paper_id
+                    paper = candidate[0] if (
+                        isinstance(candidate, tuple) and len(candidate) == 2
+                        and isinstance(candidate[1], PaperSnapshot)
+                    ) else candidate
+                    total_seen += 1
+                    try:
+                        paper_relative = paper.relative_to(input_root).as_posix()
+                        if (
+                            isinstance(candidate, tuple) and len(candidate) == 2
+                            and isinstance(candidate[1], PaperSnapshot)
+                        ):
+                            input_snapshot = candidate[1]
+                        else:
+                            input_snapshot = snapshot_paper(paper, input_root)
+                        paper_id = input_snapshot.paper_id
+                    except Exception as exc:
+                        fallback_relative = (
+                            paper.relative_to(input_root).as_posix()
+                            if paper.is_relative_to(input_root)
+                            else paper.resolve().as_posix()
+                        )
+                        fallback_id = storage_paper_id(fallback_relative)
+                        if ledger.prepare(fallback_id):
+                            ledger.start(
+                                fallback_id,
+                                worker_id=f"scheduler-preflight-{os.getpid()}",
+                                input_fingerprint=None,
+                            )
+                            ledger.finish(
+                                fallback_id,
+                                JobState.FAILED_PERMANENT.value,
+                                f"INPUT_SNAPSHOT_FAILED: {type(exc).__name__}: {exc}",
+                            )
+                            results["failed"] += 1
+                        else:
+                            results["active_jobs_skipped"] += 1
+                        continue
                     if not ledger.prepare(paper_id):
                         results["active_jobs_skipped"] += 1
                         continue
-                    total_seen += 1
                 else:
                     break
                 paper_relative = paper.relative_to(input_root).as_posix()

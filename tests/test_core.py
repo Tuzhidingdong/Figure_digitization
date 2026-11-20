@@ -2786,3 +2786,51 @@ def test_series_override_preserves_explicit_measurement_semantics():
     assert semantics["cell_scope"] == "half_cell"
     assert semantics["current_density_basis"] == "active_material_mass"
     assert semantics["cycling_protocol"] == "constant_current"
+
+
+
+
+def test_scheduler_isolates_snapshot_preflight_failure_and_continues_corpus(
+    tmp_path: Path, monkeypatch,
+):
+    import scientific_figure_data.scheduler as scheduler_module
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import JobLedger, run_corpus
+
+    input_root = tmp_path / "input"
+    bad = input_root / "a-bad-paper"
+    good = input_root / "b-good-paper"
+    bad.mkdir(parents=True)
+    good.mkdir(parents=True)
+    (bad / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+    (good / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+
+    original_snapshot = scheduler_module.snapshot_paper
+
+    def fail_only_bad(paper, root):
+        if paper.name == "a-bad-paper":
+            raise PermissionError("synthetic unreadable upstream manifest")
+        return original_snapshot(paper, root)
+
+    monkeypatch.setattr(scheduler_module, "snapshot_paper", fail_only_bad)
+    output_root = tmp_path / "output"
+
+    report = run_corpus(
+        input_root, output_root, discover_papers(input_root), workers=1,
+        max_attempts=1, lease_seconds=30,
+        options={"memory_limit_mb": 0, "min_free_memory_mb": 0, "min_free_disk_mb": 0},
+    )
+
+    ledger = JobLedger(output_root / "catalog.sqlite")
+    rows = {
+        row["paper_id"]: dict(row)
+        for row in ledger.con.execute(
+            "SELECT paper_id,state,last_error FROM jobs"
+        ).fetchall()
+    }
+    assert rows["a-bad-paper"]["state"] == "FAILED_PERMANENT"
+    assert "INPUT_SNAPSHOT_FAILED: PermissionError" in rows["a-bad-paper"]["last_error"]
+    assert rows["b-good-paper"]["state"] == "NEEDS_REVIEW"
+    assert report["failed"] == 1
+    assert report["completed_with_review"] == 1
+    ledger.close()
