@@ -2458,3 +2458,66 @@ def test_new_domain_profile_can_be_added_without_core_engine_changes(tmp_path: P
     assert profile["techniques"]["LSV"]["preserve_point_order"] is True
     assert profile["metrics"]["shared"] == ["temperature"]
     assert profile["metrics"]["distinct"] == ["overpotential", "tafel_slope"]
+
+
+
+def test_scan_collision_cleans_temporary_manifest_and_preserves_previous_scan(tmp_path: Path, capsys):
+    from scientific_figure_data.cli import main
+
+    input_root = tmp_path / "input"
+    nested = input_root / "nested" / "paper"
+    collision = input_root / "nested__paper"
+    nested.mkdir(parents=True)
+    collision.mkdir(parents=True)
+    for paper in (nested, collision):
+        (paper / "figure_inventory.json").write_text('{"figures":[]}', encoding="utf-8")
+
+    output_root = tmp_path / "output"
+    output_root.mkdir()
+    final_stream = output_root / "corpus_manifest.jsonl"
+    final_stream.write_text('{"previous":"valid"}\n', encoding="utf-8")
+    previous_manifest = final_stream.read_bytes()
+
+    assert main([
+        "scan", "--input-root", str(input_root), "--output-root", str(output_root)
+    ]) == 2
+    error = capsys.readouterr().err
+    assert "Paper ID normalization collision" in error
+    assert final_stream.read_bytes() == previous_manifest
+    assert not (output_root / "corpus_manifest.jsonl.tmp").exists()
+
+
+def test_corrupt_paper_inventory_does_not_stop_other_papers(tmp_path: Path):
+    from scientific_figure_data.adapter import discover_papers
+    from scientific_figure_data.scheduler import JobLedger, run_corpus
+
+    input_root = tmp_path / "input"
+    corrupt = input_root / "paper-corrupt"
+    valid = input_root / "paper-valid"
+    corrupt.mkdir(parents=True)
+    valid.mkdir(parents=True)
+    (corrupt / "figure_inventory.json").write_text("{invalid json", encoding="utf-8")
+    (valid / "figure_inventory.json").write_text(json.dumps({
+        "figures": [{
+            "figure_id": "Figure1",
+            "panels": [{"panel_id": "a", "technique": "CV", "domain": "battery"}],
+        }]
+    }), encoding="utf-8")
+    output_root = tmp_path / "output"
+
+    report = run_corpus(
+        input_root, output_root, discover_papers(input_root), workers=1,
+        max_attempts=1, lease_seconds=30, options={"memory_limit_mb": 0},
+    )
+
+    assert report["papers_seen"] == 2
+    assert report["completed_with_review"] == 2
+    ledger = JobLedger(output_root / "catalog.sqlite")
+    rows = {
+        row["paper_id"]: row["state"]
+        for row in ledger.con.execute("SELECT paper_id,state FROM jobs")
+    }
+    assert rows == {"paper-corrupt": "NEEDS_REVIEW", "paper-valid": "NEEDS_REVIEW"}
+    assert (output_root / "papers" / "paper-corrupt" / "paper_manifest.json").is_file()
+    assert (output_root / "papers" / "paper-valid" / "paper_manifest.json").is_file()
+    ledger.close()

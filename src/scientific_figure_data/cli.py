@@ -133,12 +133,19 @@ def _scan(args) -> int:
     jsonl_path = output_root / "corpus_manifest.jsonl"
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
     count = 0
-    with temporary.open("w", encoding="utf-8") as stream:
-        for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
-            snapshot = snapshot_paper(paper_dir, input_root)
-            stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
-            count += 1
-    temporary.replace(jsonl_path)
+    try:
+        with temporary.open("w", encoding="utf-8") as stream:
+            for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
+                snapshot = snapshot_paper(paper_dir, input_root)
+                stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
+                count += 1
+        temporary.replace(jsonl_path)
+    except Exception:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     atomic_write_json(output_root / "corpus_manifest.json", {
         "schema_version": "1.0", "input_root_name": input_root.name,
         "paper_count": count, "paper_manifest_stream": "corpus_manifest.jsonl",
