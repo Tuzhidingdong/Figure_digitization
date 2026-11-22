@@ -2376,7 +2376,7 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
-    assert report["algorithm_version"] == "0.4.0"
+    assert report["algorithm_version"] == "0.5.0"
     assert len(report["algorithm_implementation_fingerprint"]) == 64
     assert len(report["profile_config_fingerprint"]) == 64
     assert len(report["qc_threshold_fingerprint"]) == 64
@@ -2474,6 +2474,10 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert report["sfd_temp_bytes_before_cleanup"] >= 0
     assert report["sfd_temp_cleanup_succeeded"] is True
     assert report["sfd_worker_temp_isolation_verified"] is True
+    assert report["worker_log_directory"]
+    assert Path(report["worker_log_directory"]).is_dir()
+    assert report["worker_shutdown"]
+    assert all(item["status"] == "WORKERS_REAPED" for item in report["worker_shutdown"])
     assert not (output_root / report["sfd_temp_directory_relative"]).exists()
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
@@ -3203,3 +3207,175 @@ def test_scheduler_retries_broken_process_pool_submission_a_finite_number_of_tim
     assert report["retried_papers"] == 1
     assert report["permanently_failed_papers"] == 1
     ledger.close()
+
+
+def test_bounded_executor_shutdown_reaps_only_its_own_workers():
+    from scientific_figure_data.scheduler import _shutdown_executor_bounded
+
+    class FakeProcess:
+        def __init__(self, pid: int, terminate_exits: bool, kill_exits: bool):
+            self.pid = pid
+            self.exitcode = None
+            self.alive = True
+            self.terminate_exits = terminate_exits
+            self.kill_exits = kill_exits
+            self.terminate_calls = 0
+            self.kill_calls = 0
+
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return self.alive
+
+        def terminate(self):
+            self.terminate_calls += 1
+            if self.terminate_exits:
+                self.alive = False
+                self.exitcode = -15
+
+        def kill(self):
+            self.kill_calls += 1
+            if self.kill_exits:
+                self.alive = False
+                self.exitcode = -9
+
+    class FakeExecutor:
+        def __init__(self, processes):
+            self._processes = {item.pid: item for item in processes}
+            self.shutdown_arguments = None
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdown_arguments = (wait, cancel_futures)
+            self._processes[111].alive = False
+            self._processes[111].exitcode = 0
+
+    graceful = FakeProcess(111, terminate_exits=False, kill_exits=False)
+    stubborn = FakeProcess(222, terminate_exits=False, kill_exits=True)
+    executor = FakeExecutor([graceful, stubborn])
+
+    report = _shutdown_executor_bounded(executor, grace_seconds=0)
+
+    assert executor.shutdown_arguments == (False, True)
+    assert report["status"] == "WORKERS_REAPED"
+    by_pid = {item["pid"]: item for item in report["workers"]}
+    assert by_pid[111]["action"] == "EXITED_GRACEFULLY"
+    assert by_pid[222]["action"] == "KILL_SENT"
+    assert graceful.terminate_calls == 0
+    assert graceful.kill_calls == 0
+    assert stubborn.kill_calls == 1
+    assert all(not item["still_alive"] for item in report["workers"])
+
+
+
+def _parent_exit_probe_worker(pid_file: str):
+    import os
+    import time
+    from pathlib import Path
+
+    Path(pid_file).write_text(str(os.getpid()), encoding="utf-8")
+    time.sleep(12)
+
+
+def _parent_exit_probe_pool_owner(root: str):
+    import os
+    import time
+    from concurrent.futures import ProcessPoolExecutor
+    from pathlib import Path
+    from scientific_figure_data.scheduler import _worker_initializer
+
+    root_path = Path(root)
+    temp_directory = root_path / "worker-temp"
+    log_directory = root_path / "worker-logs"
+    temp_directory.mkdir(parents=True, exist_ok=True)
+    log_directory.mkdir(parents=True, exist_ok=True)
+    pid_file = root_path / "worker.pid"
+    executor = ProcessPoolExecutor(
+        max_workers=1,
+        initializer=_worker_initializer,
+        initargs=(str(temp_directory), str(log_directory)),
+    )
+    executor.submit(_parent_exit_probe_worker, str(pid_file))
+    deadline = time.monotonic() + 12
+    while not pid_file.is_file() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if not pid_file.is_file():
+        os._exit(7)
+    # Simulate the precise failure mode: the executor owner vanishes while
+    # a worker is still inside a long-running task and without normal shutdown.
+    os._exit(0)
+
+
+def test_worker_exits_when_its_scheduler_parent_disappears(tmp_path: Path):
+    import multiprocessing
+    import os
+    import time
+
+    context = multiprocessing.get_context("spawn")
+    owner = context.Process(
+        target=_parent_exit_probe_pool_owner,
+        args=(str(tmp_path),),
+    )
+    owner.start()
+    owner.join(timeout=18)
+    if owner.is_alive():
+        owner.terminate()
+        owner.join(timeout=3)
+        raise AssertionError("test pool owner failed to exit within the bounded window")
+    assert owner.exitcode == 0, f"test pool owner exited with {owner.exitcode}"
+
+    pid_file = tmp_path / "worker.pid"
+    assert pid_file.is_file(), "worker did not report its PID before parent exit"
+    worker_pid = int(pid_file.read_text(encoding="utf-8").strip())
+
+    def is_process_alive(pid: int) -> bool:
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            open_process = kernel32.OpenProcess
+            open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            open_process.restype = wintypes.HANDLE
+            get_exit_code = kernel32.GetExitCodeProcess
+            get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            get_exit_code.restype = wintypes.BOOL
+            close_handle = kernel32.CloseHandle
+            close_handle.argtypes = [wintypes.HANDLE]
+            close_handle.restype = wintypes.BOOL
+
+            handle = open_process(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                error = ctypes.get_last_error()
+                if error in {87, 1168}:  # ERROR_INVALID_PARAMETER / ERROR_NOT_FOUND
+                    return False
+                raise OSError(error, f"OpenProcess failed for PID {pid}")
+            try:
+                exit_code = wintypes.DWORD()
+                if not get_exit_code(handle, ctypes.byref(exit_code)):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                return exit_code.value == 259  # STILL_ACTIVE
+            finally:
+                close_handle(handle)
+
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline:
+        if not is_process_alive(worker_pid):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError(
+            f"orphan worker PID {worker_pid} remained alive after its parent exited"
+        )
+    assert not is_process_alive(worker_pid), (
+        f"orphan worker PID {worker_pid} remained alive after its parent exited"
+    )
+

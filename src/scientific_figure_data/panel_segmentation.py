@@ -158,10 +158,101 @@ def detect_panel_regions(
 
     split((0, 0, width, height))
     if len(leaves) < 2:
+        # Many scientific figures have touching or crowded panels without a
+        # broad white gutter. Detect several independent plot frames directly
+        # instead of silently treating the complete source figure as one panel.
+        from .plot_region import detect_plot_box_candidates
+
+        frame_detection = detect_plot_box_candidates(image_path)
+        frame_candidates = frame_detection.get("candidates", [])
+        if len(frame_candidates) >= 2:
+            frames = [
+                item for item in frame_candidates
+                if isinstance(item.get("pixel_bbox"), list)
+                and len(item["pixel_bbox"]) == 4
+            ]
+            panel_rows = []
+            for index, candidate in enumerate(frames, 1):
+                x0, y0, x1, y1 = [int(value) for value in candidate["pixel_bbox"]]
+                frame_width, frame_height = x1 - x0, y1 - y0
+                margin_x = min(max(8, round(frame_width * 0.16)), max(8, round(width * 0.12)))
+                margin_y = min(max(8, round(frame_height * 0.20)), max(8, round(height * 0.14)))
+                panel_x0, panel_y0 = max(0, x0 - margin_x), max(0, y0 - margin_y)
+                panel_x1, panel_y1 = min(width, x1 + margin_x), min(height, y1 + margin_y)
+
+                for other_index, other in enumerate(frames):
+                    if other_index == index - 1:
+                        continue
+                    ox0, oy0, ox1, oy1 = [int(value) for value in other["pixel_bbox"]]
+                    overlap_y = max(0, min(y1, oy1) - max(y0, oy0))
+                    overlap_x = max(0, min(x1, ox1) - max(x0, ox0))
+                    if overlap_y >= 0.30 * min(frame_height, oy1 - oy0):
+                        # Keep a small shared margin around touching plot frames.
+                        # Cropping exactly at the midpoint can cut off the axis
+                        # line itself and make the per-panel plot detector fail.
+                        shared_margin = max(4, round(min(frame_width, ox1 - ox0) * 0.06))
+                        if ox1 <= x0:
+                            panel_x0 = max(panel_x0, (ox1 + x0) // 2 - shared_margin)
+                        elif ox0 >= x1:
+                            panel_x1 = min(panel_x1, (x1 + ox0) // 2 + shared_margin)
+                    if overlap_x >= 0.30 * min(frame_width, ox1 - ox0):
+                        shared_margin = max(4, round(min(frame_height, oy1 - oy0) * 0.06))
+                        if oy1 <= y0:
+                            panel_y0 = max(panel_y0, (oy1 + y0) // 2 - shared_margin)
+                        elif oy0 >= y1:
+                            panel_y1 = min(panel_y1, (y1 + oy0) // 2 + shared_margin)
+
+                if panel_x1 <= panel_x0 or panel_y1 <= panel_y0:
+                    continue
+                panel_rows.append({
+                    "panel_id": f"auto-frame-{index:02d}",
+                    "label": None,
+                    "bbox": [panel_x0, panel_y0, panel_x1, panel_y1],
+                    "bbox_coordinate_space": "IMAGE_PIXELS",
+                    "plot_box": [
+                        x0 - panel_x0, y0 - panel_y0,
+                        x1 - panel_x0, y1 - panel_y0,
+                    ],
+                    "plot_box_coordinate_space": "PANEL_IMAGE_PIXELS",
+                    "plot_frame_bbox_pixels": [x0, y0, x1, y1],
+                    "plot_frame_score": candidate.get("score"),
+                    "segmentation_provenance": "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION",
+                    "segmentation_status": "PROVISIONAL_PLOT_FRAME_SPLIT",
+                    "segmentation_confidence": round(
+                        max(0.0, min(0.95, float(candidate.get("score", 0.0)))), 4
+                    ),
+                    "segmentation_confidence_status": "HEURISTIC_UNCALIBRATED",
+                })
+
+            if len(panel_rows) >= 2:
+                return {
+                    "status": "PROVISIONAL_PANELS_DETECTED",
+                    "reason": "MULTIPLE_PLOT_FRAME_CANDIDATES",
+                    "image_size": [width, height],
+                    "panel_count": len(panel_rows),
+                    "plot_frame_detection": frame_detection,
+                    "panels": panel_rows,
+                    "provisional": True,
+                }
+
+        if len(frame_candidates) == 1:
+            candidate = frame_candidates[0]
+            return {
+                "status": "SINGLE_PLOT_FRAME_DETECTED",
+                "reason": "ONE_SUPPORTED_PLOT_FRAME",
+                "image_size": [width, height],
+                "plot_frame_detection": frame_detection,
+                "plot_frame_bbox_pixels": candidate.get("pixel_bbox"),
+                "plot_frame_score": candidate.get("score"),
+                "panels": [],
+                "provisional": True,
+            }
+
         return {
             "status": "NO_CONFIDENT_PANEL_SPLIT",
-            "reason": "NO_BROAD_WHITESPACE_GUTTER",
+            "reason": "NO_WHITESPACE_GUTTER_OR_PLOT_FRAME_CANDIDATES",
             "image_size": [width, height],
+            "plot_frame_detection": frame_detection,
             "panels": [],
         }
 

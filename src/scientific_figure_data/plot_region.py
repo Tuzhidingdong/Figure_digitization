@@ -125,6 +125,408 @@ def detect_plot_box(
     }
 
 
+
+def detect_plot_box_candidates(
+    image_path: Path,
+    *,
+    max_candidates: int = 12,
+    minimum_width_fraction: float = 0.18,
+    minimum_height_fraction: float = 0.18,
+    minimum_line_fraction: float = 0.12,
+    minimum_adjacent_coverage: float = 0.50,
+    max_axis_lines: int = 20,
+) -> dict:
+    """Detect multiple independent chart frames in one source figure.
+
+    Unlike the single-frame detector, this function does not rank the largest
+    rectangle as the sole plot. It retains spatially distinct frame candidates
+    so a large subplot cannot hide the remaining plots in a multi-panel figure.
+    Three-sided/open-axis plots are allowed when two adjacent sides provide
+    strong evidence. Candidates remain provisional and are never treated as
+    scientific data until panel-level axis and trace checks pass.
+    """
+    if max_candidates < 1 or max_axis_lines < 4:
+        raise ValueError("max_candidates must be positive and max_axis_lines at least 4")
+    if not 0 < minimum_line_fraction < 1 or not 0 < minimum_adjacent_coverage <= 1:
+        raise ValueError("line and side coverage thresholds must be in (0, 1]")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Plot-frame detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        original_width, original_height = source.size
+        if original_width < 100 or original_height < 100:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "IMAGE_TOO_SMALL_FOR_PLOT_FRAME_CANDIDATES",
+                "image_size": [original_width, original_height],
+                "candidates": [],
+            }
+        max_analysis_pixels = 5_000_000
+        analysis_scale = min(
+            1.0,
+            (max_analysis_pixels / float(original_width * original_height)) ** 0.5,
+        )
+        analysis_width = max(100, int(original_width * analysis_scale))
+        analysis_height = max(100, int(original_height * analysis_scale))
+        # Integer rounding must never push the resized image over the explicit
+        # memory bound. Correct the larger dimension for any residual excess.
+        while analysis_width * analysis_height > max_analysis_pixels:
+            if analysis_width >= analysis_height:
+                analysis_width -= 1
+            else:
+                analysis_height -= 1
+        analysis_scale = min(
+            analysis_width / float(original_width),
+            analysis_height / float(original_height),
+        )
+        converted = source.convert("RGB")
+        if (analysis_width, analysis_height) != (original_width, original_height):
+            resampling = getattr(Image, "Resampling", Image).BOX
+            converted = converted.resize((analysis_width, analysis_height), resample=resampling)
+        rgb = np.asarray(converted, dtype=np.uint8)
+        if converted is not source:
+            converted.close()
+    height, width = rgb.shape[:2]
+
+    luminance = (
+        0.2126 * rgb[:, :, 0].astype(np.float32)
+        + 0.7152 * rgb[:, :, 1].astype(np.float32)
+        + 0.0722 * rgb[:, :, 2].astype(np.float32)
+    )
+    chroma = (
+        rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2).astype(np.int16)
+    )
+    dark = luminance <= 178.0
+    # Use mostly achromatic ink to locate axes. Saturated data traces can be
+    # long and nearly horizontal/vertical, so counting them as frame lines
+    # creates false plot rectangles and can suppress the true panel candidates.
+    axis_ink = dark & (chroma <= 65)
+    chromatic_axis_ink = (chroma >= 80) & (luminance <= 220)
+    # Colored Y-axis spines/ticks are useful vertical-edge evidence. A normal
+    # colored data trace occupies only a few pixels per X column and therefore
+    # does not pass the same long-line coverage threshold.
+    vertical_ink = axis_ink | chromatic_axis_ink
+    row_profile = axis_ink.mean(axis=1)
+    column_profile = vertical_ink.mean(axis=0)
+
+    def line_positions(profile, dimension):
+        raw = [
+            index for index, fraction in enumerate(profile)
+            if fraction >= minimum_line_fraction
+            and dimension * 0.015 <= index <= dimension * 0.985
+        ]
+        clusters = _collapse_nearby(raw, max(1, round(dimension * 0.004)))
+        ranked = []
+        for position in clusters:
+            radius = max(1, round(dimension * 0.002))
+            start, end = max(0, position - radius), min(dimension, position + radius + 1)
+            ranked.append((float(profile[start:end].max()), int(position)))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return sorted(position for _, position in ranked[:max_axis_lines])
+
+    rows = line_positions(row_profile, height)
+    columns = line_positions(column_profile, width)
+    if not rows or not columns:
+        return {
+            "status": "NEEDS_REVIEW",
+            "reason": "INSUFFICIENT_LONG_AXIS_LINES",
+            "image_size": [original_width, original_height],
+            "analysis_image_size": [width, height],
+            "analysis_scale": analysis_scale,
+            "horizontal_candidate_count": len(rows),
+            "vertical_candidate_count": len(columns),
+            "candidates": [],
+        }
+
+    horizontal_pairs = []
+    for top_index, top in enumerate(rows[:-1]):
+        for bottom in rows[top_index + 1:]:
+            box_height = bottom - top
+            if box_height < height * minimum_height_fraction or box_height > height * 0.96:
+                continue
+            horizontal_pairs.append((top, bottom))
+
+    vertical_pairs = []
+    for left_index, left in enumerate(columns[:-1]):
+        for right in columns[left_index + 1:]:
+            box_width = right - left
+            if box_width < width * minimum_width_fraction or box_width > width * 0.96:
+                continue
+            vertical_pairs.append((left, right))
+
+    candidates = []
+    for top, bottom in horizontal_pairs:
+        box_height = bottom - top
+        for left, right in vertical_pairs:
+            box_width = right - left
+            aspect = box_width / max(1, box_height)
+            if not 0.20 <= aspect <= 5.0:
+                continue
+
+            horizontal_top = float(axis_ink[max(0, top - 1):min(height, top + 2), left:right].mean())
+            horizontal_bottom = float(axis_ink[max(0, bottom - 1):min(height, bottom + 2), left:right].mean())
+            vertical_left = float(vertical_ink[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
+            vertical_right = float(vertical_ink[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
+            sides = (horizontal_top, horizontal_bottom, vertical_left, vertical_right)
+
+            adjacent = max(
+                min(horizontal_top, vertical_left),
+                min(horizontal_top, vertical_right),
+                min(horizontal_bottom, vertical_left),
+                min(horizontal_bottom, vertical_right),
+            )
+            if adjacent < minimum_adjacent_coverage:
+                continue
+
+            strongest = sorted(sides, reverse=True)
+            # Full rectangular frames are preferred, while ordinary L-shaped
+            # axes remain discoverable from one horizontal and one vertical side.
+            if strongest[1] < minimum_adjacent_coverage:
+                continue
+
+            area_fraction = (box_width * box_height) / float(width * height)
+            if area_fraction < 0.035:
+                continue
+            size_score = max(0.25, 1.0 - max(0.0, area_fraction - 0.38) * 1.7)
+            interior = rgb[
+                min(height - 1, top + 2):max(top + 3, bottom - 1),
+                min(width - 1, left + 2):max(left + 3, right - 1),
+            ].astype(np.int16)
+            if interior.size:
+                chroma_fraction = float(
+                    ((interior.max(axis=2) - interior.min(axis=2)) >= 32).mean()
+                )
+            else:
+                chroma_fraction = 0.0
+            chroma_score = min(1.0, chroma_fraction / 0.018)
+            side_score = 0.55 * adjacent + 0.45 * (sum(strongest[:2]) / 2.0)
+            score = 0.55 * side_score + 0.22 * size_score + 0.23 * chroma_score
+            if score < 0.44:
+                continue
+            candidates.append({
+                "pixel_bbox": [int(left), int(top), int(right), int(bottom)],
+                "normalized_bbox": [
+                    left / width, top / height, right / width, bottom / height,
+                ],
+                "image_size": [width, height],
+                "side_coverage": {
+                    "top": horizontal_top, "bottom": horizontal_bottom,
+                    "left": vertical_left, "right": vertical_right,
+                },
+                "adjacent_side_coverage": adjacent,
+                "area_fraction": area_fraction,
+                "chromatic_pixel_fraction": chroma_fraction,
+                "score": float(score),
+                "provisional": True,
+            })
+
+    # Also recover open-axis charts. A conventional L-shaped plot has one
+    # long horizontal axis and one long vertical axis that meet at a corner;
+    # requiring all four dark borders would incorrectly reject it.
+    def contiguous_segments(mask, minimum_length):
+        indices = np.flatnonzero(mask)
+        if not indices.size:
+            return []
+        segments = []
+        start = previous = int(indices[0])
+        for raw_index in indices[1:]:
+            index = int(raw_index)
+            if index - previous <= 3:
+                previous = index
+                continue
+            if previous - start + 1 >= minimum_length:
+                segments.append((start, previous + 1))
+            start = previous = index
+        if previous - start + 1 >= minimum_length:
+            segments.append((start, previous + 1))
+        return segments
+
+    minimum_horizontal_length = max(20, int(round(width * minimum_width_fraction)))
+    minimum_vertical_length = max(20, int(round(height * minimum_height_fraction)))
+    corner_tolerance = max(3, int(round(min(width, height) * 0.008)))
+    for y in rows:
+        horizontal_band = axis_ink[max(0, y - 1):min(height, y + 2), :]
+        horizontal_segments = contiguous_segments(
+            horizontal_band.any(axis=0), minimum_horizontal_length
+        )
+        if not horizontal_segments:
+            continue
+        horizontal_coverage_by_segment = {
+            segment: float(horizontal_band[:, segment[0]:segment[1]].mean())
+            for segment in horizontal_segments
+        }
+        for x in columns:
+            vertical_band = vertical_ink[:, max(0, x - 1):min(width, x + 2)]
+            vertical_segments = contiguous_segments(
+                vertical_band.any(axis=1), minimum_vertical_length
+            )
+            for horizontal_start, horizontal_end in horizontal_segments:
+                if abs(x - horizontal_start) <= corner_tolerance:
+                    horizontal_side = "left"
+                elif abs(x - (horizontal_end - 1)) <= corner_tolerance:
+                    horizontal_side = "right"
+                else:
+                    continue
+                horizontal_coverage = horizontal_coverage_by_segment[
+                    (horizontal_start, horizontal_end)
+                ]
+                for vertical_start, vertical_end in vertical_segments:
+                    if abs(y - vertical_start) <= corner_tolerance:
+                        vertical_side = "top"
+                    elif abs(y - (vertical_end - 1)) <= corner_tolerance:
+                        vertical_side = "bottom"
+                    else:
+                        continue
+                    vertical_coverage = float(
+                        vertical_band[vertical_start:vertical_end, :].mean()
+                    )
+                    adjacent = min(horizontal_coverage, vertical_coverage)
+                    if adjacent < minimum_adjacent_coverage:
+                        continue
+                    box_width = horizontal_end - horizontal_start
+                    box_height = vertical_end - vertical_start
+                    aspect = box_width / max(1, box_height)
+                    if not 0.20 <= aspect <= 5.0:
+                        continue
+                    area_fraction = (box_width * box_height) / float(width * height)
+                    if area_fraction < 0.035:
+                        continue
+                    x0, x1 = horizontal_start, horizontal_end
+                    y0, y1 = vertical_start, vertical_end
+                    interior = rgb[
+                        min(height - 1, y0 + 2):max(y0 + 3, y1 - 1),
+                        min(width - 1, x0 + 2):max(x0 + 3, x1 - 1),
+                    ].astype(np.int16)
+                    chroma_fraction = (
+                        float(((interior.max(axis=2) - interior.min(axis=2)) >= 32).mean())
+                        if interior.size else 0.0
+                    )
+                    chroma_score = min(1.0, chroma_fraction / 0.018)
+                    size_score = max(0.25, 1.0 - max(0.0, area_fraction - 0.38) * 1.7)
+                    side_score = 0.70 * adjacent + 0.30 * max(
+                        horizontal_coverage, vertical_coverage
+                    )
+                    score = 0.55 * side_score + 0.22 * size_score + 0.23 * chroma_score
+                    if score < 0.44:
+                        continue
+                    coverage = {"top": 0.0, "bottom": 0.0, "left": 0.0, "right": 0.0}
+                    coverage[vertical_side] = vertical_coverage
+                    coverage[horizontal_side] = horizontal_coverage
+                    candidates.append({
+                        "pixel_bbox": [int(x0), int(y0), int(x1), int(y1)],
+                        "normalized_bbox": [
+                            x0 / width, y0 / height, x1 / width, y1 / height,
+                        ],
+                        "image_size": [width, height],
+                        "side_coverage": coverage,
+                        "adjacent_side_coverage": adjacent,
+                        "area_fraction": area_fraction,
+                        "chromatic_pixel_fraction": chroma_fraction,
+                        "score": float(score),
+                        "candidate_type": "OPEN_AXIS_CORNER",
+                        "provisional": True,
+                    })
+
+    candidates.sort(key=lambda item: (
+        -item["score"],
+        (item["pixel_bbox"][2] - item["pixel_bbox"][0])
+        * (item["pixel_bbox"][3] - item["pixel_bbox"][1]),
+        item["pixel_bbox"][1], item["pixel_bbox"][0],
+    ))
+
+    def intersection_over_union(first, second):
+        ax0, ay0, ax1, ay1 = first
+        bx0, by0, bx1, by1 = second
+        ix0, iy0, ix1, iy1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+        intersection = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+        area_a = max(1, ax1 - ax0) * max(1, ay1 - ay0)
+        area_b = max(1, bx1 - bx0) * max(1, by1 - by0)
+        return intersection / max(1, area_a + area_b - intersection)
+
+    deduplicated = []
+    for candidate in candidates:
+        box = candidate["pixel_bbox"]
+        if any(intersection_over_union(box, prior["pixel_bbox"]) >= 0.72
+               for prior in deduplicated):
+            continue
+        deduplicated.append(candidate)
+
+    # Remove an enclosing rectangle when one or more similarly supported
+    # internal frames explain the chart area more precisely.
+    rejected = set()
+    for outer_index, outer in enumerate(deduplicated):
+        ox0, oy0, ox1, oy1 = outer["pixel_bbox"]
+        outer_area = max(1, (ox1 - ox0) * (oy1 - oy0))
+        children = []
+        for inner_index, inner in enumerate(deduplicated):
+            if inner_index == outer_index:
+                continue
+            ix0, iy0, ix1, iy1 = inner["pixel_bbox"]
+            contained = ox0 <= ix0 and oy0 <= iy0 and ox1 >= ix1 and oy1 >= iy1
+            if not contained:
+                continue
+            inner_area = max(1, (ix1 - ix0) * (iy1 - iy0))
+            ratio = inner_area / outer_area
+            if 0.12 <= ratio <= 0.82 and inner["score"] >= outer["score"] - 0.12:
+                children.append(inner_index)
+        if len(children) >= 2:
+            rejected.add(outer_index)
+        elif len(children) == 1:
+            child = deduplicated[children[0]]
+            if child["score"] >= outer["score"] - 0.06:
+                rejected.add(outer_index)
+
+    selected = [
+        item for index, item in enumerate(deduplicated)
+        if index not in rejected
+    ][:max_candidates]
+    selected.sort(key=lambda item: (
+        item["pixel_bbox"][1], item["pixel_bbox"][0], -item["score"]
+    ))
+    scale_x = original_width / float(width)
+    scale_y = original_height / float(height)
+    for item in selected:
+        x0, y0, x1, y1 = item["pixel_bbox"]
+        original_box = [
+            max(0, min(original_width, int(round(x0 * scale_x)))),
+            max(0, min(original_height, int(round(y0 * scale_y)))),
+            max(0, min(original_width, int(round(x1 * scale_x)))),
+            max(0, min(original_height, int(round(y1 * scale_y)))),
+        ]
+        item["analysis_pixel_bbox"] = item["pixel_bbox"]
+        item["pixel_bbox"] = original_box
+        item["normalized_bbox"] = [
+            original_box[0] / original_width,
+            original_box[1] / original_height,
+            original_box[2] / original_width,
+            original_box[3] / original_height,
+        ]
+        item["image_size"] = [original_width, original_height]
+    return {
+        "status": "PLOT_FRAME_CANDIDATES_FOUND" if selected else "NEEDS_REVIEW",
+        "reason": (
+            "MULTIPLE_SPATIALLY_DISTINCT_PLOT_FRAMES"
+            if len(selected) >= 2 else
+            "ONE_SUPPORTED_PLOT_FRAME" if len(selected) == 1 else
+            "NO_PLOT_FRAME_CANDIDATE_PASSED_GEOMETRY"
+        ),
+        "image_size": [original_width, original_height],
+        "analysis_image_size": [width, height],
+        "analysis_scale": analysis_scale,
+        "horizontal_candidate_count": len(rows),
+        "vertical_candidate_count": len(columns),
+        "candidate_count": len(selected),
+        "candidates": selected,
+        "provisional": True,
+    }
+
+
 def _collapse_nearby(values: list[int], gap: int) -> list[int]:
     if not values:
         return []
@@ -241,7 +643,7 @@ def detect_chromatic_color_families(
     image_path: Path,
     plot_box: tuple[int, int, int, int],
     *,
-    max_families: int = 4,
+    max_families: int = 8,
     minimum_family_pixels: int = 24,
     minimum_family_fraction: float = 0.025,
     maximum_distance: float = 52.0,
@@ -274,11 +676,27 @@ def detect_chromatic_color_families(
     if x1 <= x0 or y1 <= y0:
         return {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX", "families": []}
 
-    region = rgb[y0:y1, x0:x1].reshape(-1, 3).astype(np.int16)
+    region_rgb = rgb[y0:y1, x0:x1]
+    boundary_spine_exclusion = np.zeros(region_rgb.shape[:2], dtype=bool)
+    axis_spine_evidence = detect_colored_y_axis_spines(
+        image_path, (x0, y0, x1, y1)
+    )
+    edge_width = max(3, min(14, int(round((x1 - x0) * 0.012))))
+    for side in ("LEFT", "RIGHT"):
+        side_evidence = axis_spine_evidence.get("sides", {}).get(side, {})
+        if side_evidence.get("status") != "CHROMATIC_Y_AXIS_SPINE_DETECTED":
+            continue
+        if side == "LEFT":
+            boundary_spine_exclusion[:, :min(edge_width, region_rgb.shape[1])] = True
+        else:
+            boundary_spine_exclusion[:, max(0, region_rgb.shape[1] - edge_width):] = True
+
+    region = region_rgb.reshape(-1, 3).astype(np.int16)
     hues, saturations, values = _rgb_to_hsv_arrays(region)
     selected_mask = (
         (saturations >= float(minimum_saturation))
         & (values >= float(minimum_value))
+        & ~boundary_spine_exclusion.reshape(-1)
     )
     selected = region[selected_mask]
     selected_hues = hues[selected_mask]
@@ -290,6 +708,7 @@ def detect_chromatic_color_families(
             "status": "NEEDS_REVIEW",
             "reason": "INSUFFICIENT_CHROMATIC_PIXELS",
             "saturated_pixel_count": total,
+            "axis_spine_exclusion": axis_spine_evidence,
             "families": [],
         }
 
@@ -361,8 +780,200 @@ def detect_chromatic_color_families(
         "truncated": bool(remaining.sum() >= minimum_family_pixels),
         "color_space": "HSV_HUE_FAMILY",
         "hue_tolerance_degrees": float(hue_tolerance_degrees),
+        "axis_spine_exclusion": axis_spine_evidence,
         "provisional": True,
     }
+
+
+
+def detect_colored_y_axis_spines(
+    image_path: Path,
+    plot_box: tuple[int, int, int, int],
+    *,
+    minimum_vertical_coverage: float = 0.35,
+    hue_tolerance_degrees: float = 14.0,
+    minimum_hue_purity: float = 0.80,
+) -> dict:
+    """Detect a persistent chromatic spine on the left/right plot boundary.
+
+    This is supporting evidence for dual-Y assignment, not a curve detector.
+    A color must occupy a substantial, vertically continuous portion of a
+    narrow axis-edge strip and form one dominant circular-HSV hue family.
+    A colored curve endpoint or isolated tick mark must not be sufficient.
+    """
+    if not 0 < minimum_vertical_coverage <= 1:
+        raise ValueError("minimum_vertical_coverage must be between 0 and 1")
+    if not 0 < hue_tolerance_degrees <= 45:
+        raise ValueError("hue_tolerance_degrees must be between 0 and 45")
+    if not 0 < minimum_hue_purity <= 1:
+        raise ValueError("minimum_hue_purity must be between 0 and 1")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Colored Y-axis detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        width, height = source.size
+        x0, y0, x1, y1 = [int(value) for value in plot_box]
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(width, x1), min(height, y1)
+        if x1 <= x0 or y1 <= y0:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "INVALID_PLOT_BOX",
+                "sides": {},
+            }
+        plot_width, plot_height = x1 - x0, y1 - y0
+        if plot_height < 30 or plot_width < 20:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "PLOT_REGION_TOO_SMALL_FOR_AXIS_SPINE_EVIDENCE",
+                "sides": {},
+            }
+
+        band_width = max(3, min(14, int(round(plot_width * 0.012))))
+        y_start, y_end = min(y1, y0 + 1), max(y0 + 1, y1 - 1)
+        side_boxes = {
+            "LEFT": (
+                max(0, x0 - 1), y_start,
+                min(width, x0 + band_width), y_end,
+            ),
+            "RIGHT": (
+                max(0, x1 - band_width), y_start,
+                min(width, x1 + 1), y_end,
+            ),
+        }
+        image_rgb = source.convert("RGB")
+        sides = {}
+        try:
+            for side, box in side_boxes.items():
+                sx0, sy0, sx1, sy1 = box
+                if sx1 <= sx0 or sy1 <= sy0:
+                    sides[side] = {
+                        "status": "NO_AXIS_SPINE_COLOR_EVIDENCE",
+                        "reason": "EMPTY_AXIS_EDGE_SAMPLE",
+                    }
+                    continue
+                strip = np.asarray(
+                    image_rgb.crop(box), dtype=np.uint8
+                )
+                hues, saturations, values = _rgb_to_hsv_arrays(
+                    strip.reshape(-1, 3)
+                )
+                chromatic = (saturations >= 0.28) & (values >= 0.22)
+                selected_count = int(chromatic.sum())
+                if selected_count < max(18, int(round(plot_height * 0.10))):
+                    sides[side] = {
+                        "status": "NO_AXIS_SPINE_COLOR_EVIDENCE",
+                        "reason": "INSUFFICIENT_CHROMATIC_EDGE_PIXELS",
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "chromatic_pixel_count": selected_count,
+                    }
+                    continue
+
+                selected_hues = hues[chromatic]
+                selected_rgb = strip.reshape(-1, 3)[chromatic]
+                bin_width = 3.0
+                bin_count = int(round(360.0 / bin_width))
+                bins = np.floor(selected_hues / bin_width).astype(int) % bin_count
+                histogram = np.bincount(bins, minlength=bin_count)
+                seed_bin = int(histogram.argmax())
+                seed_hue = (seed_bin + 0.5) * bin_width
+                seed_distance = np.abs(
+                    (selected_hues - seed_hue + 180.0) % 360.0 - 180.0
+                )
+                members = seed_distance <= hue_tolerance_degrees
+                family_count = int(members.sum())
+                purity = family_count / max(1, selected_count)
+                family_hues = selected_hues[members]
+                family_rgb = selected_rgb[members]
+
+                angles = np.deg2rad(family_hues)
+                center_hue = float(
+                    np.rad2deg(
+                        np.arctan2(np.sin(angles).mean(), np.cos(angles).mean())
+                    ) % 360.0
+                ) if family_count else None
+                refined_distance = np.abs(
+                    (selected_hues - center_hue + 180.0) % 360.0 - 180.0
+                ) if center_hue is not None else np.full(selected_count, 180.0)
+                refined_members = refined_distance <= hue_tolerance_degrees
+                refined_count = int(refined_members.sum())
+                purity = refined_count / max(1, selected_count)
+                family_rgb = selected_rgb[refined_members]
+
+                family_mask = np.zeros(chromatic.shape, dtype=bool)
+                family_mask[chromatic] = refined_members
+                family_rows = family_mask.reshape(strip.shape[0], strip.shape[1]).any(axis=1)
+                row_coverage = float(family_rows.mean()) if len(family_rows) else 0.0
+                longest_run = 0
+                current_run = 0
+                for present in family_rows:
+                    current_run = current_run + 1 if bool(present) else 0
+                    longest_run = max(longest_run, current_run)
+                longest_run_fraction = longest_run / max(1, len(family_rows))
+
+                detected = (
+                    refined_count >= max(18, int(round(plot_height * 0.10)))
+                    and row_coverage >= minimum_vertical_coverage
+                    and longest_run_fraction >= minimum_vertical_coverage * 0.70
+                    and purity >= minimum_hue_purity
+                )
+                if detected:
+                    color_rgb = [
+                        int(round(value)) for value in np.median(family_rgb, axis=0)
+                    ]
+                    sides[side] = {
+                        "status": "CHROMATIC_Y_AXIS_SPINE_DETECTED",
+                        "color_rgb": color_rgb,
+                        "hue_center_degrees": round(float(center_hue), 3),
+                        "hue_tolerance_degrees": float(hue_tolerance_degrees),
+                        "hue_purity": round(float(purity), 4),
+                        "vertical_row_coverage": round(row_coverage, 4),
+                        "longest_vertical_run_fraction": round(
+                            longest_run_fraction, 4
+                        ),
+                        "chromatic_pixel_count": refined_count,
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "sample_bbox": list(box),
+                        "provisional": True,
+                    }
+                else:
+                    sides[side] = {
+                        "status": "NO_CONTINUOUS_CHROMATIC_SPINE",
+                        "hue_center_degrees": (
+                            round(float(center_hue), 3) if center_hue is not None else None
+                        ),
+                        "hue_purity": round(float(purity), 4),
+                        "vertical_row_coverage": round(row_coverage, 4),
+                        "longest_vertical_run_fraction": round(
+                            longest_run_fraction, 4
+                        ),
+                        "chromatic_pixel_count": refined_count,
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "sample_bbox": list(box),
+                    }
+        finally:
+            image_rgb.close()
+
+    return {
+        "status": (
+            "CHROMATIC_Y_AXIS_SPINES_DETECTED"
+            if any(
+                item.get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                for item in sides.values()
+            )
+            else "NO_CHROMATIC_Y_AXIS_SPINE_DETECTED"
+        ),
+        "plot_box_pixels": [x0, y0, x1, y1],
+        "sides": sides,
+        "provisional": True,
+    }
+
 
 
 def estimate_ocr_text_ink_color(

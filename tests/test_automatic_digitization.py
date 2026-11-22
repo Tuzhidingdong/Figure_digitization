@@ -130,6 +130,244 @@ def test_panel_segmentation_finds_a_two_by_three_grid(tmp_path: Path):
                for panel in result["panels"])
 
 
+def test_plot_frame_detection_recovers_an_open_l_shaped_axis(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "open_l_axis.png"
+    image = Image.new("RGB", (500, 350), "white")
+    draw = ImageDraw.Draw(image)
+    # A color-coded left Y-axis spine with a black X-axis is common in
+    # dual-axis scientific plots; candidate detection must retain it.
+    draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
+    draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    draw.line(
+        [(x, int(260 - 145 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(275 - 85 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(25, 75, 225), width=3,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_plot_box_candidates(image_path)
+    assert result["status"] == "PLOT_FRAME_CANDIDATES_FOUND", result
+    candidate = result["candidates"][0]
+    assert candidate["candidate_type"] == "OPEN_AXIS_CORNER"
+    x0, y0, x1, y1 = candidate["pixel_bbox"]
+    assert abs(x0 - 60) <= 4
+    assert abs(y0 - 40) <= 4
+    assert abs(x1 - 451) <= 4
+    assert abs(y1 - 301) <= 4
+
+
+def test_colored_y_axis_spine_is_distinguished_from_curve_endpoints(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_colored_y_axis_spines
+
+    image_path = tmp_path / "color_coded_y_axis.png"
+    image = Image.new("RGB", (500, 350), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
+    draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    draw.line(
+        [(x, int(260 - 145 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(275 - 85 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(25, 75, 225), width=3,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_colored_y_axis_spines(image_path, (60, 40, 450, 300))
+    left = result["sides"]["LEFT"]
+    right = result["sides"]["RIGHT"]
+    assert left["status"] == "CHROMATIC_Y_AXIS_SPINE_DETECTED", result
+    assert left["vertical_row_coverage"] >= 0.90
+    assert left["hue_purity"] >= 0.95
+    assert abs((left["hue_center_degrees"] - 0.0 + 180.0) % 360.0 - 180.0) <= 8.0
+    assert right["status"] != "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+
+    # A colored axis spine by itself is not a data series and must be excluded
+    # from the hue-family inventory used to create trace candidates.
+    axis_only_path = tmp_path / "axis_spine_without_curve.png"
+    axis_only = Image.new("RGB", (500, 350), "white")
+    axis_draw = ImageDraw.Draw(axis_only)
+    axis_draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
+    axis_draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    axis_only.save(axis_only_path, format="PNG")
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+    family_result = detect_chromatic_color_families(
+        axis_only_path, (60, 40, 450, 300)
+    )
+    assert family_result["status"] == "NEEDS_REVIEW"
+    assert family_result["reason"] == "INSUFFICIENT_CHROMATIC_PIXELS"
+    assert (
+        family_result["axis_spine_exclusion"]["sides"]["LEFT"]["status"]
+        == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+    )
+
+
+def test_downsampled_plot_frame_candidates_map_back_to_original_pixels(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "large_open_axis_figure.png"
+    image = Image.new("RGB", (2600, 2200), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((120, 80, 120, 1980), fill=(20, 20, 20), width=4)
+    draw.line((120, 1980, 2460, 1980), fill=(20, 20, 20), width=4)
+    draw.line(
+        [(x, int(1780 - 650 * (x - 180) / 2200)) for x in range(180, 2420)],
+        fill=(225, 25, 35), width=4,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_plot_box_candidates(image_path)
+    assert result["status"] == "PLOT_FRAME_CANDIDATES_FOUND", result
+    assert result["analysis_scale"] < 1.0
+    assert result["analysis_image_size"][0] * result["analysis_image_size"][1] <= 5_000_000
+    candidate = next(
+        item for item in result["candidates"]
+        if item.get("candidate_type") == "OPEN_AXIS_CORNER"
+    )
+    x0, y0, x1, y1 = candidate["pixel_bbox"]
+    assert abs(x0 - 120) <= 8
+    assert abs(y0 - 80) <= 8
+    assert abs(x1 - 2461) <= 8
+    assert abs(y1 - 1981) <= 8
+    assert candidate["image_size"] == [2600, 2200]
+
+
+def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.panel_segmentation import detect_panel_regions
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "adjacent_plots_no_gutter.png"
+    image = Image.new("RGB", (640, 400), "white")
+    draw = ImageDraw.Draw(image)
+
+    # The two plot frames share one vertical border. There is no broad white
+    # gutter between them, so whitespace-only segmentation must not be relied on.
+    draw.rectangle((30, 80, 320, 320), outline=(20, 20, 20), width=3)
+    draw.rectangle((320, 80, 610, 320), outline=(20, 20, 20), width=3)
+    left_red = [(x, int(270 - 125 * (x - 48) / 250)) for x in range(48, 304)]
+    left_blue = [(x, int(285 - 70 * (x - 48) / 250)) for x in range(48, 304)]
+    right_red = [(x, int(260 - 90 * (x - 338) / 250)) for x in range(338, 594)]
+    right_blue = [(x, int(285 - 145 * (x - 338) / 250)) for x in range(338, 594)]
+    draw.line(left_red, fill=(225, 25, 35), width=3)
+    draw.line(left_blue, fill=(25, 75, 225), width=3)
+    draw.line(right_red, fill=(225, 25, 35), width=3)
+    draw.line(right_blue, fill=(25, 75, 225), width=3)
+
+    # Dense low-contrast chart ink avoids a completely empty row/column
+    # projection while retaining the true plot-frame geometry.
+    for y in range(100, 305, 24):
+        draw.line((31, y, 319, y), fill=(240, 240, 240), width=1)
+        draw.line((321, y, 609, y), fill=(240, 240, 240), width=1)
+    # Thin, low-contrast vertical grid marks keep the horizontal projection
+    # occupied too, ensuring this case exercises the frame-candidate fallback.
+    draw.line((145, 81, 145, 319), fill=(240, 240, 240), width=8)
+    draw.line((465, 81, 465, 319), fill=(240, 240, 240), width=8)
+    image.save(image_path, format="PNG")
+
+    detected = detect_plot_box_candidates(image_path)
+    assert detected["status"] == "PLOT_FRAME_CANDIDATES_FOUND", detected
+    boxes = [item["pixel_bbox"] for item in detected["candidates"]]
+    assert any(abs(box[0] - 30) <= 4 and abs(box[2] - 320) <= 4 for box in boxes), boxes
+    assert any(abs(box[0] - 320) <= 4 and abs(box[2] - 610) <= 4 for box in boxes), boxes
+
+    segmented = detect_panel_regions(image_path)
+    assert segmented["status"] == "PROVISIONAL_PANELS_DETECTED", segmented
+    assert segmented["reason"] == "MULTIPLE_PLOT_FRAME_CANDIDATES"
+    assert segmented["panel_count"] >= 2
+    assert all(
+        item["segmentation_provenance"] == "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION"
+        for item in segmented["panels"]
+    )
+
+
+def test_process_paper_auto_segments_adjacent_panels_before_plot_tracing(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-adjacent"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    image = Image.new("RGB", (640, 400), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((30, 80, 320, 320), outline=(20, 20, 20), width=3)
+    draw.rectangle((320, 80, 610, 320), outline=(20, 20, 20), width=3)
+    draw.line(
+        [(x, int(270 - 125 * (x - 48) / 250)) for x in range(48, 304)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(285 - 70 * (x - 48) / 250)) for x in range(48, 304)],
+        fill=(25, 75, 225), width=3,
+    )
+    draw.line(
+        [(x, int(260 - 90 * (x - 338) / 250)) for x in range(338, 594)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(285 - 145 * (x - 338) / 250)) for x in range(338, 594)],
+        fill=(25, 75, 225), width=3,
+    )
+    for y in range(100, 305, 24):
+        draw.line((31, y, 319, y), fill=(240, 240, 240), width=1)
+        draw.line((321, y, 609, y), fill=(240, 240, 240), width=1)
+    draw.line((145, 81, 145, 319), fill=(240, 240, 240), width=8)
+    draw.line((465, 81, 465, 319), fill=(240, 240, 240), width=8)
+    image.save(image_path, format="PNG")
+
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({
+            "figures": [{
+                "figure_id": "Figure1",
+                "image_path": "Figure1.png",
+                "caption": "Two adjacent time-series panels with no white gutter.",
+                "panels": [],
+            }]
+        }),
+        encoding="utf-8",
+    )
+
+    result = process_paper(
+        input_root,
+        Path("paper-adjacent"),
+        tmp_path / "output",
+        options={"ocr": False, "memory_limit_mb": 1024},
+    )
+
+    assert result["panel_count"] >= 2
+    assert result["figure_count"] == 1
+    paper_output = tmp_path / "output" / "papers" / "paper-adjacent"
+    inventory = json.loads((paper_output / "figure_inventory.json").read_text(encoding="utf-8"))
+    layout = json.loads((paper_output / "panel_layout.json").read_text(encoding="utf-8"))
+    detected = inventory["figures"][0]["panel_segmentation"]
+    assert detected["reason"] == "MULTIPLE_PLOT_FRAME_CANDIDATES"
+    auto_panels = [
+        item for item in layout["panels"]
+        if item["segmentation_provenance"] == "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION"
+    ]
+    assert len(auto_panels) >= 2
+    assert all(item["evidence_image_path"] for item in auto_panels)
+    assert all(item["plot_box"] for item in auto_panels)
+    assert all(
+        item["plot_box_coordinate_space"] == "PANEL_IMAGE_PIXELS"
+        for item in auto_panels
+    )
+
+
 def test_process_paper_auto_traces_and_reconstructs_monotonic_raster_curve(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ):
@@ -474,6 +712,79 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
                for record in records)
 
 
+def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "colored_y_spines_black_ticks.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+
+    # Tick labels are black OCR evidence. Only the two Y-axis spines are
+    # color-coded, matching their respective red/blue curves.
+    draw.line((54, 40, 54, 270), fill=(230, 20, 30), width=3)
+    draw.line((54, 40, 360, 40), fill=(25, 25, 25), width=4)
+    draw.line((54, 270, 360, 270), fill=(25, 25, 25), width=4)
+    draw.line((360, 40, 360, 270), fill=(20, 65, 225), width=3)
+
+    red_curve, blue_curve = [], []
+    for x in range(70, 346):
+        fraction = (x - 70) / 275
+        red_curve.append((x, int(220 - 110 * fraction)))
+        blue_curve.append((x, int(238 - 65 * fraction)))
+    draw.line(red_curve, fill=(230, 20, 30), width=3)
+    draw.line(blue_curve, fill=(20, 65, 225), width=3)
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+    ]
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a",
+        {"plot_box": [55, 40, 360, 270]},
+        {"caption": "Two monotonic time-series curves with dual Y axes."},
+        {}, context, None, ocr_evidence=rows,
+    )
+    assert len(records) == 2
+    by_side = {record.y_axis_side: record for record in records}
+    assert set(by_side) == {"LEFT", "RIGHT"}, [
+        {
+            "side": record.y_axis_side,
+            "assignment": record.metadata.get("series_axis_assignment"),
+            "association": record.metadata.get("y_axis_text_color_association"),
+            "color": record.metadata.get("color_detection"),
+        }
+        for record in records
+    ]
+    for record in records:
+        assignment = record.metadata["series_axis_assignment"]
+        association = record.metadata["y_axis_text_color_association"]
+        assert assignment["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
+        assert association["status"] == "MATCHED"
+        matched_sources = {
+            item["source"]
+            for side in association["side_color_evidence"].values()
+            for item in side["candidate_inks"]
+        }
+        assert "AXIS_SPINE" in matched_sources
+        assert len(record.points) >= 100, {
+            "side": record.y_axis_side,
+            "trace_specification": record.metadata.get("trace_specification"),
+            "raster_qc": record.metadata.get("raster_qc"),
+            "color_detection": record.metadata.get("color_detection"),
+            "calibration_errors": record.metadata.get("calibration_errors"),
+        }
+        if record.y_axis_side == "LEFT":
+            assert 55 in record.metadata["raster_qc"]["edge_axis_columns_removed"]
+        assert all(point.x is not None and point.y is not None for point in record.points)
+
+
 def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.plot_region import detect_chromatic_color_families
@@ -511,6 +822,107 @@ def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry
     assert len(points) >= 200
     assert all(point.x is None and point.y is None for point in points)
     assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
+
+
+def test_pipeline_expands_five_color_families_into_numeric_series(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "five_color_numeric_time_series.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    plot_box = (54, 40, 360, 270)
+    draw.line((54, 40, 54, 270), fill=(20, 20, 20), width=3)
+    draw.line((54, 270, 360, 270), fill=(20, 20, 20), width=3)
+
+    colors = [
+        (230, 20, 30),
+        (230, 125, 25),
+        (25, 170, 75),
+        (20, 65, 225),
+        (160, 35, 200),
+    ]
+    for index, color in enumerate(colors):
+        base_y = 225 - index * 34
+        curve = [
+            (
+                x,
+                int(base_y - 18 * (x - 70) / 275 + 2 * ((x - 70) / 275) ** 2),
+            )
+            for x in range(70, 346)
+        ]
+        draw.line(curve, fill=color, width=3)
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 55), _ocr_row("5", 42, 150), _ocr_row("0", 42, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+    ]
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a",
+        {"plot_box": list(plot_box)},
+        {"caption": "Five independent colored time-series curves."},
+        {}, context, None, ocr_evidence=rows,
+    )
+
+    assert len(records) == 5, [
+        {
+            "status": record.metadata.get("color_detection"),
+            "trace": record.metadata.get("trace_specification"),
+            "qc": record.metadata.get("raster_qc"),
+        }
+        for record in records
+    ]
+    assert len({tuple(record.metadata["color_detection"]["color_rgb"]) for record in records}) == 5
+    for record in records:
+        assert record.points and len(record.points) >= 200, {
+            "series_id": record.series_id,
+            "color": record.metadata.get("color_detection"),
+            "trace": record.metadata.get("trace_specification"),
+            "raster_qc": record.metadata.get("raster_qc"),
+        }
+        assert record.metadata["trace_specification"]["status"] in {
+            "READY", "READY_WITH_REVIEW",
+        }
+        assert all(point.x is not None and point.y is not None for point in record.points)
+
+
+def test_multicolor_family_inventory_supports_more_than_four_curves(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+
+    image_path = tmp_path / "five_color_curves.png"
+    image = Image.new("RGB", (400, 260), "white")
+    draw = ImageDraw.Draw(image)
+    colors = [
+        (230, 30, 35),
+        (230, 120, 25),
+        (30, 170, 60),
+        (25, 90, 225),
+        (160, 35, 205),
+    ]
+    for index, color in enumerate(colors):
+        base_y = 48 + index * 34
+        points = [
+            (x, int(base_y - 14 * (x - 35) / 330 + 2 * ((x - 35) / 330) ** 2))
+            for x in range(35, 366)
+        ]
+        draw.line(points, fill=color, width=3)
+    image.save(image_path, format="PNG")
+
+    result = detect_chromatic_color_families(
+        image_path, (20, 20, 380, 230)
+    )
+    assert result["status"] == "MULTIPLE_CHROMATIC_FAMILIES", result
+    assert result["family_count"] == 5, result
+    assert result["truncated"] is False
+    hues = sorted(
+        item["color_match"]["hue_center_degrees"]
+        for item in result["families"]
+    )
+    assert len(hues) == len(set(round(value / 10) for value in hues))
 
 
 def test_geometry_only_trace_specification_does_not_require_a_y_axis_mapping(tmp_path: Path):

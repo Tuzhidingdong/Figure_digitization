@@ -64,6 +64,37 @@ def trace_monotonic_color(
         x1, y1 = min(width, int(bx1)), min(height, int(by1))
         if x1 <= x0 or y1 <= y0:
             return [], {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX"}
+
+    # A color-coded Y-axis spine can share the curve hue. It must not be
+    # interpreted as a second, vertically separated data branch at the first
+    # or last X column. Remove only boundary columns with strong long-run
+    # vertical evidence; ordinary curve endpoints/ticks do not meet this test.
+    edge_axis_columns_removed = []
+    if plot_box is not None:
+        edge_width = min(4, max(2, int(round((x1 - x0) * 0.012))))
+        edge_columns = (
+            list(range(x0, min(x1, x0 + edge_width)))
+            + list(range(max(x0, x1 - edge_width), x1))
+        )
+        for x in sorted(set(edge_columns)):
+            present_rows = np.flatnonzero(mask[y0:y1, x])
+            if len(present_rows) < max(8, int(round((y1 - y0) * 0.15))):
+                continue
+            longest_run = 0
+            current_run = 0
+            previous_row = None
+            for row in present_rows:
+                row = int(row)
+                if previous_row is None or row - previous_row > 3:
+                    current_run = 1
+                else:
+                    current_run += row - previous_row
+                longest_run = max(longest_run, current_run)
+                previous_row = row
+            if longest_run / max(1, y1 - y0) >= 0.25:
+                mask[y0:y1, x] = False
+                edge_axis_columns_removed.append(int(x))
+
     columns: list[tuple[int, float, int]] = []
     for x in range(x0, x1):
         ys = np.flatnonzero(mask[y0:y1, x]) + y0
@@ -71,7 +102,8 @@ def trace_monotonic_color(
             columns.append((x, float(np.median(ys)), len(ys)))
     if len(columns) < 8:
         return [], {"status": "NEEDS_REVIEW", "reason": "INSUFFICIENT_TRACE_PIXELS",
-                    "matched_columns": len(columns)}
+                    "matched_columns": len(columns),
+                    "edge_axis_columns_removed": edge_axis_columns_removed}
     gaps = [b[0] - a[0] - 1 for a, b in zip(columns, columns[1:])]
     max_gap = max(gaps, default=0)
     if max_gap > max_gap_columns:
@@ -118,6 +150,7 @@ def trace_monotonic_color(
         "matched_columns": len(columns),
         "matched_pixel_fraction": len(columns) / max(1, x1 - x0),
         "plot_box": [x0, y0, x1, y1],
+        "edge_axis_columns_removed": edge_axis_columns_removed,
         "max_gap_columns": max_gap,
         "path_constraint": "X_MONOTONIC_ONLY",
         "qc_status": "PROVISIONAL_UNCALIBRATED",
