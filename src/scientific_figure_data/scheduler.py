@@ -106,14 +106,16 @@ def _shutdown_executor_bounded(executor, grace_seconds: float = 8.0) -> dict:
         return {"status": "NOT_CREATED", "workers": []}
 
     processes = list((getattr(executor, "_processes", None) or {}).values())
+    shutdown_error = None
     try:
         executor.shutdown(wait=False, cancel_futures=True)
     except TypeError:
-        executor.shutdown(wait=False)
+        try:
+            executor.shutdown(wait=False)
+        except Exception as exc:
+            shutdown_error = f"{type(exc).__name__}: {exc}"
     except Exception as exc:
         shutdown_error = f"{type(exc).__name__}: {exc}"
-    else:
-        shutdown_error = None
 
     deadline = time.monotonic() + max(0.0, float(grace_seconds))
     for process in processes:
