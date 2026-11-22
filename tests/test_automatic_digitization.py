@@ -265,3 +265,123 @@ def test_process_paper_records_ocr_failure_and_continues_with_panel_diagnostics(
         warning.startswith("OCR_FAILED:Figure1/")
         for warning in result["snapshot"]["warnings"]
     )
+
+
+def test_chromatic_color_family_detector_separates_two_distinct_curve_colors(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+
+    path = tmp_path / "two_colors.png"
+    image = Image.new("RGB", (320, 220), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((30, 20, 285, 180), outline=(20, 20, 20), width=3)
+    red = [(x, int(145 - 80 * (x - 40) / 230)) for x in range(40, 276)]
+    blue = [(x, int(155 - 55 * (x - 40) / 230)) for x in range(40, 276)]
+    draw.line(red, fill=(225, 30, 35), width=3)
+    draw.line(blue, fill=(25, 70, 220), width=3)
+    image.save(path)
+
+    result = detect_chromatic_color_families(path, (30, 20, 285, 180))
+    assert result["status"] == "MULTIPLE_CHROMATIC_FAMILIES"
+    assert result["family_count"] == 2
+    colors = result["families"]
+    assert any(c["color_rgb"][0] > 150 and c["color_rgb"][2] < 80 for c in colors)
+    assert any(c["color_rgb"][2] > 150 and c["color_rgb"][0] < 80 for c in colors)
+
+
+def test_numeric_axis_anchor_extraction_preserves_both_y_sides():
+    from scientific_figure_data.axis_text import extract_numeric_axis_anchors
+
+    rows = [
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+    ]
+    result = extract_numeric_axis_anchors(rows, (55, 40, 360, 270))
+    assert len(result["x_anchors"]) == 3
+    assert len(result["y_left_anchors"]) == 3
+    assert len(result["y_right_anchors"]) == 3
+
+
+def test_process_paper_automatically_extracts_two_monotonic_color_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data import ocr
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-two-color"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=4)
+    red, blue = [], []
+    for x in range(70, 346):
+        fraction = (x - 70) / 275
+        red.append((x, int(220 - 110 * fraction)))
+        blue.append((x, int(238 - 65 * fraction)))
+    draw.line(red, fill=(230, 20, 30), width=3)
+    draw.line(blue, fill=(20, 65, 225), width=3)
+    draw.text((155, 294), "Time (s)", fill=(20, 20, 20))
+    draw.text((8, 148), "Signal (mA)", fill=(20, 20, 20))
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+        _ocr_row("Signal (mA)", 18, 155, 0.95),
+    ]
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({"figures": [{
+            "figure_id": "Figure1", "image_path": "Figure1.png",
+            "caption": "Two monotonic time-series curves.", "panels": [],
+        }]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ocr, "run_ocr", lambda path: rows)
+
+    result = process_paper(
+        input_root, Path("paper-two-color"), tmp_path / "output",
+        options={"ocr": True, "memory_limit_mb": 1024},
+    )
+    assert result["series_count"] == 2
+    assert all(item["metadata"]["trace_specification"]["status"] == "READY"
+               for item in result["series"])
+    assert all(item["metadata"]["trace_specification"]["input_provenance"]["automation_status"]
+               == "FULLY_AUTOMATIC" for item in result["series"])
+    assert all(item["metadata"]["points_count"] >= 100 for item in result["series"])
+    assert len({tuple(item["metadata"]["color_detection"]["color_rgb"])
+                for item in result["series"]}) == 2
+
+
+def test_dual_y_axis_calibrations_are_retained_without_guessing_series_side(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "dual_axis.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=4)
+    draw.line([(70, 220), (120, 190), (170, 165), (220, 140), (270, 115), (345, 80)],
+              fill=(230, 20, 30), width=3)
+    image.save(image_path)
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+    ]
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    result = _extract_panel(
+        image_path, "paper", "Figure1", "a", {}, {"caption": "Time series"},
+        {}, context, None, ocr_evidence=rows,
+    )
+    metadata = result[0].metadata
+    assert set(metadata["y_axis_calibrations"]) == {"LEFT", "RIGHT"}
+    assert metadata["series_axis_assignment"]["status"] == "AMBIGUOUS_DUAL_Y_AXIS"
+    assert metadata["series_axis_assignment"]["selected_side"] is None
+    assert metadata["trace_specification"]["status"] == "NEEDS_REVIEW"
+    assert metadata["calibration_errors"]["y"] == "AMBIGUOUS_DUAL_Y_AXIS_SERIES_ASSOCIATION"
