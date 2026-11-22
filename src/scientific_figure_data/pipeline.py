@@ -21,7 +21,7 @@ from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, Serie
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
-from .plot_region import detect_plot_box, detect_single_trace_color, detect_chromatic_color_families
+from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, estimate_ocr_text_ink_color)
 from .panel_segmentation import detect_panel_regions
 from .trace_spec import generate_trace_specification
 from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
@@ -1048,6 +1048,65 @@ def _extract_panel(
                     color_rgb = color_detection["color_rgb"]
             except OptionalDependencyError:
                 color_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
+        y_axis_text_color_association = {"status": "NOT_EVALUATED"}
+        trace_color_rgb = (
+            color_detection.get("color_rgb") if isinstance(color_detection, dict)
+            else color_rgb
+        )
+        if (
+            y_cal is None
+            and len(y_axis_calibrations) > 1
+            and image_path is not None
+            and isinstance(trace_color_rgb, (list, tuple))
+            and len(trace_color_rgb) == 3
+            and isinstance(ocr_axis_evidence, dict)
+        ):
+            side_matches = []
+            side_color_evidence = {}
+            for side, evidence_key in (
+                ("LEFT", "y_left_evidence"),
+                ("RIGHT", "y_right_evidence"),
+            ):
+                color_evidence = estimate_ocr_text_ink_color(
+                    image_path, ocr_axis_evidence.get(evidence_key, [])
+                )
+                side_color_evidence[side] = color_evidence
+                if color_evidence.get("status") != "CHROMATIC_TEXT_COLOR_DETECTED":
+                    continue
+                distance = math.sqrt(sum(
+                    (float(trace_color_rgb[index]) - float(color_evidence["color_rgb"][index])) ** 2
+                    for index in range(3)
+                ))
+                if distance <= 68.0:
+                    side_matches.append((side, distance))
+            y_axis_text_color_association = {
+                "status": "MATCHED" if len(side_matches) == 1 else
+                          "AMBIGUOUS" if len(side_matches) > 1 else "NO_UNIQUE_MATCH",
+                "curve_color_rgb": [int(value) for value in trace_color_rgb],
+                "side_color_evidence": side_color_evidence,
+                "side_match_distances": {
+                    side: round(distance, 3) for side, distance in side_matches
+                },
+                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_TICK_TEXT_COLOR",
+            }
+            if len(side_matches) == 1:
+                selected_side, distance = side_matches[0]
+                y_cal = y_axis_calibrations[selected_side]
+                y_axis_anchors = y_axis_anchors_by_side[selected_side]
+                record.y_axis_side = selected_side
+                calibration_errors.pop("y", None)
+                series_axis_assignment = {
+                    "status": "COLOR_MATCHED_TO_Y_AXIS_TICK_LABELS",
+                    "selected_side": selected_side,
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": None,
+                    "evidence": {
+                        "curve_color_rgb": [int(value) for value in trace_color_rgb],
+                        "axis_tick_text_color_rgb": side_color_evidence[selected_side]["color_rgb"],
+                        "rgb_distance": round(distance, 3),
+                    },
+                }
+
         plot_box_source = (
             "AUTO_PLOT_FRAME" if plot_detection and plot_detection.get("status") == "PROVISIONAL_PLOT_BOX"
             else "UPSTREAM_PANEL_GEOMETRY" if panel.get("plot_box") is not None
@@ -1069,6 +1128,8 @@ def _extract_panel(
         if definition.get("_auto_color_candidate"):
             trace_specification["automatic_color_family_candidate"] = definition["_auto_color_candidate"]
             trace_specification["automatic_color_family_detection"] = definition.get("_auto_color_detection")
+        trace_specification["series_axis_assignment"] = series_axis_assignment
+        trace_specification["y_axis_text_color_association"] = y_axis_text_color_association
         trace_specification["input_provenance"] = {
             "plot_box": plot_box_source,
             "x_axis_anchors": x_anchor_source or "UNRESOLVED",
@@ -1136,6 +1197,7 @@ def _extract_panel(
                             for side, calibration in y_axis_calibrations.items()
                         },
                         "series_axis_assignment": series_axis_assignment,
+                        "y_axis_text_color_association": y_axis_text_color_association,
                         "calibration_errors": calibration_errors,
                     }
                 else:
@@ -1152,6 +1214,7 @@ def _extract_panel(
                             for side, calibration in y_axis_calibrations.items()
                         },
                         "series_axis_assignment": series_axis_assignment,
+                        "y_axis_text_color_association": y_axis_text_color_association,
                         "calibration_errors": calibration_errors,
                     }
             except (OSError, KeyError, TypeError, ValueError) as exc:
@@ -1216,6 +1279,7 @@ def _extract_panel(
                             for side, calibration in y_axis_calibrations.items()
                         },
                         "series_axis_assignment": series_axis_assignment,
+                        "y_axis_text_color_association": y_axis_text_color_association,
                                "calibration_errors": calibration_errors}
         elif image_path and trace_specification.get("status") == "READY":
             specification = trace_specification["specification"]
@@ -1236,6 +1300,7 @@ def _extract_panel(
                             for side, calibration in y_axis_calibrations.items()
                         },
                         "series_axis_assignment": series_axis_assignment,
+                        "y_axis_text_color_association": y_axis_text_color_association,
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
                                "vector_selection": vector_selection,
@@ -1272,6 +1337,7 @@ def _extract_panel(
                             for side, calibration in y_axis_calibrations.items()
                         },
                         "series_axis_assignment": series_axis_assignment,
+                        "y_axis_text_color_association": y_axis_text_color_association,
                 "calibration_errors": calibration_errors,
             }
         if record.points:
