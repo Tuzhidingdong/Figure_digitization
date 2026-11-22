@@ -2474,6 +2474,13 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert report["sfd_temp_bytes_before_cleanup"] >= 0
     assert report["sfd_temp_cleanup_succeeded"] is True
     assert report["sfd_worker_temp_isolation_verified"] is True
+    assert report["worker_log_directory"]
+    assert Path(report["worker_log_directory"]).is_dir()
+    assert report["worker_shutdown"]
+    assert all(
+        item["status"] in {"WORKERS_REAPED", "WORKER_REMAINS_AFTER_KILL"}
+        for item in report["worker_shutdown"]
+    )
     assert not (output_root / report["sfd_temp_directory_relative"]).exists()
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
