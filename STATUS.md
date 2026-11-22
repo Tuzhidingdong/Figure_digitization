@@ -69,10 +69,20 @@ These are software-engineering results. They do not establish scientific point a
 - **AC-101:** P2 heatmap, advanced LC-MS/MS and specialized image reconstruction.
 - **Release boundary:** AC-06, AC-16, AC-36, AC-68, AC-70, AC-94 and AC-102 remain release-gated.
 
+
+## 2026-11-22 — Figure-local classification and explicit calibration reporting
+
+- Restricted automatic CV classification to explicit technique wording or a paired panel-local potential/voltage X-axis plus current Y-axis. Removed generic single-word triggers such as `potential` and `current density`; page-level native text is no longer used as chart-family routing evidence because it can contain unrelated body discussion and cross-references. Weak/ambiguous evidence remains `UNCLASSIFIED` / `NEEDS_REVIEW`.
+- Added regression cases for SEM captions accompanied by unrelated page text, body sentences mentioning potential, and valid paired CV axis labels.
+- Added an explicit `calibration_state` and matching QC component that distinguish both numeric axes calibrated, partial calibration, X numeric/Y relative signal, and unresolved numeric calibration. The overall `PROVISIONAL_UNCALIBRATED` status intentionally remains unchanged until QC thresholds are benchmark-calibrated against annotated real papers; axis calibration alone is not scientific acceptance.
+- Documented the existing per-series `plot_box` override in `docs/INPUT_CONTRACT.md`, including coordinate system, normalized/pixel forms, bounds, and the distinction between reviewer-supplied geometry and scientific acceptance.
+- Added QC regression coverage proving that two numerically calibrated axes can coexist with provisional scientific QC status.
+- This branch has not yet been run through GitHub Actions or local Windows synchronization. Awaiting CI and local Agent verification; no Release/tag is authorized.
+
 ## Tests and evidence
 
 - Test files: `tests/test_core.py`, `tests/test_upstream_compat.py`, `tests/test_temp_disk_monitor.py`, `tests/test_dependency_audit.py`.
-- Current source count: **117 test functions / 121 pytest cases** (two parametrized functions contribute four additional cases).
+- Current source count before this branch: **117 test functions / 121 pytest cases** (two parametrized functions contribute four additional cases).
 - Latest source/test HEAD `f597d01f4e14c728d09394c04875ca70164d169a`: [Windows CI #44747871501](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747871501), all test jobs passed on Python 3.11, 3.12 and 3.13; compileall, Ruff and Windows harness parse check passed.
 - CI validates Python 3.11, 3.12, 3.13 on hosted Windows; it is not a substitute for the target-PC measurement or scientific benchmark.
 

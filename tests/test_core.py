@@ -1438,6 +1438,23 @@ def test_chart_classifier_uses_explicit_technique_and_axis_semantics():
     assert ambiguous["chart_family"] == "UNCLASSIFIED"
     assert ambiguous["status"] == "NEEDS_REVIEW"
 
+    # Page-level text and incidental words in a caption must not route SEM/body
+    # text into the CV curve extractor.
+    sem = classify_chart_family(
+        None, None, None, "SEM images of zinc deposition",
+        "Potential was applied during electrochemical plating",
+    )
+    assert sem["chart_family"] == "UNCLASSIFIED"
+    body_reference = classify_chart_family(
+        None, None, None,
+        "Figure 5d, the cell can operate at a potential for 250 cycles",
+    )
+    assert body_reference["chart_family"] == "UNCLASSIFIED"
+
+    axis_cv = classify_chart_family(None, "Potential (V)", "Current density (A g-1)")
+    assert axis_cv["technique"] == "CV"
+    assert axis_cv["status"] == "PROVISIONAL_AXIS_SEMANTIC_CLASSIFICATION"
+
 
 def test_plot_region_detector_finds_unique_rectangular_frame_and_rejects_borderless_image(tmp_path: Path):
     from PIL import Image, ImageDraw
@@ -2581,6 +2598,8 @@ def test_series_qc_report_keeps_independent_provisional_dimensions():
     assert report["assessment_mode"] == "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE"
     assert report["axes"]["x"]["status"] == "CALIBRATION_EVIDENCE_PRESENT"
     assert report["axes"]["y"]["status"] == "RELATIVE_SIGNAL"
+    assert report["calibration_state"] == "X_NUMERIC_Y_RELATIVE_SIGNAL"
+    assert report["components"]["axis_calibration"] == "X_NUMERIC_Y_RELATIVE_SIGNAL"
     assert report["trace_metrics"]["x_direction_changes"] == 1
     assert report["trace_metrics"]["path_constraint"] == "ORDERED_NON_MONOTONIC_ALLOWED"
     assert report["components"]["subject_link"] == "ASSIGNED_WITH_EVIDENCE"
@@ -2588,6 +2607,38 @@ def test_series_qc_report_keeps_independent_provisional_dimensions():
     assert report["components"]["legend_association"] == "EVIDENCE_ATTACHED"
     assert report["aggregate_score"] is None
     assert report["scientific_acceptance"] == "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+
+
+
+def test_qc_distinguishes_numeric_axis_calibration_from_uncalibrated_thresholds():
+    from scientific_figure_data.qc import build_series_qc_report
+
+    series = make_series("numeric-qc", "numeric-measurement", "electrolyte")
+    series.metadata = {
+        "x_calibration": {
+            "status": "CALIBRATED_NUMERIC",
+            "anchors": [{"pixel": 0, "value": 0}, {"pixel": 100, "value": 1}],
+            "rmse": 0.0, "unit": "V",
+        },
+        "y_calibration": {
+            "status": "CALIBRATED_NUMERIC",
+            "anchors": [{"pixel": 100, "value": -1}, {"pixel": 0, "value": 1}],
+            "rmse": 0.0, "unit": "A/g",
+        },
+    }
+    report = build_series_qc_report(series, {}, {
+        "status": "PROVISIONAL_UNCALIBRATED",
+        "minimum_calibration_anchors": 2,
+        "minimum_trace_points": 2,
+        "minimum_trace_pixel_fraction": 0.0,
+    })
+
+    assert report["axes"]["x"]["status"] == "CALIBRATION_EVIDENCE_PRESENT"
+    assert report["axes"]["y"]["status"] == "CALIBRATION_EVIDENCE_PRESENT"
+    assert report["calibration_state"] == "BOTH_AXES_NUMERICALLY_CALIBRATED"
+    assert report["components"]["axis_calibration"] == "BOTH_AXES_NUMERICALLY_CALIBRATED"
+    # Axis calibration is not equivalent to benchmark-calibrated scientific QC.
+    assert report["status"] == "PROVISIONAL_UNCALIBRATED"
 
 
 def test_pipeline_persists_qc_dimensions_for_extracted_series(tmp_path: Path):

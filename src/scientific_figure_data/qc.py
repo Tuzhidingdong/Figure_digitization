@@ -250,7 +250,19 @@ def build_series_qc_report(series: Any, panel: dict | None = None,
         ),
     }
 
+    x_numeric = x_axis.get("calibration_status") == "CALIBRATED_NUMERIC"
+    y_numeric = y_axis.get("calibration_status") == "CALIBRATED_NUMERIC"
+    if x_numeric and y_numeric:
+        calibration_state = "BOTH_AXES_NUMERICALLY_CALIBRATED"
+    elif x_numeric and y_axis.get("status") == "RELATIVE_SIGNAL":
+        calibration_state = "X_NUMERIC_Y_RELATIVE_SIGNAL"
+    elif x_numeric or y_numeric:
+        calibration_state = "PARTIAL_NUMERIC_AXIS_CALIBRATION"
+    else:
+        calibration_state = "NUMERIC_AXIS_CALIBRATION_UNRESOLVED"
+
     components = {
+        "axis_calibration": calibration_state,
         "panel_segmentation": (
             "BOUNDARY_EVIDENCE_PRESENT" if panel.get("bbox") is not None else "UNKNOWN"
         ),
@@ -299,6 +311,7 @@ def build_series_qc_report(series: Any, panel: dict | None = None,
         "components": components,
         "panel_segmentation": segmentation,
         "axes": {"x": x_axis, "y": y_axis},
+        "calibration_state": calibration_state,
         "trace_metrics": {
             "point_count": point_count,
             "pixel_coordinate_count": pixel_count,

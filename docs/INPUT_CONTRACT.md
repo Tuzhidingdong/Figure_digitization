@@ -51,6 +51,7 @@ Shape:
                 "technique": "CV",
                 "domain": "battery",
                 "data_family": "NON_MONOTONIC",
+                "plot_box": [40, 30, 900, 420],
                 "x_axis_anchors": [{"pixel": 40, "value": -1.0}, {"pixel": 900, "value": 1.0}],
                 "y_axis_anchors": [{"pixel": 420, "value": -2.0}, {"pixel": 30, "value": 2.0}],
                 "x_unit": "V",
@@ -64,7 +65,9 @@ Shape:
       }
     }
 
-pixel_points are in the local panel image coordinate system and preserve their declared order. This is the supported explicit path for CV/EIS and other non-monotonic traces.
+`plot_box` is an optional manual plot-area boundary in the same image coordinate system used by the series `pixel_points` and axis-anchor pixel positions. It is `[x0, y0, x1, y1]` with origin at the image's top-left; provide pixel coordinates, or normalized 0–1 coordinates. The boundary must be finite, ordered, and inside the image. It overrides automatic plot-frame detection and is recorded as reviewer-supplied geometry; it does not establish scientific acceptance.
+
+`pixel_points` are in the local panel image coordinate system and preserve their declared order. Axis-anchor `pixel` positions use the corresponding axis direction in that same coordinate system (horizontal for X, vertical for Y). This is the supported explicit path for CV/EIS and other non-monotonic traces.
 
 ### Explicit dimensional standardization
 
