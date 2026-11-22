@@ -450,7 +450,7 @@ def detect_panel_regions(
     if len(panel_rows) >= 2:
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
-            "reason": "MULTIPLE_REGION_LOCAL_PLOT_FRAME_CANDIDATES",
+            "reason": "MULTIPLE_PLOT_FRAME_CANDIDATES",
             "image_size": [width, height],
             "panel_count": len(panel_rows),
             "plot_frame_detection": frame_detection,
