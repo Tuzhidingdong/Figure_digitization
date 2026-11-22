@@ -310,6 +310,113 @@ def detect_plot_box_candidates(
                 "provisional": True,
             })
 
+    # Also recover open-axis charts. A conventional L-shaped plot has one
+    # long horizontal axis and one long vertical axis that meet at a corner;
+    # requiring all four dark borders would incorrectly reject it.
+    def contiguous_segments(mask, minimum_length):
+        indices = np.flatnonzero(mask)
+        if not indices.size:
+            return []
+        segments = []
+        start = previous = int(indices[0])
+        for raw_index in indices[1:]:
+            index = int(raw_index)
+            if index - previous <= 3:
+                previous = index
+                continue
+            if previous - start + 1 >= minimum_length:
+                segments.append((start, previous + 1))
+            start = previous = index
+        if previous - start + 1 >= minimum_length:
+            segments.append((start, previous + 1))
+        return segments
+
+    minimum_horizontal_length = max(20, int(round(width * minimum_width_fraction)))
+    minimum_vertical_length = max(20, int(round(height * minimum_height_fraction)))
+    corner_tolerance = max(3, int(round(min(width, height) * 0.008)))
+    for y in rows:
+        horizontal_band = axis_ink[max(0, y - 1):min(height, y + 2), :]
+        horizontal_segments = contiguous_segments(
+            horizontal_band.any(axis=0), minimum_horizontal_length
+        )
+        if not horizontal_segments:
+            continue
+        horizontal_coverage_by_segment = {
+            segment: float(horizontal_band[:, segment[0]:segment[1]].mean())
+            for segment in horizontal_segments
+        }
+        for x in columns:
+            vertical_band = axis_ink[:, max(0, x - 1):min(width, x + 2)]
+            vertical_segments = contiguous_segments(
+                vertical_band.any(axis=1), minimum_vertical_length
+            )
+            for horizontal_start, horizontal_end in horizontal_segments:
+                if abs(x - horizontal_start) <= corner_tolerance:
+                    horizontal_side = "left"
+                elif abs(x - (horizontal_end - 1)) <= corner_tolerance:
+                    horizontal_side = "right"
+                else:
+                    continue
+                horizontal_coverage = horizontal_coverage_by_segment[
+                    (horizontal_start, horizontal_end)
+                ]
+                for vertical_start, vertical_end in vertical_segments:
+                    if abs(y - vertical_start) <= corner_tolerance:
+                        vertical_side = "top"
+                    elif abs(y - (vertical_end - 1)) <= corner_tolerance:
+                        vertical_side = "bottom"
+                    else:
+                        continue
+                    vertical_coverage = float(
+                        vertical_band[vertical_start:vertical_end, :].mean()
+                    )
+                    adjacent = min(horizontal_coverage, vertical_coverage)
+                    if adjacent < minimum_adjacent_coverage:
+                        continue
+                    box_width = horizontal_end - horizontal_start
+                    box_height = vertical_end - vertical_start
+                    aspect = box_width / max(1, box_height)
+                    if not 0.20 <= aspect <= 5.0:
+                        continue
+                    area_fraction = (box_width * box_height) / float(width * height)
+                    if area_fraction < 0.035:
+                        continue
+                    x0, x1 = horizontal_start, horizontal_end
+                    y0, y1 = vertical_start, vertical_end
+                    interior = rgb[
+                        min(height - 1, y0 + 2):max(y0 + 3, y1 - 1),
+                        min(width - 1, x0 + 2):max(x0 + 3, x1 - 1),
+                    ].astype(np.int16)
+                    chroma_fraction = (
+                        float(((interior.max(axis=2) - interior.min(axis=2)) >= 32).mean())
+                        if interior.size else 0.0
+                    )
+                    chroma_score = min(1.0, chroma_fraction / 0.018)
+                    size_score = max(0.25, 1.0 - max(0.0, area_fraction - 0.38) * 1.7)
+                    side_score = 0.70 * adjacent + 0.30 * max(
+                        horizontal_coverage, vertical_coverage
+                    )
+                    score = 0.55 * side_score + 0.22 * size_score + 0.23 * chroma_score
+                    if score < 0.44:
+                        continue
+                    coverage = {"top": 0.0, "bottom": 0.0, "left": 0.0, "right": 0.0}
+                    coverage[vertical_side] = vertical_coverage
+                    coverage[horizontal_side] = horizontal_coverage
+                    candidates.append({
+                        "pixel_bbox": [int(x0), int(y0), int(x1), int(y1)],
+                        "normalized_bbox": [
+                            x0 / width, y0 / height, x1 / width, y1 / height,
+                        ],
+                        "image_size": [width, height],
+                        "side_coverage": coverage,
+                        "adjacent_side_coverage": adjacent,
+                        "area_fraction": area_fraction,
+                        "chromatic_pixel_fraction": chroma_fraction,
+                        "score": float(score),
+                        "candidate_type": "OPEN_AXIS_CORNER",
+                        "provisional": True,
+                    })
+
     candidates.sort(key=lambda item: (
         -item["score"],
         (item["pixel_bbox"][2] - item["pixel_bbox"][0])
