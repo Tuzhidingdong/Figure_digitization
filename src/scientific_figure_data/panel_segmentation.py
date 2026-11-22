@@ -178,6 +178,22 @@ def detect_panel_regions(
     # at least two geometrically usable panels. The pre-filter leaf count is
     # not sufficient: recursive splits can yield several text-sized fragments
     # that are all rejected by the minimum panel geometry gate.
+    leaf_diagnostics = []
+    for box, score in leaves:
+        x0, y0, x1, y1 = box
+        width_fraction = (x1 - x0) / float(width)
+        height_fraction = (y1 - y0) / float(height)
+        rejected = (
+            width_fraction < 0.18 or height_fraction < 0.18
+        )
+        leaf_diagnostics.append({
+            "bbox": [int(x0), int(y0), int(x1), int(y1)],
+            "score": float(score),
+            "width_fraction": width_fraction,
+            "height_fraction": height_fraction,
+            "rejected_by_minimum_geometry": rejected,
+        })
+
     if len(panels) >= 2:
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
@@ -277,6 +293,7 @@ def detect_panel_regions(
                 "whitespace_split_diagnostic": {
                     "leaf_count": len(leaves),
                     "usable_panel_count": len(panels),
+                    "leaf_diagnostics": leaf_diagnostics,
                 },
                 "panels": panel_rows,
                 "provisional": True,
@@ -305,6 +322,7 @@ def detect_panel_regions(
         "whitespace_split_diagnostic": {
             "leaf_count": len(leaves),
             "usable_panel_count": len(panels),
+            "leaf_diagnostics": leaf_diagnostics,
         },
         "plot_frame_detection": frame_detection,
         "panels": [],
