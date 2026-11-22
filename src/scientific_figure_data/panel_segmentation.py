@@ -187,15 +187,20 @@ def detect_panel_regions(
                     overlap_y = max(0, min(y1, oy1) - max(y0, oy0))
                     overlap_x = max(0, min(x1, ox1) - max(x0, ox0))
                     if overlap_y >= 0.30 * min(frame_height, oy1 - oy0):
+                        # Keep a small shared margin around touching plot frames.
+                        # Cropping exactly at the midpoint can cut off the axis
+                        # line itself and make the per-panel plot detector fail.
+                        shared_margin = max(4, round(min(frame_width, ox1 - ox0) * 0.06))
                         if ox1 <= x0:
-                            panel_x0 = max(panel_x0, (ox1 + x0) // 2)
+                            panel_x0 = max(panel_x0, (ox1 + x0) // 2 - shared_margin)
                         elif ox0 >= x1:
-                            panel_x1 = min(panel_x1, (x1 + ox0) // 2)
+                            panel_x1 = min(panel_x1, (x1 + ox0) // 2 + shared_margin)
                     if overlap_x >= 0.30 * min(frame_width, ox1 - ox0):
+                        shared_margin = max(4, round(min(frame_height, oy1 - oy0) * 0.06))
                         if oy1 <= y0:
-                            panel_y0 = max(panel_y0, (oy1 + y0) // 2)
+                            panel_y0 = max(panel_y0, (oy1 + y0) // 2 - shared_margin)
                         elif oy0 >= y1:
-                            panel_y1 = min(panel_y1, (y1 + oy0) // 2)
+                            panel_y1 = min(panel_y1, (y1 + oy0) // 2 + shared_margin)
 
                 if panel_x1 <= panel_x0 or panel_y1 <= panel_y0:
                     continue
