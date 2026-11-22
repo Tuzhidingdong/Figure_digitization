@@ -30,7 +30,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.3.0"
+ALGORITHM_VERSION = "0.4.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -657,22 +657,30 @@ def _extract_panel(
             )
             candidates = family_detection.get("families", [])
             if (
-                family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES"
-                and len(candidates) >= 2
+                family_detection.get("status") in {
+                    "UNIQUE_CHROMATIC_FAMILY", "MULTIPLE_CHROMATIC_FAMILIES",
+                }
+                and candidates
                 and not family_detection.get("truncated", False)
             ):
                 expanded = []
                 base_id = str(base_definition.get("series_id") or f"{figure_id}_{panel_id}_unassigned")
+                multiple_families = (
+                    family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES"
+                    and len(candidates) >= 2
+                )
                 for color_index, candidate in enumerate(candidates, 1):
                     definition = dict(base_definition)
-                    definition["series_id"] = f"{base_id}_auto_color_{color_index:02d}"
+                    if multiple_families:
+                        definition["series_id"] = f"{base_id}_auto_color_{color_index:02d}"
                     definition["color_rgb"] = list(candidate["color_rgb"])
                     definition["_auto_color_candidate"] = dict(candidate)
                     definition["_auto_color_detection"] = family_detection
                     definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
                     definition["_auto_plot_detection"] = pre_plot_detection
                     expanded.append(definition)
-                definitions = expanded
+                if expanded:
+                    definitions = expanded
 
     evidence = {
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
@@ -1036,7 +1044,8 @@ def _extract_panel(
                 "status": "UNIQUE_CHROMATIC_FAMILY",
                 "color_rgb": list(candidate["color_rgb"]),
                 "color_tolerance": int(candidate.get("color_tolerance", 24)),
-                "source": "AUTOMATIC_MULTI_COLOR_FAMILY_CANDIDATE",
+                "color_match": candidate.get("color_match"),
+                "source": "AUTOMATIC_HUE_COLOR_FAMILY_CANDIDATE",
                 "candidate_evidence": candidate,
                 "family_detection": definition.get("_auto_color_detection"),
             }
@@ -1063,47 +1072,114 @@ def _extract_panel(
         ):
             side_matches = []
             side_color_evidence = {}
-            for side, evidence_key in (
-                ("LEFT", "y_left_evidence"),
-                ("RIGHT", "y_right_evidence"),
+            curve_color_match = (
+                color_detection.get("color_match")
+                if isinstance(color_detection, dict) else None
+            )
+            curve_hue = (
+                float(curve_color_match["hue_center_degrees"])
+                if isinstance(curve_color_match, dict)
+                and curve_color_match.get("space") == "HSV_HUE_FAMILY"
+                and curve_color_match.get("hue_center_degrees") is not None
+                else None
+            )
+            for side, evidence_key, label_key in (
+                ("LEFT", "y_left_evidence", "y_left"),
+                ("RIGHT", "y_right_evidence", "y_right"),
             ):
-                color_evidence = estimate_ocr_text_ink_color(
+                tick_ink = estimate_ocr_text_ink_color(
                     image_path, ocr_axis_evidence.get(evidence_key, [])
                 )
-                side_color_evidence[side] = color_evidence
-                if color_evidence.get("status") != "CHROMATIC_TEXT_COLOR_DETECTED":
-                    continue
-                distance = math.sqrt(sum(
-                    (float(trace_color_rgb[index]) - float(color_evidence["color_rgb"][index])) ** 2
-                    for index in range(3)
-                ))
-                if distance <= 68.0:
-                    side_matches.append((side, distance))
+                label_rows = (
+                    axis_label_evidence.get("candidates", {}).get(label_key, [])
+                    if isinstance(axis_label_evidence, dict) else []
+                )
+                title_ink = estimate_ocr_text_ink_color(
+                    image_path, label_rows[:1], minimum_colored_labels=1
+                ) if label_rows else {
+                    "status": "NO_AXIS_TITLE_COLOR_EVIDENCE",
+                    "colored_label_count": 0,
+                }
+                candidate_inks = []
+                for source_name, ink in (
+                    ("NUMERIC_TICK_LABELS", tick_ink),
+                    ("AXIS_TITLE", title_ink),
+                ):
+                    if ink.get("status") == "CHROMATIC_TEXT_COLOR_DETECTED":
+                        candidate_inks.append({"source": source_name, **ink})
+
+                def ink_distance(ink):
+                    if curve_hue is not None and ink.get("hue_degrees") is not None:
+                        return abs(
+                            (float(ink["hue_degrees"]) - curve_hue + 180.0) % 360.0 - 180.0
+                        ), "HUE_DEGREES"
+                    return math.sqrt(sum(
+                        (float(trace_color_rgb[index]) - float(ink["color_rgb"][index])) ** 2
+                        for index in range(3)
+                    )), "RGB_DISTANCE"
+
+                distances = [
+                    (ink_distance(ink)[0], ink, ink_distance(ink)[1])
+                    for ink in candidate_inks
+                ]
+                conflicting_sources = (
+                    len(distances) > 1
+                    and any(
+                        abs(
+                            (float(first[1]["hue_degrees"]) -
+                             float(second[1]["hue_degrees"]) + 180.0) % 360.0 - 180.0
+                        ) > 16.0
+                        for index, first in enumerate(distances)
+                        for second in distances[index + 1:]
+                        if first[1].get("hue_degrees") is not None
+                        and second[1].get("hue_degrees") is not None
+                    )
+                )
+                matching = [
+                    item for item in distances
+                    if item[0] <= (14.0 if item[2] == "HUE_DEGREES" else 68.0)
+                ]
+                side_color_evidence[side] = {
+                    "tick_labels": tick_ink,
+                    "axis_title": title_ink,
+                    "candidate_inks": candidate_inks,
+                    "conflicting_text_color_sources": conflicting_sources,
+                }
+                if not conflicting_sources and matching:
+                    selected_ink = min(matching, key=lambda item: item[0])
+                    side_matches.append((
+                        side, selected_ink[0], selected_ink[1], selected_ink[2]
+                    ))
+
             y_axis_text_color_association = {
                 "status": "MATCHED" if len(side_matches) == 1 else
                           "AMBIGUOUS" if len(side_matches) > 1 else "NO_UNIQUE_MATCH",
                 "curve_color_rgb": [int(value) for value in trace_color_rgb],
+                "curve_hue_degrees": curve_hue,
                 "side_color_evidence": side_color_evidence,
                 "side_match_distances": {
-                    side: round(distance, 3) for side, distance in side_matches
+                    side: round(distance, 3)
+                    for side, distance, _, _ in side_matches
                 },
-                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_TICK_TEXT_COLOR",
+                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_AXIS_TEXT_COLOR",
             }
             if len(side_matches) == 1:
-                selected_side, distance = side_matches[0]
+                selected_side, distance, selected_ink, distance_kind = side_matches[0]
                 y_cal = y_axis_calibrations[selected_side]
                 y_axis_anchors = y_axis_anchors_by_side[selected_side]
                 record.y_axis_side = selected_side
                 calibration_errors.pop("y", None)
                 series_axis_assignment = {
-                    "status": "COLOR_MATCHED_TO_Y_AXIS_TICK_LABELS",
+                    "status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
                     "selected_side": selected_side,
                     "available_sides": list(y_axis_calibrations),
                     "reason": None,
                     "evidence": {
                         "curve_color_rgb": [int(value) for value in trace_color_rgb],
-                        "axis_tick_text_color_rgb": side_color_evidence[selected_side]["color_rgb"],
-                        "rgb_distance": round(distance, 3),
+                        "axis_text_color_rgb": selected_ink["color_rgb"],
+                        "axis_text_evidence_source": selected_ink["source"],
+                        "distance_kind": distance_kind,
+                        "color_distance": round(distance, 3),
                     },
                 }
 
@@ -1124,6 +1200,7 @@ def _extract_panel(
             image_path, plot_box_pixels, color_detection, x_cal, y_cal, family,
             record.x_label or x_axis_label_text,
             allow_unlabelled_manual_override=manual_monotonic_override,
+            allow_geometry_only=True,
         ) if image_path else {"status": "NEEDS_REVIEW", "reason": "SOURCE_IMAGE_UNAVAILABLE"}
         if definition.get("_auto_color_candidate"):
             trace_specification["automatic_color_family_candidate"] = definition["_auto_color_candidate"]
@@ -1140,7 +1217,11 @@ def _extract_panel(
         if any(value == "MANUAL_OVERRIDE" for value in trace_specification["input_provenance"].values()):
             trace_specification["input_provenance"]["automation_status"] = "CONTAINS_MANUAL_OVERRIDE"
         elif trace_specification.get("status") == "READY":
-            trace_specification["input_provenance"]["automation_status"] = "FULLY_AUTOMATIC"
+            trace_specification["input_provenance"]["automation_status"] = (
+                "FULLY_AUTOMATIC" if trace_specification["specification"].get(
+                    "numeric_mapping_status"
+                ) == "CALIBRATED_NUMERIC" else "FULLY_AUTOMATIC_GEOMETRY_ONLY"
+            )
         else:
             trace_specification["input_provenance"]["automation_status"] = "NOT_READY"
         vector_selection = None
@@ -1287,6 +1368,7 @@ def _extract_panel(
                 str(image_path), tuple(int(v) for v in specification["color_rgb"]),
                 int(specification["color_tolerance"]),
                 x_cal, y_cal, plot_box=tuple(specification["plot_box_pixels"]),
+                color_match=specification.get("color_match"),
             )
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = (
@@ -1319,7 +1401,7 @@ def _extract_panel(
         else:
             record.metadata = {
                 "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
-                "note": "Automatic tracing requires a supported monotonic X-axis label, a unique trace color, and numeric calibrations on both axes.",
+                "note": "Automatic tracing requires supported monotonic X-axis semantics, a resolved plot region, and a separable chromatic family. Numeric axis mapping is recorded separately and may remain unresolved.",
                 "trace_specification": trace_specification,
                 "data_family": family,
                 "plot_detection": plot_detection,
@@ -1787,7 +1869,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                             "status": "RENDER_FAILED",
                             "reason": f"{type(exc).__name__}: {exc}",
                         }
-                    if rendering.get("status") == "RENDERED":
+                    if rendering.get("status") in {"RENDERED", "GEOMETRY_ONLY_OVERLAY"}:
                         for path_key in ("reconstructed_path", "overlay_path"):
                             try:
                                 rendering[path_key] = Path(rendering[path_key]).resolve().relative_to(
@@ -1817,6 +1899,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             for item in extracted:
                 item.metadata.setdefault("points_count", len(item.points))
             reconstructed_absolute = None
+            overlay_absolute = None
             for rendering in panel_renderings:
                 if rendering.get("status") == "RENDERED":
                     relative = rendering.get("reconstructed_path")
@@ -1824,11 +1907,18 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                     if candidate and candidate.is_file():
                         reconstructed_absolute = candidate
                         break
+                if rendering.get("status") == "GEOMETRY_ONLY_OVERLAY":
+                    relative = rendering.get("overlay_path")
+                    candidate = paper_output / relative if relative else None
+                    if candidate and candidate.is_file():
+                        overlay_absolute = candidate
             first_metadata = extracted[0].metadata if extracted else {}
             trace_info = first_metadata.get("trace_specification") or {}
             failure_reason = (
                 "AUTOMATIC_DIGITIZATION_AND_RECONSTRUCTION_COMPLETED"
                 if reconstructed_absolute else
+                "PIXEL_GEOMETRY_EXTRACTED_NUMERIC_AXIS_MAPPING_UNRESOLVED"
+                if overlay_absolute else
                 trace_info.get("reason")
                 or first_metadata.get("reason")
                 or first_metadata.get("raster_qc", {}).get("reason")
@@ -1837,9 +1927,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_comparison_items.append({
                 "panel_id": panel_id,
                 "original_path": str(saved_crop) if saved_crop else None,
-                "reconstructed_path": str(reconstructed_absolute) if reconstructed_absolute else None,
+                "reconstructed_path": (
+                    str(reconstructed_absolute or overlay_absolute)
+                    if reconstructed_absolute or overlay_absolute else None
+                ),
                 "status": (
                     "RECONSTRUCTED" if reconstructed_absolute else
+                    "GEOMETRY_ONLY_TRACE_OVERLAY" if overlay_absolute else
                     trace_info.get("status", "NEEDS_REVIEW")
                 ),
                 "reason": failure_reason,

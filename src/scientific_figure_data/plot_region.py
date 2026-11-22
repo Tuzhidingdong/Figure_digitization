@@ -201,6 +201,42 @@ def detect_single_trace_color(
     }
 
 
+def _rgb_to_hsv_arrays(values):
+    """Convert an Nx3 uint8/int RGB array to hue degrees, saturation and value."""
+    import numpy as np
+
+    rgb = values.astype(np.float32) / 255.0
+    red, green, blue = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+    maximum = rgb.max(axis=1)
+    minimum = rgb.min(axis=1)
+    delta = maximum - minimum
+    safe_delta = np.where(delta > 1e-8, delta, 1.0)
+    hue = np.zeros(len(rgb), dtype=np.float32)
+    red_max = (maximum == red) & (delta > 1e-8)
+    green_max = (maximum == green) & (delta > 1e-8)
+    blue_max = (maximum == blue) & (delta > 1e-8)
+    hue[red_max] = ((green[red_max] - blue[red_max]) / safe_delta[red_max]) % 6.0
+    hue[green_max] = (
+        (blue[green_max] - red[green_max]) / safe_delta[green_max] + 2.0
+    )
+    hue[blue_max] = (
+        (red[blue_max] - green[blue_max]) / safe_delta[blue_max] + 4.0
+    )
+    hue *= 60.0
+    saturation = np.divide(
+        delta, maximum, out=np.zeros_like(delta), where=maximum > 1e-8
+    )
+    return hue, saturation, maximum
+
+
+def _rgb_hue_degrees(color) -> float | None:
+    import numpy as np
+
+    values = np.asarray(color, dtype=np.float32).reshape(1, 3)
+    hue, saturation, _ = _rgb_to_hsv_arrays(values)
+    return float(hue[0]) if float(saturation[0]) > 1e-6 else None
+
+
 def detect_chromatic_color_families(
     image_path: Path,
     plot_box: tuple[int, int, int, int],
@@ -209,17 +245,17 @@ def detect_chromatic_color_families(
     minimum_family_pixels: int = 24,
     minimum_family_fraction: float = 0.025,
     maximum_distance: float = 52.0,
+    hue_tolerance_degrees: float = 12.0,
+    minimum_saturation: float = 0.16,
+    minimum_value: float = 0.22,
 ) -> dict:
-    """Find distinct saturated color families without selecting a curve by itself.
-
-    Candidate families are only proposals. Callers must still verify each color
-    with the ordered-path tracer and chart-family/axis evidence. Quantization
-    combines anti-aliased shades before deterministic nearest-center grouping.
-    """
+    """Group chromatic shades by circular HSV hue; candidates still require path validation."""
     if max_families < 1 or minimum_family_pixels < 1:
         raise ValueError("max_families and minimum_family_pixels must be positive")
-    if not 0.0 < minimum_family_fraction <= 1.0:
+    if not 0 < minimum_family_fraction <= 1:
         raise ValueError("minimum_family_fraction must be between 0 and 1")
+    if not 0 < hue_tolerance_degrees <= 45:
+        raise ValueError("hue_tolerance_degrees must be between 0 and 45")
     try:
         import numpy as np
         from PIL import Image
@@ -239,9 +275,15 @@ def detect_chromatic_color_families(
         return {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX", "families": []}
 
     region = rgb[y0:y1, x0:x1].reshape(-1, 3).astype(np.int16)
-    saturation = region.max(axis=1) - region.min(axis=1)
-    brightness = region.max(axis=1)
-    selected = region[(saturation >= 45) & (brightness >= 55)]
+    hues, saturations, values = _rgb_to_hsv_arrays(region)
+    selected_mask = (
+        (saturations >= float(minimum_saturation))
+        & (values >= float(minimum_value))
+    )
+    selected = region[selected_mask]
+    selected_hues = hues[selected_mask]
+    selected_saturations = saturations[selected_mask]
+    selected_values = values[selected_mask]
     total = int(len(selected))
     if total < minimum_family_pixels:
         return {
@@ -251,41 +293,53 @@ def detect_chromatic_color_families(
             "families": [],
         }
 
-    remaining = selected.copy()
+    remaining = np.ones(total, dtype=bool)
     families = []
-    quantization = 24
-    while len(remaining) >= minimum_family_pixels and len(families) < max_families:
-        quantized = ((remaining + quantization // 2) // quantization) * quantization
-        quantized = np.clip(quantized, 0, 255).astype(np.uint8)
-        bins, counts = np.unique(quantized, axis=0, return_counts=True)
-        seed = bins[int(counts.argmax())].astype(np.float32)
-        distances = np.sqrt(((remaining.astype(np.float32) - seed) ** 2).sum(axis=1))
-        members = distances <= maximum_distance
-        family_pixels = remaining[members]
-        count = int(len(family_pixels))
+    bin_width = 3.0
+    bin_count = int(round(360.0 / bin_width))
+    while int(remaining.sum()) >= minimum_family_pixels and len(families) < max_families:
+        remaining_hues = selected_hues[remaining]
+        bins = np.floor(remaining_hues / bin_width).astype(int) % bin_count
+        counts = np.bincount(bins, minlength=bin_count)
+        seed_bin = int(counts.argmax())
+        seed_hue = (seed_bin + 0.5) * bin_width
+        seed_distance = np.abs((selected_hues - seed_hue + 180.0) % 360.0 - 180.0)
+        members = remaining & (seed_distance <= hue_tolerance_degrees)
+        if int(members.sum()) < minimum_family_pixels:
+            break
+
+        angles = np.deg2rad(selected_hues[members])
+        center_hue = float(
+            np.rad2deg(np.arctan2(np.sin(angles).mean(), np.cos(angles).mean())) % 360.0
+        )
+        refined_distance = np.abs(
+            (selected_hues - center_hue + 180.0) % 360.0 - 180.0
+        )
+        refined = remaining & (refined_distance <= hue_tolerance_degrees)
+        count = int(refined.sum())
         if count < minimum_family_pixels or count / total < minimum_family_fraction:
             break
 
-        center = np.median(family_pixels, axis=0)
-        refined_distances = np.sqrt(
-            ((remaining.astype(np.float32) - center) ** 2).sum(axis=1)
-        )
-        refined_members = refined_distances <= maximum_distance
-        refined_pixels = remaining[refined_members]
-        refined_count = int(len(refined_pixels))
-        if refined_count < minimum_family_pixels or refined_count / total < minimum_family_fraction:
-            break
-
-        color_rgb = [int(round(value)) for value in np.median(refined_pixels, axis=0)]
+        family_pixels = selected[refined]
+        color_rgb = [int(round(value)) for value in np.median(family_pixels, axis=0)]
         families.append({
             "color_rgb": color_rgb,
-            "color_tolerance": int(max(12, round(maximum_distance / 2))),
-            "pixel_count": refined_count,
-            "pixel_fraction": refined_count / total,
-            "seed_rgb": [int(value) for value in seed],
+            "color_tolerance": 24,
+            "color_match": {
+                "space": "HSV_HUE_FAMILY",
+                "hue_center_degrees": round(center_hue, 3),
+                "hue_tolerance_degrees": float(hue_tolerance_degrees),
+                "minimum_saturation": float(max(0.12, minimum_saturation - 0.02)),
+                "minimum_value": float(max(0.18, minimum_value - 0.02)),
+            },
+            "pixel_count": count,
+            "pixel_fraction": count / total,
+            "hue_spread_degrees": float(np.max(refined_distance[refined])),
+            "median_saturation": float(np.median(selected_saturations[refined])),
+            "median_value": float(np.median(selected_values[refined])),
             "provisional": True,
         })
-        remaining = remaining[~refined_members]
+        remaining[refined] = False
 
     families.sort(key=lambda item: (-item["pixel_count"], item["color_rgb"]))
     if not families:
@@ -296,12 +350,17 @@ def detect_chromatic_color_families(
             "families": [],
         }
     return {
-        "status": "UNIQUE_CHROMATIC_FAMILY" if len(families) == 1 else "MULTIPLE_CHROMATIC_FAMILIES",
-        "reason": "COLOR_FAMILIES_ARE_CANDIDATES_NOT_CONFIRMED_SERIES",
+        "status": (
+            "UNIQUE_CHROMATIC_FAMILY" if len(families) == 1
+            else "MULTIPLE_CHROMATIC_FAMILIES"
+        ),
+        "reason": "HUE_FAMILIES_ARE_CANDIDATES_NOT_CONFIRMED_SERIES",
         "saturated_pixel_count": total,
         "family_count": len(families),
         "families": families,
-        "truncated": len(remaining) >= minimum_family_pixels,
+        "truncated": bool(remaining.sum() >= minimum_family_pixels),
+        "color_space": "HSV_HUE_FAMILY",
+        "hue_tolerance_degrees": float(hue_tolerance_degrees),
         "provisional": True,
     }
 
@@ -321,7 +380,7 @@ def estimate_ocr_text_ink_color(
     color classifier. At least two OCR boxes must contain consistent chromatic
     glyph pixels. Black/gray labels and inconsistent colors remain unresolved.
     """
-    if minimum_pixels_per_label < 1 or minimum_colored_labels < 2:
+    if minimum_pixels_per_label < 1 or minimum_colored_labels < 1:
         raise ValueError("minimum pixel and label counts must be positive")
     try:
         import numpy as np
@@ -391,6 +450,7 @@ def estimate_ocr_text_ink_color(
     return {
         "status": "CHROMATIC_TEXT_COLOR_DETECTED",
         "color_rgb": [int(round(value)) for value in shared],
+        "hue_degrees": _rgb_hue_degrees(shared),
         "colored_label_count": len(label_colors),
         "label_pixel_counts": label_pixel_counts,
         "color_spread": spread,

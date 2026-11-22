@@ -2376,7 +2376,7 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
-    assert report["algorithm_version"] == "0.3.0"
+    assert report["algorithm_version"] == "0.4.0"
     assert len(report["algorithm_implementation_fingerprint"]) == 64
     assert len(report["profile_config_fingerprint"]) == 64
     assert len(report["qc_threshold_fingerprint"]) == 64
