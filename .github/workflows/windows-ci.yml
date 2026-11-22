@@ -6,11 +6,13 @@ on:
       - main
       - feat/p1-automatic-monotonic-digitization
       - fix/p1-rapidocr-310-compatibility
+      - feat/p1-multicolor-dual-y-axis
   pull_request:
     branches:
       - main
       - fix/p0-classification-qc-contract
       - feat/p1-automatic-monotonic-digitization
+      - fix/p1-rapidocr-310-compatibility
   workflow_dispatch:
 
 jobs:
