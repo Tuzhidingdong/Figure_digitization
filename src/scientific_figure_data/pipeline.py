@@ -1900,7 +1900,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     disk_usage = _paper_disk_usage(paper_output)
     artifacts = write_paper_artifacts(
         output_root, snapshot, figures, panels, series, status,
-        extra={"context_index_fingerprint": context.fingerprint,
+        extra={"algorithm_version": ALGORITHM_VERSION,
+               "context_index_fingerprint": context.fingerprint,
                "figure_inventory_source": inventory_path.name if inventory_path else None,
                "pdf_source": pdf_path.name if pdf_path else None,
                "native_page_evidence": native_evidence_by_page,
