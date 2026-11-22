@@ -638,7 +638,11 @@ def _extract_panel(
             figure.get("caption"),
             native_text_preview,
         )
-        pre_family = str(pre_classification.get("chart_family") or "UNCLASSIFIED").upper()
+        pre_family = str(
+            base_definition.get("data_family")
+            or pre_classification.get("chart_family")
+            or "UNCLASSIFIED"
+        ).upper()
         from .trace_spec import is_supported_monotonic_x_label
         ordered_x_supported = (
             is_supported_monotonic_x_label(pre_x_label)
@@ -652,7 +656,11 @@ def _extract_panel(
                 image_path, tuple(pre_plot_box_pixels)
             )
             candidates = family_detection.get("families", [])
-            if family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES" and len(candidates) >= 2:
+            if (
+                family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES"
+                and len(candidates) >= 2
+                and not family_detection.get("truncated", False)
+            ):
                 expanded = []
                 base_id = str(base_definition.get("series_id") or f"{figure_id}_{panel_id}_unassigned")
                 for color_index, candidate in enumerate(candidates, 1):
