@@ -282,6 +282,11 @@ def detect_panel_regions(
             scan_regions.add((x0, y0, x1, y1))
 
     column_windows = (
+        # Isolated near-third columns keep neighboring plot traces and tick
+        # marks from crowding the axis candidate ranking for a narrow panel.
+        (0.00, 0.36), (0.32, 0.68), (0.64, 1.00),
+        # Wider overlapping windows retain plots that span more than one
+        # column, such as a two-axis comparison panel in the lower figure row.
         (0.00, 0.44), (0.28, 0.72), (0.56, 1.00),
         (0.00, 0.68), (0.32, 1.00),
     )
