@@ -159,15 +159,29 @@ def detect_plot_box_candidates(
         ) from exc
 
     with Image.open(image_path) as source:
-        rgb = np.asarray(source.convert("RGB"), dtype=np.uint8)
+        original_width, original_height = source.size
+        if original_width < 100 or original_height < 100:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "IMAGE_TOO_SMALL_FOR_PLOT_FRAME_CANDIDATES",
+                "image_size": [original_width, original_height],
+                "candidates": [],
+            }
+        max_analysis_pixels = 5_000_000
+        analysis_scale = min(
+            1.0,
+            (max_analysis_pixels / float(original_width * original_height)) ** 0.5,
+        )
+        analysis_width = max(100, int(round(original_width * analysis_scale)))
+        analysis_height = max(100, int(round(original_height * analysis_scale)))
+        converted = source.convert("RGB")
+        if (analysis_width, analysis_height) != (original_width, original_height):
+            resampling = getattr(Image, "Resampling", Image).BOX
+            converted = converted.resize((analysis_width, analysis_height), resample=resampling)
+        rgb = np.asarray(converted, dtype=np.uint8)
+        if converted is not source:
+            converted.close()
     height, width = rgb.shape[:2]
-    if width < 100 or height < 100:
-        return {
-            "status": "NEEDS_REVIEW",
-            "reason": "IMAGE_TOO_SMALL_FOR_PLOT_FRAME_CANDIDATES",
-            "image_size": [width, height],
-            "candidates": [],
-        }
 
     luminance = (
         0.2126 * rgb[:, :, 0].astype(np.float32)
@@ -350,6 +364,25 @@ def detect_plot_box_candidates(
     selected.sort(key=lambda item: (
         item["pixel_bbox"][1], item["pixel_bbox"][0], -item["score"]
     ))
+    scale_x = original_width / float(width)
+    scale_y = original_height / float(height)
+    for item in selected:
+        x0, y0, x1, y1 = item["pixel_bbox"]
+        original_box = [
+            max(0, min(original_width, int(round(x0 * scale_x)))),
+            max(0, min(original_height, int(round(y0 * scale_y)))),
+            max(0, min(original_width, int(round(x1 * scale_x)))),
+            max(0, min(original_height, int(round(y1 * scale_y)))),
+        ]
+        item["analysis_pixel_bbox"] = item["pixel_bbox"]
+        item["pixel_bbox"] = original_box
+        item["normalized_bbox"] = [
+            original_box[0] / original_width,
+            original_box[1] / original_height,
+            original_box[2] / original_width,
+            original_box[3] / original_height,
+        ]
+        item["image_size"] = [original_width, original_height]
     return {
         "status": "PLOT_FRAME_CANDIDATES_FOUND" if selected else "NEEDS_REVIEW",
         "reason": (
@@ -358,7 +391,9 @@ def detect_plot_box_candidates(
             "ONE_SUPPORTED_PLOT_FRAME" if len(selected) == 1 else
             "NO_PLOT_FRAME_CANDIDATE_PASSED_GEOMETRY"
         ),
-        "image_size": [width, height],
+        "image_size": [original_width, original_height],
+        "analysis_image_size": [width, height],
+        "analysis_scale": analysis_scale,
         "horizontal_candidate_count": len(rows),
         "vertical_candidate_count": len(columns),
         "candidate_count": len(selected),
