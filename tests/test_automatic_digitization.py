@@ -824,6 +824,71 @@ def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry
     assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
 
 
+def test_pipeline_expands_five_color_families_into_numeric_series(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "five_color_numeric_time_series.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    plot_box = (54, 40, 360, 270)
+    draw.line((54, 40, 54, 270), fill=(20, 20, 20), width=3)
+    draw.line((54, 270, 360, 270), fill=(20, 20, 20), width=3)
+
+    colors = [
+        (230, 20, 30),
+        (230, 125, 25),
+        (25, 170, 75),
+        (20, 65, 225),
+        (160, 35, 200),
+    ]
+    for index, color in enumerate(colors):
+        base_y = 225 - index * 34
+        curve = [
+            (
+                x,
+                int(base_y - 18 * (x - 70) / 275 + 2 * ((x - 70) / 275) ** 2),
+            )
+            for x in range(70, 346)
+        ]
+        draw.line(curve, fill=color, width=3)
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 55), _ocr_row("5", 42, 150), _ocr_row("0", 42, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+    ]
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a",
+        {"plot_box": list(plot_box)},
+        {"caption": "Five independent colored time-series curves."},
+        {}, context, None, ocr_evidence=rows,
+    )
+
+    assert len(records) == 5, [
+        {
+            "status": record.metadata.get("color_detection"),
+            "trace": record.metadata.get("trace_specification"),
+            "qc": record.metadata.get("raster_qc"),
+        }
+        for record in records
+    ]
+    assert len({tuple(record.metadata["color_detection"]["color_rgb"]) for record in records}) == 5
+    for record in records:
+        assert record.points and len(record.points) >= 200, {
+            "series_id": record.series_id,
+            "color": record.metadata.get("color_detection"),
+            "trace": record.metadata.get("trace_specification"),
+            "raster_qc": record.metadata.get("raster_qc"),
+        }
+        assert record.metadata["trace_specification"]["status"] in {
+            "READY", "READY_WITH_REVIEW",
+        }
+        assert all(point.x is not None and point.y is not None for point in record.points)
+
+
 def test_multicolor_family_inventory_supports_more_than_four_curves(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.plot_region import detect_chromatic_color_families
