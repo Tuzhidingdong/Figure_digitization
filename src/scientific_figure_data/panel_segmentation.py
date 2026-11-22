@@ -329,8 +329,30 @@ def detect_panel_regions(
                         region_x0, region_y0, region_x1, region_y1
                     ],
                     "image_size": [region_width, region_height],
+                    "detection_mode": "STANDARD",
                     "detection": local_detection,
                 })
+                if not local_candidates:
+                    # Compact/multi-trace panels may have weak borders or
+                    # several colored vertical features. Retry only this
+                    # bounded crop with a more permissive line search; global
+                    # defaults and single-plot behavior remain unchanged.
+                    relaxed_detection = detect_plot_box_candidates(
+                        temporary_path,
+                        max_candidates=16,
+                        minimum_line_fraction=0.06,
+                        minimum_adjacent_coverage=0.34,
+                        max_axis_lines=48,
+                    )
+                    local_candidates = relaxed_detection.get("candidates", [])
+                    frame_detections.append({
+                        "region_bbox": [
+                            region_x0, region_y0, region_x1, region_y1
+                        ],
+                        "image_size": [region_width, region_height],
+                        "detection_mode": "RELAXED_BORDER_RETRY",
+                        "detection": relaxed_detection,
+                    })
                 for candidate in local_candidates:
                     add_frame(
                         candidate, region_x0, region_y0,
@@ -389,6 +411,60 @@ def detect_panel_regions(
                 break
         if not explained_by_outer:
             deduplicated.append(candidate)
+
+    # Join adjacent frame fragments that share the same top/bottom extent.
+    # Internal vertical grid lines can be ranked ahead of a faint outer side,
+    # splitting one real panel into two touching rectangles. A tiny pixel gap
+    # is allowed for anti-aliased or interrupted borders, but distinct panels
+    # separated by a visible gutter remain independent.
+    stitch_gap = max(6, int(round(width * 0.008)))
+    stitched = list(deduplicated)
+    changed = True
+    while changed:
+        changed = False
+        for first_index in range(len(stitched)):
+            if changed:
+                break
+            first = stitched[first_index]
+            ax0, ay0, ax1, ay1 = first["pixel_bbox"]
+            for second_index in range(first_index + 1, len(stitched)):
+                second = stitched[second_index]
+                bx0, by0, bx1, by1 = second["pixel_bbox"]
+                overlap_y = max(0, min(ay1, by1) - max(ay0, by0))
+                min_height = max(1, min(ay1 - ay0, by1 - by0))
+                if overlap_y / min_height < 0.90:
+                    continue
+                if abs(ay0 - by0) > max(8, int(round(height * 0.015))):
+                    continue
+                if abs(ay1 - by1) > max(8, int(round(height * 0.015))):
+                    continue
+                gap = max(0, max(ax0, bx0) - min(ax1, bx1))
+                if gap > stitch_gap:
+                    continue
+                union_box = [
+                    min(ax0, bx0), min(ay0, by0),
+                    max(ax1, bx1), max(ay1, by1),
+                ]
+                merged = dict(first)
+                merged["pixel_bbox"] = union_box
+                merged["score"] = min(
+                    float(first.get("score", 0.0)),
+                    float(second.get("score", 0.0)),
+                )
+                merged["candidate_type"] = "STITCHED_ADJACENT_FRAME_SEGMENTS"
+                merged["stitched_from"] = [
+                    list(first["pixel_bbox"]), list(second["pixel_bbox"])
+                ]
+                merged["image_size"] = [width, height]
+                merged["normalized_bbox"] = [
+                    union_box[0] / width, union_box[1] / height,
+                    union_box[2] / width, union_box[3] / height,
+                ]
+                stitched[first_index] = merged
+                stitched.pop(second_index)
+                changed = True
+                break
+    deduplicated = stitched
 
     # If local scans and the conservative full-frame scan do not expose at
     # least two panels, retain the original whole-image multi-frame fallback.
