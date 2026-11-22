@@ -172,8 +172,19 @@ def detect_plot_box_candidates(
             1.0,
             (max_analysis_pixels / float(original_width * original_height)) ** 0.5,
         )
-        analysis_width = max(100, int(round(original_width * analysis_scale)))
-        analysis_height = max(100, int(round(original_height * analysis_scale)))
+        analysis_width = max(100, int(original_width * analysis_scale))
+        analysis_height = max(100, int(original_height * analysis_scale))
+        # Integer rounding must never push the resized image over the explicit
+        # memory bound. Correct the larger dimension for any residual excess.
+        while analysis_width * analysis_height > max_analysis_pixels:
+            if analysis_width >= analysis_height:
+                analysis_width -= 1
+            else:
+                analysis_height -= 1
+        analysis_scale = min(
+            analysis_width / float(original_width),
+            analysis_height / float(original_height),
+        )
         converted = source.convert("RGB")
         if (analysis_width, analysis_height) != (original_width, original_height):
             resampling = getattr(Image, "Resampling", Image).BOX
