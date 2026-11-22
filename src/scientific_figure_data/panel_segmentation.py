@@ -307,9 +307,11 @@ def detect_panel_regions(
     # Prefer large, conservative frames and then append region-local frames.
     # Suppress local fragments fully explained by a larger enclosing plot.
     frames.sort(key=lambda item: (
+        -(
+            (item["pixel_bbox"][2] - item["pixel_bbox"][0])
+            * (item["pixel_bbox"][3] - item["pixel_bbox"][1])
+        ),
         -float(item.get("score", 0.0)),
-        -(item["pixel_bbox"][2] - item["pixel_bbox"][0])
-        * (item["pixel_bbox"][3] - item["pixel_bbox"][1]),
     ))
     deduplicated = []
     for candidate in frames:
@@ -347,10 +349,19 @@ def detect_panel_regions(
             add_frame(candidate)
         for candidate in frames:
             box = candidate["pixel_bbox"]
-            if not any(
-                intersection_over_union(box, prior["pixel_bbox"]) >= 0.55
-                for prior in deduplicated
-            ):
+            explained = False
+            for prior in deduplicated:
+                prior_box = prior["pixel_bbox"]
+                if intersection_over_union(box, prior_box) >= 0.55:
+                    explained = True
+                    break
+                if (
+                    prior_box[0] <= box[0] and prior_box[1] <= box[1]
+                    and prior_box[2] >= box[2] and prior_box[3] >= box[3]
+                ):
+                    explained = True
+                    break
+            if not explained:
                 deduplicated.append(candidate)
 
     frames = deduplicated[:12]
