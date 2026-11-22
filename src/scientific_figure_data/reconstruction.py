@@ -21,6 +21,11 @@ def _fmt(value: float) -> str:
     return f"{value:.4g}"
 
 
+def _display_text(value: Any) -> str:
+    """Keep the built-in Pillow font from failing on non-Latin axis labels."""
+    return str(value).encode("ascii", errors="replace").decode("ascii")
+
+
 def render_series_artifacts(
     series,
     source_image: Path,
@@ -90,15 +95,15 @@ def render_series_artifacts(
     for px, py in coords:
         draw.ellipse((px - 3, py - 3, px + 3, py + 3), fill=color)
 
-    x_label = str(series.x_label or "X")
-    y_label = str(series.y_label or "Y")
+    x_label = _display_text(series.x_label or "X")
+    y_label = _display_text(series.y_label or "Y")
     if series.x_unit:
         x_label = f"{x_label} ({series.x_unit})"
     if series.y_unit:
         y_label = f"{y_label} ({series.y_unit})"
     draw.text((left + plot_width // 2 - 100, height - 42), x_label, fill=(20, 20, 20), font=font)
     draw.text((12, top + plot_height // 2), y_label, fill=(20, 20, 20), font=font)
-    draw.text((left, 15), f"Digitized reconstruction · {series.label or series.series_id}",
+    draw.text((left, 15), _display_text(f"Digitized reconstruction - {series.label or series.series_id}"),
               fill=(20, 20, 20), font=font)
     image.save(reconstructed, format="PNG")
 
@@ -167,11 +172,11 @@ def build_panel_comparison_sheet(items: list[dict], output_path: Path) -> dict[s
         third_x = sum(column_widths[:2])
         draw.rectangle((third_x, top, total_width - 1, top + row_height - 1),
                        outline=(205, 205, 205), width=1)
-        draw.text((third_x + 12, top + 12), str(item.get("panel_id", f"panel-{index+1}")),
+        draw.text((third_x + 12, top + 12), _display_text(item.get("panel_id", f"panel-{index+1}")),
                   fill=(20, 20, 20), font=font)
-        draw.text((third_x + 12, top + 42), str(item.get("status", "UNKNOWN")),
+        draw.text((third_x + 12, top + 42), _display_text(item.get("status", "UNKNOWN")),
                   fill=(20, 20, 20), font=font)
-        reason = str(item.get("reason") or "")
+        reason = _display_text(item.get("reason") or "")
         if reason:
             for line_index in range(0, min(len(reason), 180), 36):
                 draw.text((third_x + 12, top + 70 + (line_index // 36) * 18),

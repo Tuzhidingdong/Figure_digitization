@@ -10,7 +10,8 @@ from typing import Any
 
 from .adapter import locate_pdf, snapshot_paper
 from .calibration import calibration_to_dict, fit_linear_axis, map_pixel
-from .axis_text import extract_native_numeric_axis_anchors, extract_numeric_axis_anchors
+from .axis_text import (extract_axis_labels, extract_native_numeric_axis_anchors,
+                        extract_numeric_axis_anchors, split_axis_label_unit)
 from .chart_classifier import classify_chart_family
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
@@ -21,12 +22,15 @@ from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
 from .plot_region import detect_plot_box, detect_single_trace_color
+from .panel_segmentation import detect_panel_regions
+from .trace_spec import generate_trace_specification
+from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
 from .qc import build_series_qc_report, load_thresholds
 from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.1.0"
+ALGORITHM_VERSION = "0.2.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -34,7 +38,7 @@ _ALGORITHM_SOURCE_FILES = (
     "pdf_backend.py", "vector_paths.py", "plot_region.py", "chart_classifier.py",
     "axis_text.py", "raster.py", "calibration.py", "semantics.py",
     "entities.py", "context_index.py", "storage.py", "profiles.py",
-    "qc.py", "hashing.py", "ocr.py",
+    "qc.py", "hashing.py", "ocr.py", "panel_segmentation.py", "trace_spec.py", "reconstruction.py",
 )
 _ALGORITHM_FINGERPRINT_CACHE: str | None = None
 
@@ -231,6 +235,13 @@ def _inventory(paper_dir: Path, snapshot: PaperSnapshot) -> tuple[list[dict], Pa
                     asset = selected["asset"]
                     status = selected["status"]
                     figure["image_asset_status"] = status
+                    figure["media_asset_metadata"] = {
+                        key: asset.get(key) for key in (
+                            "asset_id", "bbox", "page_number", "extraction_method",
+                            "coordinate_space", "bbox_coordinate_space", "page_rotation_degrees",
+                            "page_width_pdf", "page_height_pdf", "source_pdf_sha256",
+                        ) if asset.get(key) is not None
+                    }
                     if status == "VERIFIED" and asset.get("relative_path") and not figure.get("image_path"):
                         figure["image_path"] = asset["relative_path"]
                         figure["image_asset_sha256"] = asset.get("sha256")
@@ -333,6 +344,32 @@ def _normalize_bbox(bbox: Any, width: int, height: int) -> tuple[int, int, int, 
     if coords[2] <= coords[0] or coords[3] <= coords[1]:
         return None
     return coords
+
+
+
+def _source_image_crop_mapping(
+    source_path: Path, bbox: Any, crop_path: Path,
+) -> dict | None:
+    """Record an image-pixel crop transform without pretending it is a PDF mapping."""
+    try:
+        from PIL import Image
+        with Image.open(source_path) as image:
+            coords = _normalize_bbox(bbox, image.width, image.height)
+            if not coords:
+                return None
+            x0, y0, x1, y1 = coords
+            return {
+                "coordinate_space": "SOURCE_IMAGE_PIXELS",
+                "source_image_sha256": sha256_file(source_path),
+                "source_image_size": [image.width, image.height],
+                "crop_bbox_source_pixels": list(coords),
+                "crop_width_pixels": x1 - x0,
+                "crop_height_pixels": y1 - y0,
+                "crop_image_path": crop_path.name,
+                "render_scale": 1.0,
+            }
+    except (OSError, ImportError):
+        return None
 
 
 def _validated_normalized_bbox(value: Any) -> list[float] | None:
@@ -485,7 +522,13 @@ def _plot_box_to_pdf(
     plot_box_pixels: tuple[int, int, int, int] | None,
     crop_mapping: dict | None,
 ) -> tuple[float, float, float, float] | None:
-    if not plot_box_pixels or not crop_mapping or crop_mapping.get("page_rotation_degrees", 0) != 0:
+    if not plot_box_pixels or not crop_mapping:
+        return None
+    if crop_mapping.get("coordinate_space", "PDF_PAGE_POINTS") != "PDF_PAGE_POINTS":
+        return None
+    if crop_mapping.get("page_rotation_degrees", 0) != 0:
+        return None
+    if not all(key in crop_mapping for key in ("crop_left_pdf", "crop_top_pdf", "render_scale")):
         return None
     scale = float(crop_mapping.get("render_scale", 0))
     if scale <= 0:
