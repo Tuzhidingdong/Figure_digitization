@@ -412,6 +412,60 @@ def detect_panel_regions(
         if not explained_by_outer:
             deduplicated.append(candidate)
 
+    # A wide local frame may actually be a row/column group containing
+    # multiple adjacent plots. Refine it with a second, region-local whitespace
+    # projection: the full-figure split cannot see these gutters when another
+    # panel occupies the same x/y projection elsewhere in the image.
+    refined_frames = []
+    for candidate in deduplicated:
+        x0, y0, x1, y1 = candidate["pixel_bbox"]
+        box_width, box_height = x1 - x0, y1 - y0
+        if (
+            candidate.get("candidate_type") == "FULL_IMAGE_RECTANGULAR_FRAME"
+            or box_width * box_height < width * height * 0.12
+        ):
+            refined_frames.append(candidate)
+            continue
+        split = _best_split(
+            mask,
+            (x0, y0, x1, y1),
+            max(4, int(round(min(box_width, box_height) * 0.008))),
+            max(projection_threshold, 0.006),
+            0.22,
+        )
+        if split is None:
+            refined_frames.append(candidate)
+            continue
+        children = []
+        for child_box in split["boxes"]:
+            cx0, cy0, cx1, cy1 = [int(value) for value in child_box]
+            child_width, child_height = cx1 - cx0, cy1 - cy0
+            if (
+                child_width < width * 0.18
+                or child_height < height * 0.18
+                or child_width * child_height < width * height * 0.045
+            ):
+                continue
+            child = dict(candidate)
+            child["pixel_bbox"] = [cx0, cy0, cx1, cy1]
+            child["candidate_type"] = "PLOT_FRAME_SPLIT_BY_LOCAL_GUTTER"
+            child["parent_plot_frame_bbox"] = [x0, y0, x1, y1]
+            child["local_gutter_axis"] = split["axis"]
+            child["local_gutter_score"] = round(float(split["score"]), 4)
+            child["score"] = min(
+                0.95, float(candidate.get("score", 0.0)) + 0.03
+            )
+            child["image_size"] = [width, height]
+            child["normalized_bbox"] = [
+                cx0 / width, cy0 / height, cx1 / width, cy1 / height,
+            ]
+            children.append(child)
+        if len(children) >= 2:
+            refined_frames.extend(children)
+        else:
+            refined_frames.append(candidate)
+    deduplicated = refined_frames
+
     # Join adjacent frame fragments that share the same top/bottom extent.
     # Internal vertical grid lines can be ranked ahead of a faint outer side,
     # splitting one real panel into two touching rectangles. A tiny pixel gap
