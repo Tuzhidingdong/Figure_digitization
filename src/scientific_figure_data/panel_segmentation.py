@@ -249,22 +249,51 @@ def detect_panel_regions(
             "provisional": True,
         })
 
-    # Analyze each sufficiently large whitespace leaf independently, and
-    # also scan lower horizontal bands. Some real figures have no uninterrupted
-    # white gutter between a dominant upper plot and a compact lower row because
-    # panel letters/tick labels occupy the apparent gap. A lower-band scan keeps
-    # those upper traces from consuming the detector's global axis-line budget.
-    scan_regions = {
-        tuple(int(value) for value in box)
-        for box, _ in leaves
-    }
-    top_band_y1 = int(round(height * 0.50))
-    if top_band_y1 >= height * 0.18:
-        scan_regions.add((0, 0, width, top_band_y1))
-    for start_fraction in (0.50, 0.55):
-        band_y0 = int(round(height * start_fraction))
-        if height - band_y0 >= height * 0.18:
-            scan_regions.add((0, band_y0, width, height))
+    # Scan independent horizontal bands and overlapping column tiles. Real
+    # papers often place three compact plots on one row; a single full-width
+    # projection lets vertical traces in one panel monopolize the strongest
+    # axis columns and hide the middle panel.
+    scan_regions: set[tuple[int, int, int, int]] = set()
+    if full_plot_detection.get("status") == "PROVISIONAL_PLOT_BOX":
+        _, full_y0, _, full_y1 = [
+            int(value) for value in full_plot_detection["pixel_bbox"]
+        ]
+        # A full-size plot frame is authoritative for its own band. Only scan
+        # the figure area below it, avoiding false sub-panels carved out of the
+        # same plot (a single time-series chart must remain a single panel).
+        lower_y0 = max(int(round(height * 0.50)), full_y1 + int(round(height * 0.04)))
+        if height - lower_y0 >= height * 0.18:
+            scan_y_bands = [(lower_y0, height)]
+        else:
+            scan_y_bands = []
+    else:
+        scan_y_bands = [
+            (0, int(round(height * 0.52))),
+            (int(round(height * 0.45)), height),
+        ]
+
+    # Also retain sufficiently large non-trivial recursive whitespace leaves.
+    for box, _ in leaves:
+        x0, y0, x1, y1 = [int(value) for value in box]
+        if (
+            x1 - x0 >= width * 0.18 and y1 - y0 >= height * 0.18
+            and not (x0 == 0 and y0 == 0 and x1 == width and y1 == height)
+        ):
+            scan_regions.add((x0, y0, x1, y1))
+
+    column_windows = (
+        (0.00, 0.44), (0.28, 0.72), (0.56, 1.00),
+        (0.00, 0.68), (0.32, 1.00),
+    )
+    for band_y0, band_y1 in scan_y_bands:
+        band_height = band_y1 - band_y0
+        if band_height < height * 0.18:
+            continue
+        for left_fraction, right_fraction in column_windows:
+            region_x0 = int(round(width * left_fraction))
+            region_x1 = int(round(width * right_fraction))
+            if region_x1 - region_x0 >= width * 0.18:
+                scan_regions.add((region_x0, band_y0, region_x1, band_y1))
 
     with Image.open(image_path) as source:
         for region_x0, region_y0, region_x1, region_y1 in sorted(
