@@ -162,6 +162,35 @@ def test_plot_frame_detection_recovers_an_open_l_shaped_axis(tmp_path: Path):
     assert abs(y1 - 301) <= 4
 
 
+def test_colored_y_axis_spine_is_distinguished_from_curve_endpoints(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_colored_y_axis_spines
+
+    image_path = tmp_path / "color_coded_y_axis.png"
+    image = Image.new("RGB", (500, 350), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
+    draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    draw.line(
+        [(x, int(260 - 145 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(275 - 85 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(25, 75, 225), width=3,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_colored_y_axis_spines(image_path, (60, 40, 450, 300))
+    left = result["sides"]["LEFT"]
+    right = result["sides"]["RIGHT"]
+    assert left["status"] == "CHROMATIC_Y_AXIS_SPINE_DETECTED", result
+    assert left["vertical_row_coverage"] >= 0.90
+    assert left["hue_purity"] >= 0.95
+    assert abs((left["hue_center_degrees"] - 0.0 + 180.0) % 360.0 - 180.0) <= 8.0
+    assert right["status"] != "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+
+
 def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.panel_segmentation import detect_panel_regions
