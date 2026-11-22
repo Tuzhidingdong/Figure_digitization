@@ -660,6 +660,71 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
                for record in records)
 
 
+def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "colored_y_spines_black_ticks.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+
+    # Tick labels are black OCR evidence. Only the two Y-axis spines are
+    # color-coded, matching their respective red/blue curves.
+    draw.line((54, 40, 54, 270), fill=(230, 20, 30), width=3)
+    draw.line((54, 40, 360, 40), fill=(25, 25, 25), width=4)
+    draw.line((54, 270, 360, 270), fill=(25, 25, 25), width=4)
+    draw.line((360, 40, 360, 270), fill=(20, 65, 225), width=3)
+
+    red_curve, blue_curve = [], []
+    for x in range(70, 346):
+        fraction = (x - 70) / 275
+        red_curve.append((x, int(220 - 110 * fraction)))
+        blue_curve.append((x, int(238 - 65 * fraction)))
+    draw.line(red_curve, fill=(230, 20, 30), width=3)
+    draw.line(blue_curve, fill=(20, 65, 225), width=3)
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+    ]
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a", {},
+        {"caption": "Two monotonic time-series curves with dual Y axes."},
+        {}, context, None, ocr_evidence=rows,
+        panel={"plot_box": [55, 40, 360, 270]},
+    )
+    assert len(records) == 2
+    by_side = {record.y_axis_side: record for record in records}
+    assert set(by_side) == {"LEFT", "RIGHT"}, [
+        {
+            "side": record.y_axis_side,
+            "assignment": record.metadata.get("series_axis_assignment"),
+            "association": record.metadata.get("y_axis_text_color_association"),
+            "color": record.metadata.get("color_detection"),
+        }
+        for record in records
+    ]
+    for record in records:
+        assignment = record.metadata["series_axis_assignment"]
+        association = record.metadata["y_axis_text_color_association"]
+        assert assignment["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
+        assert association["status"] == "MATCHED"
+        matched_sources = {
+            item["source"]
+            for side in association["side_color_evidence"].values()
+            for item in side["candidate_inks"]
+        }
+        assert "AXIS_SPINE" in matched_sources
+        assert len(record.points) >= 100
+        assert all(point.x is not None and point.y is not None for point in record.points)
+
+
 def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.plot_region import detect_chromatic_color_families
