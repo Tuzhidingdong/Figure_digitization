@@ -1690,27 +1690,42 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             figure_image = _safe_local_file(paper_dir, str(source_figure.get("image_path")))
             if figure_image is not None:
                 try:
-                    whole_plot = detect_plot_box(figure_image)
-                    image_size = whole_plot.get("image_size") or [0, 0]
-                    whole_box = whole_plot.get("pixel_bbox")
-                    whole_area_fraction = 0.0
-                    if whole_box and len(image_size) == 2 and image_size[0] > 0 and image_size[1] > 0:
-                        whole_area_fraction = (
-                            max(0, whole_box[2] - whole_box[0])
-                            * max(0, whole_box[3] - whole_box[1])
-                            / (image_size[0] * image_size[1])
-                        )
-                    if whole_plot.get("status") == "PROVISIONAL_PLOT_BOX" and whole_area_fraction >= 0.42:
-                        figure["panel_segmentation"] = {
-                            "status": "SINGLE_PANEL_FRAME_RETAINED",
-                            "reason": "ONE_DOMINANT_PLOT_FRAME_COVERS_MOST_OF_SOURCE_IMAGE",
-                            "plot_detection": whole_plot,
-                        }
+                    # Always inspect the complete figure for multiple panel frames
+                    # before accepting any one large rectangle as the only plot.
+                    segmentation = detect_panel_regions(figure_image)
+                    figure["panel_segmentation"] = segmentation
+                    if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
+                        panel_sources = segmentation["panels"]
+                    elif segmentation.get("status") == "SINGLE_PLOT_FRAME_DETECTED":
+                        frame_box = segmentation.get("plot_frame_bbox_pixels")
+                        if isinstance(frame_box, list) and len(frame_box) == 4:
+                            panel_sources = [{
+                                "panel_id": "auto-single-frame",
+                                "plot_box": frame_box,
+                                "segmentation_provenance": "AUTO_SINGLE_PLOT_FRAME_CANDIDATE",
+                                "segmentation_status": "SINGLE_PLOT_FRAME_RETAINED",
+                            }]
+                            figure["panel_segmentation"] = {
+                                "status": "SINGLE_PANEL_FRAME_RETAINED",
+                                "reason": "ONE_SUPPORTED_PLOT_FRAME",
+                                "plot_frame_detection": segmentation.get("plot_frame_detection"),
+                                "plot_frame_bbox_pixels": frame_box,
+                            }
                     else:
-                        segmentation = detect_panel_regions(figure_image)
-                        figure["panel_segmentation"] = segmentation
-                        if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
-                            panel_sources = segmentation["panels"]
+                        whole_plot = detect_plot_box(figure_image)
+                        if whole_plot.get("status") == "PROVISIONAL_PLOT_BOX":
+                            panel_sources = [{
+                                "panel_id": "auto-whole-frame",
+                                "plot_box": whole_plot.get("pixel_bbox"),
+                                "segmentation_provenance": "AUTO_SINGLE_PLOT_FRAME_FALLBACK",
+                                "segmentation_status": "SINGLE_PLOT_FRAME_RETAINED",
+                            }]
+                            figure["panel_segmentation"] = {
+                                "status": "SINGLE_PANEL_FRAME_RETAINED",
+                                "reason": "ONE_PLOT_FRAME_FALLBACK_AFTER_MULTI_PANEL_SCAN",
+                                "plot_detection": whole_plot,
+                                "multi_panel_detection": segmentation,
+                            }
                 except OptionalDependencyError as exc:
                     figure["panel_segmentation"] = {
                         "status": "UNAVAILABLE", "reason": str(exc),
@@ -1726,7 +1741,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
             crop_mapping = None
-            auto_panel_bbox = panel.get("segmentation_provenance") == "AUTO_RASTER_WHITESPACE_SEGMENTATION"
+            auto_panel_bbox = panel.get("segmentation_provenance") in {
+                "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+                "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION",
+            }
             if panel_path and bbox and (not panel_specific_image or auto_panel_bbox):
                 if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
                     saved_crop = _crop_local_image(
