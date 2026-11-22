@@ -877,7 +877,9 @@ def detect_colored_y_axis_spines(
                 purity = refined_count / max(1, selected_count)
                 family_rgb = selected_rgb[refined_members]
 
-                family_rows = refined_members.reshape(strip.shape[0], strip.shape[1]).any(axis=1)
+                family_mask = np.zeros(chromatic.shape, dtype=bool)
+                family_mask[chromatic] = refined_members
+                family_rows = family_mask.reshape(strip.shape[0], strip.shape[1]).any(axis=1)
                 row_coverage = float(family_rows.mean()) if len(family_rows) else 0.0
                 longest_run = 0
                 current_run = 0
