@@ -3266,3 +3266,84 @@ def test_bounded_executor_shutdown_reaps_only_its_own_workers():
     assert stubborn.kill_calls == 1
     assert all(not item["still_alive"] for item in report["workers"])
 
+
+
+def _parent_exit_probe_worker(pid_file: str):
+    import os
+    import time
+    from pathlib import Path
+
+    Path(pid_file).write_text(str(os.getpid()), encoding="utf-8")
+    time.sleep(12)
+
+
+def _parent_exit_probe_pool_owner(root: str):
+    import os
+    import time
+    from concurrent.futures import ProcessPoolExecutor
+    from pathlib import Path
+    from scientific_figure_data.scheduler import _worker_initializer
+
+    root_path = Path(root)
+    temp_directory = root_path / "worker-temp"
+    log_directory = root_path / "worker-logs"
+    temp_directory.mkdir(parents=True, exist_ok=True)
+    log_directory.mkdir(parents=True, exist_ok=True)
+    pid_file = root_path / "worker.pid"
+    executor = ProcessPoolExecutor(
+        max_workers=1,
+        initializer=_worker_initializer,
+        initargs=(str(temp_directory), str(log_directory)),
+    )
+    executor.submit(_parent_exit_probe_worker, str(pid_file))
+    deadline = time.monotonic() + 12
+    while not pid_file.is_file() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if not pid_file.is_file():
+        os._exit(7)
+    # Simulate the precise failure mode: the executor owner vanishes while
+    # a worker is still inside a long-running task and without normal shutdown.
+    os._exit(0)
+
+
+def test_worker_exits_when_its_scheduler_parent_disappears(tmp_path: Path):
+    import multiprocessing
+    import os
+    import time
+
+    context = multiprocessing.get_context("spawn")
+    owner = context.Process(
+        target=_parent_exit_probe_pool_owner,
+        args=(str(tmp_path),),
+    )
+    owner.start()
+    owner.join(timeout=18)
+    if owner.is_alive():
+        owner.terminate()
+        owner.join(timeout=3)
+        raise AssertionError("test pool owner failed to exit within the bounded window")
+    assert owner.exitcode == 0, f"test pool owner exited with {owner.exitcode}"
+
+    pid_file = tmp_path / "worker.pid"
+    assert pid_file.is_file(), "worker did not report its PID before parent exit"
+    worker_pid = int(pid_file.read_text(encoding="utf-8").strip())
+    deadline = time.monotonic() + 6
+    worker_alive = True
+    while time.monotonic() < deadline:
+        try:
+            os.kill(worker_pid, 0)
+            worker_alive = True
+        except ProcessLookupError:
+            worker_alive = False
+            break
+        except PermissionError:
+            worker_alive = True
+        except OSError as exc:
+            worker_alive = bool(getattr(exc, "winerror", None) != 87)
+            if not worker_alive:
+                break
+        time.sleep(0.1)
+    assert not worker_alive, (
+        f"orphan worker PID {worker_pid} remained alive after its parent exited"
+    )
+
