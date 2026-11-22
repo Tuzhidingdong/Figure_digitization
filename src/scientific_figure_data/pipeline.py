@@ -809,7 +809,9 @@ def _extract_panel(
             nonlocal y_axis_anchors
             if explicit_relative_signal or len(y_axis_anchors) >= 2 or not axis_candidates:
                 return
-            requested_side = str(definition.get("y_axis_side") or "UNASSIGNED").upper()
+            requested_side = str(
+                definition.get("y_axis_side") or panel.get("y_axis_side") or record.y_axis_side or "UNASSIGNED"
+            ).upper()
             left_anchors = axis_candidates["y_left_anchors"]
             right_anchors = axis_candidates["y_right_anchors"]
             if requested_side == "LEFT" and len(left_anchors) >= 2:
