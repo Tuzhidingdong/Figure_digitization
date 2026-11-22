@@ -130,6 +130,51 @@ def test_panel_segmentation_finds_a_two_by_three_grid(tmp_path: Path):
                for panel in result["panels"])
 
 
+def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.panel_segmentation import detect_panel_regions
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "adjacent_plots_no_gutter.png"
+    image = Image.new("RGB", (640, 400), "white")
+    draw = ImageDraw.Draw(image)
+
+    # The two plot frames share one vertical border. There is no broad white
+    # gutter between them, so whitespace-only segmentation must not be relied on.
+    draw.rectangle((30, 80, 320, 320), outline=(20, 20, 20), width=3)
+    draw.rectangle((320, 80, 610, 320), outline=(20, 20, 20), width=3)
+    left_red = [(x, int(270 - 125 * (x - 48) / 250)) for x in range(48, 304)]
+    left_blue = [(x, int(285 - 70 * (x - 48) / 250)) for x in range(48, 304)]
+    right_red = [(x, int(260 - 90 * (x - 338) / 250)) for x in range(338, 594)]
+    right_blue = [(x, int(285 - 145 * (x - 338) / 250)) for x in range(338, 594)]
+    draw.line(left_red, fill=(225, 25, 35), width=3)
+    draw.line(left_blue, fill=(25, 75, 225), width=3)
+    draw.line(right_red, fill=(225, 25, 35), width=3)
+    draw.line(right_blue, fill=(25, 75, 225), width=3)
+
+    # Dense low-contrast chart ink avoids a completely empty row/column
+    # projection while retaining the true plot-frame geometry.
+    for y in range(100, 305, 24):
+        draw.line((31, y, 319, y), fill=(246, 246, 246), width=1)
+        draw.line((321, y, 609, y), fill=(246, 246, 246), width=1)
+    image.save(image_path, format="PNG")
+
+    detected = detect_plot_box_candidates(image_path)
+    assert detected["status"] == "PLOT_FRAME_CANDIDATES_FOUND", detected
+    boxes = [item["pixel_bbox"] for item in detected["candidates"]]
+    assert any(abs(box[0] - 30) <= 4 and abs(box[2] - 320) <= 4 for box in boxes), boxes
+    assert any(abs(box[0] - 320) <= 4 and abs(box[2] - 610) <= 4 for box in boxes), boxes
+
+    segmented = detect_panel_regions(image_path)
+    assert segmented["status"] == "PROVISIONAL_PANELS_DETECTED", segmented
+    assert segmented["reason"] == "MULTIPLE_PLOT_FRAME_CANDIDATES"
+    assert segmented["panel_count"] >= 2
+    assert all(
+        item["segmentation_provenance"] == "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION"
+        for item in segmented["panels"]
+    )
+
+
 def test_process_paper_auto_traces_and_reconstructs_monotonic_raster_curve(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ):
