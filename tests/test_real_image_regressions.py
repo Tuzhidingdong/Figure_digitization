@@ -15,14 +15,14 @@ FIXTURES = Path(__file__).parent / "fixtures" / "real_figures"
 @pytest.mark.parametrize(
     ("filename", "minimum_panels"),
     [
-        ("P8_06.png", 2),
-        ("P3_02.png", 2),
+        ("P8_06.png", 4),
+        ("P3_02.png", 5),
     ],
 )
 def test_real_scientific_figures_are_not_collapsed_to_one_panel(
     filename: str, minimum_panels: int,
 ) -> None:
-    """Regression evidence: real multi-chart figures must expose multiple regions."""
+    """Each actual subplot in the real scientific figure must be separated."""
     image_path = FIXTURES / filename
     assert image_path.is_file(), f"Missing real-image fixture: {image_path}"
 
