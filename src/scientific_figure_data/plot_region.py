@@ -756,6 +756,195 @@ def detect_chromatic_color_families(
     }
 
 
+
+def detect_colored_y_axis_spines(
+    image_path: Path,
+    plot_box: tuple[int, int, int, int],
+    *,
+    minimum_vertical_coverage: float = 0.35,
+    hue_tolerance_degrees: float = 14.0,
+    minimum_hue_purity: float = 0.80,
+) -> dict:
+    """Detect a persistent chromatic spine on the left/right plot boundary.
+
+    This is supporting evidence for dual-Y assignment, not a curve detector.
+    A color must occupy a substantial, vertically continuous portion of a
+    narrow axis-edge strip and form one dominant circular-HSV hue family.
+    A colored curve endpoint or isolated tick mark must not be sufficient.
+    """
+    if not 0 < minimum_vertical_coverage <= 1:
+        raise ValueError("minimum_vertical_coverage must be between 0 and 1")
+    if not 0 < hue_tolerance_degrees <= 45:
+        raise ValueError("hue_tolerance_degrees must be between 0 and 45")
+    if not 0 < minimum_hue_purity <= 1:
+        raise ValueError("minimum_hue_purity must be between 0 and 1")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Colored Y-axis detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        width, height = source.size
+        x0, y0, x1, y1 = [int(value) for value in plot_box]
+        x0, y0 = max(0, x0), max(0, y0)
+        x1, y1 = min(width, x1), min(height, y1)
+        if x1 <= x0 or y1 <= y0:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "INVALID_PLOT_BOX",
+                "sides": {},
+            }
+        plot_width, plot_height = x1 - x0, y1 - y0
+        if plot_height < 30 or plot_width < 20:
+            return {
+                "status": "NEEDS_REVIEW",
+                "reason": "PLOT_REGION_TOO_SMALL_FOR_AXIS_SPINE_EVIDENCE",
+                "sides": {},
+            }
+
+        band_width = max(3, min(14, int(round(plot_width * 0.012))))
+        y_start, y_end = min(y1, y0 + 1), max(y0 + 1, y1 - 1)
+        side_boxes = {
+            "LEFT": (
+                max(0, x0 - 1), y_start,
+                min(width, x0 + band_width), y_end,
+            ),
+            "RIGHT": (
+                max(0, x1 - band_width), y_start,
+                min(width, x1 + 1), y_end,
+            ),
+        }
+        image_rgb = source.convert("RGB")
+        sides = {}
+        try:
+            for side, box in side_boxes.items():
+                sx0, sy0, sx1, sy1 = box
+                if sx1 <= sx0 or sy1 <= sy0:
+                    sides[side] = {
+                        "status": "NO_AXIS_SPINE_COLOR_EVIDENCE",
+                        "reason": "EMPTY_AXIS_EDGE_SAMPLE",
+                    }
+                    continue
+                strip = np.asarray(
+                    image_rgb.crop(box), dtype=np.uint8
+                )
+                hues, saturations, values = _rgb_to_hsv_arrays(
+                    strip.reshape(-1, 3)
+                )
+                chromatic = (saturations >= 0.28) & (values >= 0.22)
+                selected_count = int(chromatic.sum())
+                if selected_count < max(18, int(round(plot_height * 0.10))):
+                    sides[side] = {
+                        "status": "NO_AXIS_SPINE_COLOR_EVIDENCE",
+                        "reason": "INSUFFICIENT_CHROMATIC_EDGE_PIXELS",
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "chromatic_pixel_count": selected_count,
+                    }
+                    continue
+
+                selected_hues = hues[chromatic]
+                selected_rgb = strip.reshape(-1, 3)[chromatic]
+                bin_width = 3.0
+                bin_count = int(round(360.0 / bin_width))
+                bins = np.floor(selected_hues / bin_width).astype(int) % bin_count
+                histogram = np.bincount(bins, minlength=bin_count)
+                seed_bin = int(histogram.argmax())
+                seed_hue = (seed_bin + 0.5) * bin_width
+                seed_distance = np.abs(
+                    (selected_hues - seed_hue + 180.0) % 360.0 - 180.0
+                )
+                members = seed_distance <= hue_tolerance_degrees
+                family_count = int(members.sum())
+                purity = family_count / max(1, selected_count)
+                family_hues = selected_hues[members]
+                family_rgb = selected_rgb[members]
+
+                angles = np.deg2rad(family_hues)
+                center_hue = float(
+                    np.rad2deg(
+                        np.arctan2(np.sin(angles).mean(), np.cos(angles).mean())
+                    ) % 360.0
+                ) if family_count else None
+                refined_distance = np.abs(
+                    (selected_hues - center_hue + 180.0) % 360.0 - 180.0
+                ) if center_hue is not None else np.full(selected_count, 180.0)
+                refined_members = refined_distance <= hue_tolerance_degrees
+                refined_count = int(refined_members.sum())
+                purity = refined_count / max(1, selected_count)
+                family_rgb = selected_rgb[refined_members]
+
+                family_rows = refined_members.reshape(strip.shape[0], strip.shape[1]).any(axis=1)
+                row_coverage = float(family_rows.mean()) if len(family_rows) else 0.0
+                longest_run = 0
+                current_run = 0
+                for present in family_rows:
+                    current_run = current_run + 1 if bool(present) else 0
+                    longest_run = max(longest_run, current_run)
+                longest_run_fraction = longest_run / max(1, len(family_rows))
+
+                detected = (
+                    refined_count >= max(18, int(round(plot_height * 0.10)))
+                    and row_coverage >= minimum_vertical_coverage
+                    and longest_run_fraction >= minimum_vertical_coverage * 0.70
+                    and purity >= minimum_hue_purity
+                )
+                if detected:
+                    color_rgb = [
+                        int(round(value)) for value in np.median(family_rgb, axis=0)
+                    ]
+                    sides[side] = {
+                        "status": "CHROMATIC_Y_AXIS_SPINE_DETECTED",
+                        "color_rgb": color_rgb,
+                        "hue_center_degrees": round(float(center_hue), 3),
+                        "hue_tolerance_degrees": float(hue_tolerance_degrees),
+                        "hue_purity": round(float(purity), 4),
+                        "vertical_row_coverage": round(row_coverage, 4),
+                        "longest_vertical_run_fraction": round(
+                            longest_run_fraction, 4
+                        ),
+                        "chromatic_pixel_count": refined_count,
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "sample_bbox": list(box),
+                        "provisional": True,
+                    }
+                else:
+                    sides[side] = {
+                        "status": "NO_CONTINUOUS_CHROMATIC_SPINE",
+                        "hue_center_degrees": (
+                            round(float(center_hue), 3) if center_hue is not None else None
+                        ),
+                        "hue_purity": round(float(purity), 4),
+                        "vertical_row_coverage": round(row_coverage, 4),
+                        "longest_vertical_run_fraction": round(
+                            longest_run_fraction, 4
+                        ),
+                        "chromatic_pixel_count": refined_count,
+                        "sample_pixel_count": int(strip.shape[0] * strip.shape[1]),
+                        "sample_bbox": list(box),
+                    }
+        finally:
+            image_rgb.close()
+
+    return {
+        "status": (
+            "CHROMATIC_Y_AXIS_SPINES_DETECTED"
+            if any(
+                item.get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                for item in sides.values()
+            )
+            else "NO_CHROMATIC_Y_AXIS_SPINE_DETECTED"
+        ),
+        "plot_box_pixels": [x0, y0, x1, y1],
+        "sides": sides,
+        "provisional": True,
+    }
+
+
+
 def estimate_ocr_text_ink_color(
     image_path: Path,
     text_rows: list[dict],
