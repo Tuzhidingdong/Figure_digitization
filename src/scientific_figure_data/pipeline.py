@@ -21,7 +21,7 @@ from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, Serie
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
-from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, estimate_ocr_text_ink_color)
+from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, detect_colored_y_axis_spines, estimate_ocr_text_ink_color)
 from .panel_segmentation import detect_panel_regions
 from .trace_spec import generate_trace_specification
 from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
@@ -1074,6 +1074,16 @@ def _extract_panel(
             axis_ocr_rows = ocr_axis_evidence if isinstance(ocr_axis_evidence, dict) else {}
             side_matches = []
             side_color_evidence = {}
+            try:
+                axis_spine_detection = detect_colored_y_axis_spines(
+                    image_path, tuple(plot_box_pixels)
+                )
+            except OptionalDependencyError:
+                axis_spine_detection = {
+                    "status": "UNAVAILABLE",
+                    "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING",
+                    "sides": {},
+                }
             curve_color_match = (
                 color_detection.get("color_match")
                 if isinstance(color_detection, dict) else None
@@ -1102,12 +1112,36 @@ def _extract_panel(
                     "status": "NO_AXIS_TITLE_COLOR_EVIDENCE",
                     "colored_label_count": 0,
                 }
+                spine_evidence = (
+                    axis_spine_detection.get("sides", {}).get(side, {})
+                    if isinstance(axis_spine_detection, dict) else {}
+                )
+                spine_ink = {
+                    "status": (
+                        "CHROMATIC_TEXT_COLOR_DETECTED"
+                        if spine_evidence.get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                        else spine_evidence.get("status", "NO_AXIS_SPINE_COLOR_EVIDENCE")
+                    ),
+                    "color_rgb": spine_evidence.get("color_rgb"),
+                    "hue_degrees": spine_evidence.get("hue_center_degrees"),
+                    "hue_purity": spine_evidence.get("hue_purity"),
+                    "vertical_row_coverage": spine_evidence.get("vertical_row_coverage"),
+                    "longest_vertical_run_fraction": spine_evidence.get(
+                        "longest_vertical_run_fraction"
+                    ),
+                    "chromatic_pixel_count": spine_evidence.get("chromatic_pixel_count", 0),
+                }
                 candidate_inks = []
                 for source_name, ink in (
                     ("NUMERIC_TICK_LABELS", tick_ink),
                     ("AXIS_TITLE", title_ink),
+                    ("AXIS_SPINE", spine_ink),
                 ):
-                    if ink.get("status") == "CHROMATIC_TEXT_COLOR_DETECTED":
+                    if (
+                        ink.get("status") == "CHROMATIC_TEXT_COLOR_DETECTED"
+                        and isinstance(ink.get("color_rgb"), (list, tuple))
+                        and len(ink["color_rgb"]) == 3
+                    ):
                         candidate_inks.append({"source": source_name, **ink})
 
                 def ink_distance(ink):
@@ -1144,8 +1178,9 @@ def _extract_panel(
                 side_color_evidence[side] = {
                     "tick_labels": tick_ink,
                     "axis_title": title_ink,
+                    "axis_spine": spine_evidence,
                     "candidate_inks": candidate_inks,
-                    "conflicting_text_color_sources": conflicting_sources,
+                    "conflicting_color_sources": conflicting_sources,
                 }
                 if not conflicting_sources and matching:
                     selected_ink = min(matching, key=lambda item: item[0])
@@ -1163,7 +1198,8 @@ def _extract_panel(
                     side: round(distance, 3)
                     for side, distance, _, _ in side_matches
                 },
-                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_AXIS_TEXT_COLOR",
+                "axis_spine_detection": axis_spine_detection,
+                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_AXIS_TEXT_OR_SPINE_COLOR",
             }
             if len(side_matches) == 1:
                 selected_side, distance, selected_ink, distance_kind = side_matches[0]
