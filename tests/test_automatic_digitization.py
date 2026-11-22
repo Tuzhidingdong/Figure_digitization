@@ -190,6 +190,25 @@ def test_colored_y_axis_spine_is_distinguished_from_curve_endpoints(tmp_path: Pa
     assert abs((left["hue_center_degrees"] - 0.0 + 180.0) % 360.0 - 180.0) <= 8.0
     assert right["status"] != "CHROMATIC_Y_AXIS_SPINE_DETECTED"
 
+    # A colored axis spine by itself is not a data series and must be excluded
+    # from the hue-family inventory used to create trace candidates.
+    axis_only_path = tmp_path / "axis_spine_without_curve.png"
+    axis_only = Image.new("RGB", (500, 350), "white")
+    axis_draw = ImageDraw.Draw(axis_only)
+    axis_draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
+    axis_draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    axis_only.save(axis_only_path, format="PNG")
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+    family_result = detect_chromatic_color_families(
+        axis_only_path, (60, 40, 450, 300)
+    )
+    assert family_result["status"] == "NEEDS_REVIEW"
+    assert family_result["reason"] == "INSUFFICIENT_CHROMATIC_PIXELS"
+    assert (
+        family_result["axis_spine_exclusion"]["sides"]["LEFT"]["status"]
+        == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+    )
+
 
 def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
     from PIL import Image, ImageDraw
