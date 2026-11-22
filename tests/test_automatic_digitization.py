@@ -385,3 +385,68 @@ def test_dual_y_axis_calibrations_are_retained_without_guessing_series_side(tmp_
     assert metadata["series_axis_assignment"]["selected_side"] is None
     assert metadata["trace_specification"]["status"] == "NEEDS_REVIEW"
     assert metadata["calibration_errors"]["y"] == "AMBIGUOUS_DUAL_Y_AXIS_SERIES_ASSOCIATION"
+
+
+def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: Path):
+    from PIL import Image, ImageDraw, ImageFont
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "color_coded_dual_axis.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=4)
+
+    red_curve, blue_curve = [], []
+    for x in range(70, 346):
+        fraction = (x - 70) / 275
+        red_curve.append((x, int(220 - 110 * fraction)))
+        blue_curve.append((x, int(238 - 65 * fraction)))
+    draw.line(red_curve, fill=(230, 20, 30), width=3)
+    draw.line(blue_curve, fill=(20, 65, 225), width=3)
+
+    def draw_tick(text: str, center_x: int, center_y: int, color: tuple[int, int, int]):
+        bounds = draw.textbbox((0, 0), text, font=font)
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+        left = int(round(center_x - width / 2))
+        top = int(round(center_y - height / 2))
+        draw.text((left - bounds[0], top - bounds[1]), text, fill=color, font=font)
+        return {
+            "text": text,
+            "confidence": 0.99,
+            "polygon": [
+                [left, top], [left + width, top],
+                [left + width, top + height], [left, top + height],
+            ],
+        }
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        draw_tick("10", 42, 65, (230, 20, 30)),
+        draw_tick("5", 42, 155, (230, 20, 30)),
+        draw_tick("0", 42, 255, (230, 20, 30)),
+        draw_tick("100", 378, 65, (20, 65, 225)),
+        draw_tick("50", 378, 155, (20, 65, 225)),
+        draw_tick("0", 378, 255, (20, 65, 225)),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+        _ocr_row("Left response (mA)", 14, 155, 0.96),
+        _ocr_row("Right response (mAh)", 402, 155, 0.96),
+    ]
+    image.save(image_path)
+
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a", {},
+        {"caption": "Two monotonic time-series curves with two Y axes."},
+        {}, context, None, ocr_evidence=rows,
+    )
+    assert len(records) == 2
+    by_side = {record.y_axis_side: record for record in records}
+    assert set(by_side) == {"LEFT", "RIGHT"}
+    assert all(len(record.points) >= 100 for record in records)
+    assert all(record.metadata["trace_specification"]["status"] == "READY"
+               for record in records)
+    assert all(record.metadata["series_axis_assignment"]["status"]
+               == "COLOR_MATCHED_TO_Y_AXIS_TICK_LABELS" for record in records)
+    assert all(record.metadata["y_axis_text_color_association"]["status"] == "MATCHED"
+               for record in records)
