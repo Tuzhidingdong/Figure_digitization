@@ -3203,3 +3203,59 @@ def test_scheduler_retries_broken_process_pool_submission_a_finite_number_of_tim
     assert report["retried_papers"] == 1
     assert report["permanently_failed_papers"] == 1
     ledger.close()
+
+
+def test_bounded_executor_shutdown_reaps_only_its_own_workers():
+    from scientific_figure_data.scheduler import _shutdown_executor_bounded
+
+    class FakeProcess:
+        def __init__(self, pid: int, terminate_exits: bool, kill_exits: bool):
+            self.pid = pid
+            self.exitcode = None
+            self.alive = True
+            self.terminate_exits = terminate_exits
+            self.kill_exits = kill_exits
+            self.terminate_calls = 0
+            self.kill_calls = 0
+
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return self.alive
+
+        def terminate(self):
+            self.terminate_calls += 1
+            if self.terminate_exits:
+                self.alive = False
+                self.exitcode = -15
+
+        def kill(self):
+            self.kill_calls += 1
+            if self.kill_exits:
+                self.alive = False
+                self.exitcode = -9
+
+    class FakeExecutor:
+        def __init__(self, processes):
+            self._processes = {item.pid: item for item in processes}
+            self.shutdown_arguments = None
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdown_arguments = (wait, cancel_futures)
+
+    graceful = FakeProcess(111, terminate_exits=False, kill_exits=False)
+    stubborn = FakeProcess(222, terminate_exits=False, kill_exits=True)
+    executor = FakeExecutor([graceful, stubborn])
+
+    report = _shutdown_executor_bounded(executor, grace_seconds=0)
+
+    assert executor.shutdown_arguments == (False, True)
+    assert report["status"] == "WORKERS_REAPED"
+    by_pid = {item["pid"]: item for item in report["workers"]}
+    assert by_pid[111]["action"] == "TERMINATE_SENT"
+    assert by_pid[222]["action"] == "KILL_SENT"
+    assert graceful.kill_calls == 0
+    assert stubborn.kill_calls == 1
+    assert all(not item["still_alive"] for item in report["workers"])
+
