@@ -464,7 +464,39 @@ def detect_panel_regions(
             refined_frames.extend(children)
         else:
             refined_frames.append(candidate)
-    deduplicated = refined_frames
+    # Re-deduplicate after local-gutter refinement. The local tile scans
+    # can contribute small fragments from the same frame that was just split
+    # into its real child panels. Those fragments were not contained by the
+    # parent candidate during the first pass, so they must be suppressed now.
+    refined_frames.sort(key=lambda item: -(
+        (item["pixel_bbox"][2] - item["pixel_bbox"][0])
+        * (item["pixel_bbox"][3] - item["pixel_bbox"][1])
+    ))
+    deduplicated = []
+    for candidate in refined_frames:
+        box = candidate["pixel_bbox"]
+        candidate_area = max(
+            1, (box[2] - box[0]) * (box[3] - box[1])
+        )
+        explained_by_refined_panel = False
+        for prior in deduplicated:
+            prior_box = prior["pixel_bbox"]
+            prior_area = max(
+                1, (prior_box[2] - prior_box[0])
+                * (prior_box[3] - prior_box[1])
+            )
+            if prior_area < candidate_area * 1.12:
+                continue
+            ix0, iy0 = max(box[0], prior_box[0]), max(box[1], prior_box[1])
+            ix1, iy1 = min(box[2], prior_box[2]), min(box[3], prior_box[3])
+            covered = (
+                max(0, ix1 - ix0) * max(0, iy1 - iy0)
+            ) / float(candidate_area)
+            if covered >= 0.88:
+                explained_by_refined_panel = True
+                break
+        if not explained_by_refined_panel:
+            deduplicated.append(candidate)
 
     # Join adjacent frame fragments that share the same top/bottom extent.
     # Internal vertical grid lines can be ranked ahead of a faint outer side,
