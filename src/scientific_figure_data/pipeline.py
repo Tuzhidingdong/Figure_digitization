@@ -682,6 +682,56 @@ def _extract_panel(
         if plot_box and image_path and plot_box_pixels is None:
             plot_detection = {"status": "NEEDS_REVIEW", "reason": "INVALID_MANUAL_PLOT_BOX"}
 
+
+        axis_label_evidence = {
+            "status": "NOT_RUN",
+            "reason": "OCR_EVIDENCE_OR_PLOT_REGION_UNAVAILABLE",
+        }
+        x_axis_label_text = definition.get("x_label") or panel.get("x_label")
+        y_axis_label_text = definition.get("y_label") or panel.get("y_label")
+        if ocr_evidence and plot_box_pixels:
+            try:
+                axis_label_evidence = extract_axis_labels(ocr_evidence, tuple(plot_box_pixels))
+            except (TypeError, ValueError):
+                axis_label_evidence = {"status": "NEEDS_REVIEW", "reason": "AXIS_LABEL_PARSE_ERROR"}
+            ocr_x_label = axis_label_evidence.get("x_label")
+            if not x_axis_label_text and ocr_x_label:
+                x_axis_label_text = ocr_x_label
+                parsed_label, parsed_unit = split_axis_label_unit(ocr_x_label)
+                record.x_label = parsed_label
+                if not record.x_unit:
+                    record.x_unit = parsed_unit
+            requested_y_side = str(
+                definition.get("y_axis_side") or panel.get("y_axis_side") or "UNASSIGNED"
+            ).upper()
+            left_y_label = axis_label_evidence.get("y_left_label")
+            right_y_label = axis_label_evidence.get("y_right_label")
+            selected_y_label = (
+                right_y_label if requested_y_side == "RIGHT" else
+                left_y_label if requested_y_side == "LEFT" else
+                left_y_label if left_y_label and not right_y_label else
+                right_y_label if right_y_label and not left_y_label else None
+            )
+            if not y_axis_label_text and selected_y_label:
+                y_axis_label_text = selected_y_label
+                parsed_label, parsed_unit = split_axis_label_unit(selected_y_label)
+                record.y_label = parsed_label
+                if not record.y_unit:
+                    record.y_unit = parsed_unit
+            if requested_y_side == "UNASSIGNED" and selected_y_label:
+                record.y_axis_side = "RIGHT" if selected_y_label == right_y_label else "LEFT"
+
+        classification = classify_chart_family(
+            definition.get("technique") or panel.get("technique") or figure.get("technique"),
+            x_axis_label_text, y_axis_label_text, figure.get("caption"), native_text_preview,
+        )
+        if not record.technique and classification.get("technique"):
+            record.technique = classification["technique"]
+        explicit_family = str(definition.get("data_family", "")).upper()
+        family = explicit_family or str(classification.get("chart_family", "UNCLASSIFIED")).upper()
+        record.metadata["chart_family_classification"] = classification
+        record.metadata["axis_label_evidence"] = axis_label_evidence
+
         plot_bbox_pdf = definition.get("plot_bbox_pdf")
         if plot_bbox_pdf is None:
             plot_bbox_pdf = _plot_box_to_pdf(plot_box_pixels, crop_mapping)
@@ -692,6 +742,8 @@ def _extract_panel(
         native_payload = None
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+        x_anchor_source = "MANUAL_OVERRIDE" if x_axis_anchors else None
+        y_anchor_source = "MANUAL_OVERRIDE" if y_axis_anchors else None
         explicit_relative_signal = str(definition.get("y_signal_mode", "")).upper() in {
             "ARBITRARY_RELATIVE", "SERIES_RELATIVE_SIGNAL"
         }
@@ -700,6 +752,7 @@ def _extract_panel(
         )
 
         if (native_page_path and native_page_path.is_file() and plot_bbox_pdf and crop_mapping
+                and crop_mapping.get("coordinate_space", "PDF_PAGE_POINTS") == "PDF_PAGE_POINTS"
                 and crop_mapping.get("page_rotation_degrees", 0) == 0):
             try:
                 native_payload = _json_file(native_page_path)
@@ -730,7 +783,11 @@ def _extract_panel(
         if native_axis_evidence:
             if len(x_axis_anchors) < 2 and len(native_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = native_axis_evidence["x_anchors"]
+                x_anchor_source = "PDF_NATIVE_TEXT"
+            previous_y_count = len(y_axis_anchors)
             use_y_axis_candidates(native_axis_evidence)
+            if len(y_axis_anchors) >= 2 and len(y_axis_anchors) != previous_y_count:
+                y_anchor_source = "PDF_NATIVE_TEXT"
         if not explicit_relative_signal and family == "SPECTRUM":
             relative_signal = len(y_axis_anchors) < 2
 
@@ -740,7 +797,11 @@ def _extract_panel(
             ocr_axis_evidence = extract_numeric_axis_anchors(ocr_evidence, tuple(plot_box_pixels))
             if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = ocr_axis_evidence["x_anchors"]
+                x_anchor_source = "OCR"
+            previous_y_count = len(y_axis_anchors)
             use_y_axis_candidates(ocr_axis_evidence)
+            if len(y_axis_anchors) >= 2 and len(y_axis_anchors) != previous_y_count:
+                y_anchor_source = "OCR"
             if not explicit_relative_signal and family == "SPECTRUM":
                 relative_signal = len(y_axis_anchors) < 2
 
@@ -786,13 +847,42 @@ def _extract_panel(
         color_rgb = definition.get("color_rgb")
         color_detection = None
         if (not color_rgb and image_path and plot_box_pixels
-                and family not in {"NON_MONOTONIC", "NON_MONOTONIC_CURVE", "CV", "EIS", "UNCLASSIFIED"}):
+                and family not in {"NON_MONOTONIC", "NON_MONOTONIC_CURVE", "CV", "EIS"}):
             try:
                 color_detection = detect_single_trace_color(image_path, plot_box_pixels)
                 if color_detection.get("status") == "UNIQUE_CHROMATIC_FAMILY":
                     color_rgb = color_detection["color_rgb"]
             except OptionalDependencyError:
                 color_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
+        plot_box_source = (
+            "AUTO_PLOT_FRAME" if plot_detection and plot_detection.get("status") == "PROVISIONAL_PLOT_BOX"
+            else "MANUAL_OVERRIDE" if definition.get("plot_box") is not None else "UNRESOLVED"
+        )
+        manual_monotonic_override = (
+            bool(definition.get("color_rgb"))
+            and isinstance(definition.get("x_axis_anchors"), list)
+            and len(definition.get("x_axis_anchors", [])) >= 2
+            and isinstance(definition.get("y_axis_anchors"), list)
+            and len(definition.get("y_axis_anchors", [])) >= 2
+        )
+        trace_specification = generate_trace_specification(
+            image_path, plot_box_pixels, color_detection, x_cal, y_cal, family,
+            record.x_label or x_axis_label_text,
+            allow_unlabelled_manual_override=manual_monotonic_override,
+        ) if image_path else {"status": "NEEDS_REVIEW", "reason": "SOURCE_IMAGE_UNAVAILABLE"}
+        trace_specification["input_provenance"] = {
+            "plot_box": plot_box_source,
+            "x_axis_anchors": x_anchor_source or "UNRESOLVED",
+            "y_axis_anchors": y_anchor_source or "UNRESOLVED",
+            "color": "AUTOMATIC_COLOR_DETECTOR" if color_detection else "UNRESOLVED",
+            "ocr": "OCR_EVIDENCE_PRESENT" if ocr_evidence else "NO_OCR_EVIDENCE",
+        }
+        if any(value == "MANUAL_OVERRIDE" for value in trace_specification["input_provenance"].values()):
+            trace_specification["input_provenance"]["automation_status"] = "CONTAINS_MANUAL_OVERRIDE"
+        elif trace_specification.get("status") == "READY":
+            trace_specification["input_provenance"]["automation_status"] = "FULLY_AUTOMATIC"
+        else:
+            trace_specification["input_provenance"]["automation_status"] = "NOT_READY"
         vector_selection = None
         vector_requested = bool(vector_indices) or (
             bool(plot_bbox_pdf) and not pixel_points
@@ -887,6 +977,8 @@ def _extract_panel(
             _attach_standardization_request(record, definition)
             results.append(record)
             continue
+        record.metadata.setdefault("trace_specification", trace_specification)
+        record.metadata.setdefault("axis_label_evidence", axis_label_evidence)
         if isinstance(pixel_points, list) and len(pixel_points) >= 2:
             clean_points = [(float(p[0]), float(p[1])) for p in pixel_points
                             if isinstance(p, (list, tuple)) and len(p) == 2]
@@ -911,11 +1003,12 @@ def _extract_panel(
                                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                                "calibration_errors": calibration_errors}
-        elif image_path and color_rgb and family not in {"CV", "EIS", "NON_MONOTONIC", "NON_MONOTONIC_CURVE"}:
+        elif image_path and trace_specification.get("status") == "READY":
+            specification = trace_specification["specification"]
             record.points, qc = trace_monotonic_color(
-                str(image_path), tuple(int(v) for v in color_rgb),
-                int(definition.get("color_tolerance", color_detection.get("color_tolerance", 24) if color_detection else 24)),
-                x_cal, y_cal, plot_box=plot_box_pixels,
+                str(image_path), tuple(int(v) for v in specification["color_rgb"]),
+                int(specification["color_tolerance"]),
+                x_cal, y_cal, plot_box=tuple(specification["plot_box_pixels"]),
             )
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = (
@@ -934,15 +1027,25 @@ def _extract_panel(
                                ),
                                "plot_detection": plot_detection, "color_detection": color_detection,
                                "chart_family_classification": classification,
+                               "axis_label_evidence": axis_label_evidence,
+                               "trace_specification": trace_specification,
+                               "crop_mapping": crop_mapping,
+                               "plot_box_pixels": list(plot_box_pixels) if plot_box_pixels else None,
                                "y_signal_mode": "SERIES_RELATIVE_SIGNAL" if relative_signal else "CALIBRATED_NUMERIC"}
         else:
             record.metadata = {
                 "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
-                "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+                "note": "Automatic tracing requires a supported monotonic X-axis label, a unique trace color, and numeric calibrations on both axes.",
+                "trace_specification": trace_specification,
                 "data_family": family,
                 "plot_detection": plot_detection,
                 "color_detection": color_detection,
                 "chart_family_classification": classification,
+                "axis_label_evidence": axis_label_evidence,
+                "color_detection": color_detection,
+                "trace_specification": trace_specification,
+                "crop_mapping": crop_mapping,
+                "plot_box_pixels": list(plot_box_pixels) if plot_box_pixels else None,
                 "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                 "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                 "calibration_errors": calibration_errors,
@@ -1137,6 +1240,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     review_needed = pdf_integrity_issue or "main_pdf" in snapshot.missing_roles
     backend = None
     native_evidence_by_page: dict[int, dict] = {}
+    panel_comparison_items: list[dict[str, Any]] = []
     for figure_index, source_figure in enumerate(figures_raw, 1):
         if not isinstance(source_figure, dict):
             continue
@@ -1155,6 +1259,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             "source_image_asset_path": source_figure.get("image_path"),
             "source_image_asset_sha256": source_figure.get("image_asset_sha256"),
             "source_image_asset_id": source_figure.get("image_asset_id"),
+            "source_media_asset_metadata": source_figure.get("media_asset_metadata"),
             "source_bbox": source_figure.get("bbox") or source_figure.get("bounding_box"),
             "source_bbox_role": (
                 "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED"
@@ -1202,7 +1307,41 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         "status": "NATIVE_EVIDENCE_UNAVAILABLE",
                         "error": f"{type(exc).__name__}: {exc}",
                     }
-        for panel_index, source_panel in enumerate(_figure_panels(source_figure), 1):
+        panel_sources = _figure_panels(source_figure)
+        if (
+            len(panel_sources) == 1
+            and panel_sources[0].get("segmentation_provenance") == "SINGLE_PANEL_FALLBACK"
+            and source_figure.get("image_path")
+        ):
+            figure_image = _safe_local_file(paper_dir, str(source_figure.get("image_path")))
+            if figure_image is not None:
+                try:
+                    whole_plot = detect_plot_box(figure_image)
+                    image_size = whole_plot.get("image_size") or [0, 0]
+                    whole_box = whole_plot.get("pixel_bbox")
+                    whole_area_fraction = 0.0
+                    if whole_box and len(image_size) == 2 and image_size[0] > 0 and image_size[1] > 0:
+                        whole_area_fraction = (
+                            max(0, whole_box[2] - whole_box[0])
+                            * max(0, whole_box[3] - whole_box[1])
+                            / (image_size[0] * image_size[1])
+                        )
+                    if whole_plot.get("status") == "PROVISIONAL_PLOT_BOX" and whole_area_fraction >= 0.42:
+                        figure["panel_segmentation"] = {
+                            "status": "SINGLE_PANEL_FRAME_RETAINED",
+                            "reason": "ONE_DOMINANT_PLOT_FRAME_COVERS_MOST_OF_SOURCE_IMAGE",
+                            "plot_detection": whole_plot,
+                        }
+                    else:
+                        segmentation = detect_panel_regions(figure_image)
+                        figure["panel_segmentation"] = segmentation
+                        if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
+                            panel_sources = segmentation["panels"]
+                except OptionalDependencyError as exc:
+                    figure["panel_segmentation"] = {
+                        "status": "UNAVAILABLE", "reason": str(exc),
+                    }
+        for panel_index, source_panel in enumerate(panel_sources, 1):
             panel = dict(source_panel)
             panel_id = safe_id(str(panel.get("panel_id") or panel.get("id") or panel.get("label") or panel_index))
             panel["panel_id"] = panel_id
@@ -1213,10 +1352,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
             crop_mapping = None
-            if panel_path and not panel_specific_image and bbox:
+            auto_panel_bbox = panel.get("segmentation_provenance") == "AUTO_RASTER_WHITESPACE_SEGMENTATION"
+            if panel_path and bbox and (not panel_specific_image or auto_panel_bbox):
                 if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
                     saved_crop = _crop_local_image(
                         panel_path, bbox, paper_output / "evidence" / f"{figure_id}_{panel_id}.png")
+                    if saved_crop is not None:
+                        crop_mapping = _source_image_crop_mapping(panel_path, bbox, saved_crop)
             elif panel_path:
                 try:
                     source_image_bytes = int(panel_path.stat().st_size)
@@ -1236,6 +1378,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         panel_path, evidence_image,
                         expected_sha256=figure.get("source_image_asset_sha256"),
                     )
+                    if saved_crop is not None:
+                        try:
+                            from PIL import Image
+                            with Image.open(panel_path) as source_image:
+                                identity_bbox = (0, 0, source_image.width, source_image.height)
+                            crop_mapping = _source_image_crop_mapping(
+                                panel_path, identity_bbox, saved_crop
+                            )
+                        except (OSError, ImportError):
+                            crop_mapping = None
                     if saved_crop is None:
                         figure["source_asset_status"] = "COPY_FAILED_OR_HASH_CHANGED_AFTER_INVENTORY"
                         source_figure["image_asset_status"] = (
@@ -1306,8 +1458,30 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 else "EXTRACTED" if has_points
                 else "NEEDS_REVIEW"
             )
+            panel_renderings: list[dict[str, Any]] = []
             for item in extracted:
                 item.evidence[0]["extraction_channel"] = item.extraction_method
+                if saved_crop is not None and item.points:
+                    try:
+                        rendering = render_series_artifacts(
+                            item, saved_crop, paper_output / "reconstructed",
+                            plot_box=tuple(item.metadata.get("plot_box_pixels") or ()),
+                        )
+                    except (OSError, ValueError, TypeError, OptionalDependencyError) as exc:
+                        rendering = {
+                            "status": "RENDER_FAILED",
+                            "reason": f"{type(exc).__name__}: {exc}",
+                        }
+                    if rendering.get("status") == "RENDERED":
+                        for path_key in ("reconstructed_path", "overlay_path"):
+                            try:
+                                rendering[path_key] = Path(rendering[path_key]).resolve().relative_to(
+                                    paper_output.resolve()
+                                ).as_posix()
+                            except (OSError, ValueError, TypeError):
+                                rendering[path_key] = None
+                    item.metadata["reconstruction"] = rendering
+                    panel_renderings.append(rendering)
                 segmentation_confidence = panel.get("segmentation_confidence")
                 segmentation_confidence_status = panel.get(
                     "segmentation_confidence_status",
@@ -1327,6 +1501,35 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             # Keep only compact per-series metadata in the paper worker; point batches are already persisted.
             for item in extracted:
                 item.metadata.setdefault("points_count", len(item.points))
+            reconstructed_absolute = None
+            for rendering in panel_renderings:
+                if rendering.get("status") == "RENDERED":
+                    relative = rendering.get("reconstructed_path")
+                    candidate = paper_output / relative if relative else None
+                    if candidate and candidate.is_file():
+                        reconstructed_absolute = candidate
+                        break
+            first_metadata = extracted[0].metadata if extracted else {}
+            trace_info = first_metadata.get("trace_specification") or {}
+            failure_reason = (
+                "AUTOMATIC_DIGITIZATION_AND_RECONSTRUCTION_COMPLETED"
+                if reconstructed_absolute else
+                trace_info.get("reason")
+                or first_metadata.get("reason")
+                or first_metadata.get("raster_qc", {}).get("reason")
+                or "NO_AUTOMATIC_DATA_POINTS"
+            )
+            panel_comparison_items.append({
+                "panel_id": panel_id,
+                "original_path": str(saved_crop) if saved_crop else None,
+                "reconstructed_path": str(reconstructed_absolute) if reconstructed_absolute else None,
+                "status": (
+                    "RECONSTRUCTED" if reconstructed_absolute else
+                    trace_info.get("status", "NEEDS_REVIEW")
+                ),
+                "reason": failure_reason,
+            })
+            for item in extracted:
                 item.points.clear()
             series.extend(extracted)
             review_needed = review_needed or panel_status in {"NEEDS_REVIEW", "EXTRACTED_NEEDS_REVIEW"}
@@ -1384,6 +1587,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
                 "segmentation_status": segmentation_status,
+                "evidence_image_path": (
+                    saved_crop.relative_to(paper_output).as_posix() if saved_crop else None
+                ),
+                "crop_mapping": crop_mapping,
                 "status": panel_status,
                 "segmentation_confidence": segmentation_confidence,
                 "segmentation_confidence_status": segmentation_confidence_status,
@@ -1397,6 +1604,21 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "shared_legend_refs": figure["shared_legends"],
             })
+
+    panel_comparison = {"status": "NOT_CREATED", "panel_count": len(panel_comparison_items)}
+    if panel_comparison_items:
+        comparison_path = paper_output / "comparisons" / "ALL_PANELS_COMPARISON.png"
+        try:
+            panel_comparison = build_panel_comparison_sheet(
+                panel_comparison_items, comparison_path
+            )
+            panel_comparison["path"] = comparison_path.relative_to(paper_output).as_posix()
+        except (OSError, ValueError, TypeError, OptionalDependencyError) as exc:
+            panel_comparison = {
+                "status": "RENDER_FAILED",
+                "reason": f"{type(exc).__name__}: {exc}",
+                "panel_count": len(panel_comparison_items),
+            }
 
     if pdf_path is not None and pdf_sha256:
         try:
@@ -1442,7 +1664,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "qc_thresholds": thresholds,
                "algorithm_implementation_fingerprint": stage_state["algorithm_implementation_fingerprint"],
                "profile_config_fingerprint": stage_state["profile_config_fingerprint"],
-               "llm_tokens": 0},
+               "llm_tokens": 0,
+               "panel_comparison": panel_comparison},
     )
     return {
         "cached": False, "snapshot": snapshot.to_dict(), "figures": figures, "panels": panels,
@@ -1454,4 +1677,5 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         "context_fingerprint": context.fingerprint,
         "resource_usage": disk_usage,
         "figure_count": len(figures), "panel_count": len(panels), "series_count": len(series),
+        "panel_comparison": panel_comparison,
     }

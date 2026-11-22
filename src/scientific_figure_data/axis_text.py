@@ -229,3 +229,95 @@ def extract_native_numeric_axis_anchors(
         "source": "PDF_NATIVE_TEXT",
         "provisional": True,
     }
+
+def _label_candidate(row: dict, plot_box: tuple[float, float, float, float]) -> dict | None:
+    text = " ".join(str(row.get("text", "")).replace("\n", " ").split())
+    if not text or not re.search(r"[A-Za-zΑ-Ωα-ω]", text):
+        return None
+    try:
+        confidence = float(row.get("confidence", 0.0) or 0.0)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    center = _box_center(row.get("polygon"))
+    if center is None or not math.isfinite(confidence):
+        return None
+    return {
+        "text": text,
+        "confidence": confidence,
+        "center_x": center[0],
+        "center_y": center[1],
+        "polygon": row.get("polygon"),
+    }
+
+
+def extract_axis_labels(
+    ocr_rows: list[dict],
+    plot_box: tuple[float, float, float, float],
+    *,
+    min_confidence: float = 0.55,
+    margin_fraction: float = 0.65,
+    min_margin_pixels: float = 18.0,
+) -> dict:
+    """Identify axis-label candidates by OCR text position relative to a plot box.
+
+    This is deliberately conservative and returns evidence/candidates rather
+    than asserting scientific semantics. Tick numbers are excluded.
+    """
+    x0, y0, x1, y1 = [float(value) for value in plot_box]
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError("plot_box must have positive width and height")
+    margin_x = max(min_margin_pixels, (x1 - x0) * margin_fraction)
+    margin_y = max(min_margin_pixels, (y1 - y0) * margin_fraction)
+    candidates = {"x": [], "y_left": [], "y_right": []}
+
+    for row in ocr_rows:
+        item = _label_candidate(row, (x0, y0, x1, y1))
+        if item is None or item["confidence"] < min_confidence:
+            continue
+        cx, cy = item["center_x"], item["center_y"]
+        if x0 <= cx <= x1 and y1 < cy <= y1 + margin_y:
+            horizontal_center = 1.0 - min(1.0, abs(cx - (x0 + x1) / 2) / max(1.0, (x1 - x0) / 2))
+            distance = (cy - y1) / max(1.0, margin_y)
+            item["score"] = 0.55 * item["confidence"] + 0.30 * horizontal_center + 0.15 * (1.0 - distance)
+            candidates["x"].append(item)
+        elif x0 - margin_x <= cx < x0 and y0 <= cy <= y1:
+            distance = (x0 - cx) / max(1.0, margin_x)
+            item["score"] = 0.75 * item["confidence"] + 0.25 * (1.0 - distance)
+            candidates["y_left"].append(item)
+        elif x1 < cx <= x1 + margin_x and y0 <= cy <= y1:
+            distance = (cx - x1) / max(1.0, margin_x)
+            item["score"] = 0.75 * item["confidence"] + 0.25 * (1.0 - distance)
+            candidates["y_right"].append(item)
+
+    for values in candidates.values():
+        values.sort(key=lambda item: (-item["score"], -len(item["text"]), item["center_y"]))
+
+    selected = {
+        key: values[0] if values else None
+        for key, values in candidates.items()
+    }
+    return {
+        "x_label": selected["x"]["text"] if selected["x"] else None,
+        "y_left_label": selected["y_left"]["text"] if selected["y_left"] else None,
+        "y_right_label": selected["y_right"]["text"] if selected["y_right"] else None,
+        "selected": selected,
+        "candidates": candidates,
+        "status": "AXIS_LABEL_CANDIDATES_FOUND" if any(selected.values()) else "NO_AXIS_LABELS_FOUND",
+        "min_confidence": min_confidence,
+        "provisional": True,
+    }
+
+
+def split_axis_label_unit(label: str | None) -> tuple[str | None, str | None]:
+    """Split a trailing parenthesized/bracketed unit without guessing a unit."""
+    if not isinstance(label, str) or not label.strip():
+        return None, None
+    value = " ".join(label.strip().split())
+    match = re.match(r"^(.*?)\s*[\(\[]\s*([^\)\]]{1,48})\s*[\)\]]\s*$", value)
+    if not match or not match.group(1).strip():
+        return value, None
+    unit = match.group(2).strip()
+    if not re.search(r"[A-Za-zµμΩ°]", unit):
+        return value, None
+    return match.group(1).strip(), unit
+

@@ -189,3 +189,13 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - No model/LLM call by default; zero LLM tokens remains the default. Never auto-fallback to paid models.
 - Do not claim scientific accuracy, calibrated QC, production readiness or Release from synthetic CI alone.
 - Preserve raw evidence and route ambiguity to `NEEDS_REVIEW`; never invent values, identities, units or comparison semantics.
+
+## Phase 1 automatic monotonic digitization (development PR)
+
+- Added a conservative raster panel-geometry splitter for figures without upstream panel boundaries.
+- Added OCR-positioned axis-label parsing and a guarded TraceSpecification for single-colour, X-monotonic raster curves.
+- Removed the UNCLASSIFIED semantic label as a blanket blocker for visual colour-candidate detection; recognized CV/EIS/non-monotonic families remain excluded from the monotonic tracer.
+- Added explicit source-image pixel crop mappings, retaining upstream media-asset bbox/page/extraction metadata without guessing PDF coordinate transforms.
+- Added independent reconstruction, source-pixel overlay and all-panel comparison-sheet output.
+- Scope is intentionally limited. Actual paper-image performance and Windows CI are pending; this entry does not claim scientific accuracy, general multi-panel understanding, CV/EIS, scatter or bar extraction.
+

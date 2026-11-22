@@ -161,7 +161,7 @@ def write_paper_artifacts(
     })
     extra = extra or {}
     digitization = {
-        "schema_version": "1.0", "algorithm_version": "0.1.0",
+        "schema_version": "1.0", "algorithm_version": "0.2.0",
         "paper_id": snapshot.paper_id, "input_fingerprint": snapshot.input_fingerprint,
         "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
