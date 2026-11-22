@@ -2477,10 +2477,7 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert report["worker_log_directory"]
     assert Path(report["worker_log_directory"]).is_dir()
     assert report["worker_shutdown"]
-    assert all(
-        item["status"] in {"WORKERS_REAPED", "WORKER_REMAINS_AFTER_KILL"}
-        for item in report["worker_shutdown"]
-    )
+    assert all(item["status"] == "WORKERS_REAPED" for item in report["worker_shutdown"])
     assert not (output_root / report["sfd_temp_directory_relative"]).exists()
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
