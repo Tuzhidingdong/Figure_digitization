@@ -8,7 +8,6 @@ on:
       - fix/p1-rapidocr-310-compatibility
       - feat/p1-multicolor-dual-y-axis
       - feat/p1-pixel-geometry-color-families
-      - fix/p2-multipanel-detection-worker-cleanup
   pull_request:
     branches:
       - main
