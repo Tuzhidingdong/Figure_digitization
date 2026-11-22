@@ -71,3 +71,8 @@ All automatically extracted records remain provisional and require review. Two-p
 For semantically ordered X axes, the detector may propose several distinct saturated colour families from the plot region. The families are recorded with pixel counts and colour evidence; each is then independently passed through the existing X-monotonic tracer. Disconnected markers, scatter-like traces, thick bands and same-colour multi-branch paths remain review-required rather than being reduced to a median line. Automatic family expansion is performed only for an unconfigured default series and does not replace explicit reviewer series definitions.
 
 Numeric anchors on the left and right Y margins are retained and calibrated independently. A curve uses an axis calibration only when its requested side is available or only one side is defensibly calibrated. When both sides are calibrated and the series-to-axis relationship is not established by explicit series metadata, both calibrations are retained and the series remains `NEEDS_REVIEW`; the software does not infer the mapping from curve color alone.
+
+
+### Color-coded dual Y-axis association
+
+When both Y axes have valid numeric anchors, the system preserves and calibrates both independently. It may assign a curve to one side only when at least two OCR-located numeric tick-label boxes on that side contain a consistent chromatic ink color and that color uniquely matches the curve's detected color family within a conservative RGB-distance threshold. The match, sampled colors, and distance are retained as evidence. Black/gray tick labels, conflicting labels, or a match to both sides do not resolve the association; the series stays `AMBIGUOUS_DUAL_Y_AXIS`.
