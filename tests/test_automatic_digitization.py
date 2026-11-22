@@ -604,8 +604,8 @@ def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path)
         _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
         _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
         _ocr_row("Time (s)", 205, 305, 0.96),
-        colored_row("Left signal (mA)", 0, 148, (230, 20, 30)),
-        colored_row("Right signal (mAh)", 365, 148, (20, 65, 225)),
+        colored_row("Left (mA)", 0, 148, (230, 20, 30)),
+        colored_row("Right (mAh)", 365, 148, (20, 65, 225)),
     ]
     image.save(image_path)
     context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
@@ -621,4 +621,12 @@ def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path)
         item.metadata["series_axis_assignment"]["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
         for item in records
     )
-    assert all(len(item.points) >= 100 for item in records)
+    assert all(len(item.points) >= 100 for item in records), [
+        {
+            "series_id": item.series_id,
+            "point_count": len(item.points),
+            "raster_qc": item.metadata.get("raster_qc"),
+            "trace_specification": item.metadata.get("trace_specification"),
+        }
+        for item in records
+    ]
