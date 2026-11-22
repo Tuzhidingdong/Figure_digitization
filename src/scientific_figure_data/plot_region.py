@@ -220,7 +220,9 @@ def detect_plot_box_candidates(
         return {
             "status": "NEEDS_REVIEW",
             "reason": "INSUFFICIENT_LONG_AXIS_LINES",
-            "image_size": [width, height],
+            "image_size": [original_width, original_height],
+            "analysis_image_size": [width, height],
+            "analysis_scale": analysis_scale,
             "horizontal_candidate_count": len(rows),
             "vertical_candidate_count": len(columns),
             "candidates": [],
