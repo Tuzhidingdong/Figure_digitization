@@ -18,12 +18,15 @@ UNCLASSIFIED by itself no longer prevents visual colour-candidate detection. How
 
 ## Panel segmentation
 
-When upstream panel boundaries are absent, the pipeline first checks whether the source image contains one dominant plot frame. If not, it may split the image at broad near-white horizontal/vertical gutters.
+When upstream panel boundaries are absent, the pipeline first attempts broad near-white gutter segmentation. If that cannot separate the figure, it scans for multiple spatially distinct plot-frame candidates using achromatic axis-line continuity and local chromatic-content evidence. This catches compact layouts whose panels touch or have no broad blank gutter. An individual large frame is not accepted as the only panel merely because it occupies a large fraction of the source image.
+
+For frame-candidate segmentation, each frame is expanded into a panel crop with a small shared margin so the plot border and nearby axis labels remain available to the per-panel detector. Adjacent crops may overlap slightly; the underlying plot-frame candidates remain spatially distinct. Candidate score, side coverage, bounding boxes and segmentation provenance are retained.
 
 This is provisional geometry only:
 - It does not infer scientific content or panel letters.
-- It does not guarantee that every separated region is a true scientific panel.
-- Ambiguous or unsplit figures remain reviewable; no boundaries are fabricated.
+- It does not guarantee that every detected frame is a true scientific panel.
+- Colored traces are excluded from the primary achromatic axis-line score so long curves are less likely to be mistaken for plot borders.
+- Ambiguous or unsplit figures remain reviewable; no panel or plot boundary is fabricated.
 
 An upstream panel inventory remains preferred where available.
 
@@ -64,6 +67,10 @@ This path does not digitize:
 The first-phase path therefore may correctly produce zero points for a multi-panel battery figure whose panels are cyclic voltammetry, dual-axis plots, scatter plots or schematics. Such refusal is preferable to fabricated data. Multi-panel segmentation, semantic panel recognition and broad chart-family extraction remain separate capability areas.
 
 All automatically extracted records remain provisional and require review. Two-point axis calibration residuals are not evidence of digitization accuracy; accuracy requires an independent annotated reference benchmark.
+
+## Worker lifecycle and interruption safety
+
+Each spawned worker redirects stdout/stderr to a per-run worker log so an orphaned child cannot keep the invoking PowerShell output pipe open after the parent exits. Workers monitor the multiprocessing parent sentinel and exit when the parent disappears. Normal scheduler shutdown is bounded: it waits briefly for executor-owned workers, then terminates and, only if necessary, kills those exact worker processes. Shutdown actions and worker log locations are recorded in the corpus run report. This does not replace atomic artifact writes or the job-ledger lease/recovery path.
 
 
 ## Multiple colour families and dual Y axes
