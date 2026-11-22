@@ -721,7 +721,15 @@ def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
             for item in side["candidate_inks"]
         }
         assert "AXIS_SPINE" in matched_sources
-        assert len(record.points) >= 100
+        assert len(record.points) >= 100, {
+            "side": record.y_axis_side,
+            "trace_specification": record.metadata.get("trace_specification"),
+            "raster_qc": record.metadata.get("raster_qc"),
+            "color_detection": record.metadata.get("color_detection"),
+            "calibration_errors": record.metadata.get("calibration_errors"),
+        }
+        if record.y_axis_side == "LEFT":
+            assert 55 in record.metadata["raster_qc"]["edge_axis_columns_removed"]
         assert all(point.x is not None and point.y is not None for point in record.points)
 
 
