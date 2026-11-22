@@ -8,6 +8,7 @@ import pytest
 from scientific_figure_data.panel_segmentation import detect_panel_regions
 
 
+# These are byte-identical copies of the two published CLI input figures.
 FIXTURES = Path(__file__).parent / "fixtures" / "real_figures"
 
 
