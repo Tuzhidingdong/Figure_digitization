@@ -130,6 +130,36 @@ def test_panel_segmentation_finds_a_two_by_three_grid(tmp_path: Path):
                for panel in result["panels"])
 
 
+def test_plot_frame_detection_recovers_an_open_l_shaped_axis(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "open_l_axis.png"
+    image = Image.new("RGB", (500, 350), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((60, 40, 60, 300), fill=(15, 15, 15), width=3)
+    draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
+    draw.line(
+        [(x, int(260 - 145 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(275 - 85 * (x - 75) / 350)) for x in range(75, 436)],
+        fill=(25, 75, 225), width=3,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_plot_box_candidates(image_path)
+    assert result["status"] == "PLOT_FRAME_CANDIDATES_FOUND", result
+    candidate = result["candidates"][0]
+    assert candidate["candidate_type"] == "OPEN_AXIS_CORNER"
+    x0, y0, x1, y1 = candidate["pixel_bbox"]
+    assert abs(x0 - 60) <= 4
+    assert abs(y0 - 40) <= 4
+    assert abs(x1 - 451) <= 4
+    assert abs(y1 - 301) <= 4
+
+
 def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.panel_segmentation import detect_panel_regions
