@@ -134,7 +134,7 @@ def detect_plot_box_candidates(
     minimum_height_fraction: float = 0.18,
     minimum_line_fraction: float = 0.12,
     minimum_adjacent_coverage: float = 0.50,
-    max_axis_lines: int = 40,
+    max_axis_lines: int = 20,
 ) -> dict:
     """Detect multiple independent chart frames in one source figure.
 
