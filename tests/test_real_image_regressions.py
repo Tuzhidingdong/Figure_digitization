@@ -34,6 +34,33 @@ def test_real_scientific_figures_are_not_collapsed_to_one_panel(
         f"{filename} still collapses to {len(panels)} automatic panel(s); "
         f"detector result={json.dumps(result, sort_keys=True)}"
     )
+    if filename == "P8_06.png":
+        width, height = result["image_size"]
+        frames = [
+            panel.get("plot_frame_bbox_pixels")
+            for panel in panels
+            if isinstance(panel.get("plot_frame_bbox_pixels"), list)
+        ]
+        top_frames = [
+            box for box in frames
+            if (box[1] + box[3]) / 2 < height * 0.55
+        ]
+        lower_frames = [
+            box for box in frames
+            if (box[1] + box[3]) / 2 >= height * 0.55
+        ]
+        lower_centers = sorted(
+            ((box[0] + box[2]) / (2.0 * width)) for box in lower_frames
+        )
+        assert len(top_frames) == 1 and len(lower_frames) == 3, (
+            f"P8_06 must resolve one upper and three lower plots; "
+            f"frames={frames}"
+        )
+        assert (
+            0.08 < lower_centers[0] < 0.36
+            and 0.36 < lower_centers[1] < 0.68
+            and 0.68 < lower_centers[2] < 0.96
+        ), f"P8_06 lower plot frames are not spatially distinct: {frames}"
     for panel in panels:
         bbox = panel.get("bbox")
         assert isinstance(bbox, list) and len(bbox) == 4, panel
@@ -178,6 +205,22 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
                     .get("trace_specification", {}).get("reason"),
                 "axis_assignment": row.get("metadata", {})
                     .get("series_axis_assignment"),
+                "x_label": row.get("x_label"),
+                "y_label": row.get("y_label"),
+                "chart_family": row.get("metadata", {})
+                    .get("chart_family_classification"),
+                "axis_label_evidence": row.get("metadata", {})
+                    .get("axis_label_evidence"),
+                "axis_text_color_association": row.get("metadata", {})
+                    .get("y_axis_text_color_association"),
+                "x_axis_anchors": row.get("metadata", {})
+                    .get("x_axis_anchors"),
+                "y_axis_anchors": row.get("metadata", {})
+                    .get("y_axis_anchors_by_side"),
+                "color_detection": row.get("metadata", {})
+                    .get("color_detection"),
+                "color_families": row.get("metadata", {})
+                    .get("color_family_detection"),
                 "y_calibrations": list(row.get("metadata", {})
                     .get("y_axis_calibrations", {})),
             }
