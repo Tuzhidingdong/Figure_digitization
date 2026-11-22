@@ -248,6 +248,11 @@ def test_process_paper_auto_segments_adjacent_panels_before_plot_tracing(
     ]
     assert len(auto_panels) >= 2
     assert all(item["evidence_image_path"] for item in auto_panels)
+    assert all(item["plot_box"] for item in auto_panels)
+    assert all(
+        item["plot_box_coordinate_space"] == "PANEL_IMAGE_PIXELS"
+        for item in auto_panels
+    )
 
 
 def test_process_paper_auto_traces_and_reconstructs_monotonic_raster_curve(
