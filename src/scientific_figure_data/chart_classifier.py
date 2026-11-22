@@ -5,7 +5,7 @@ import unicodedata
 
 
 TECHNIQUE_RULES = (
-    ("CV", ("cyclic voltammetry", "cyclic voltammogram", "current density", "potential", "scan rate")),
+    ("CV", ("cyclic voltammetry", "cyclic voltammogram")),
     ("EIS", ("electrochemical impedance", "nyquist", "z''", "z′′", "z'' vs", "imaginary impedance")),
     ("XRD", ("2theta", "2 theta", "2θ", "diffraction angle", "x-ray diffraction")),
     ("Raman", ("raman shift", "raman spectra", "raman modes")),
@@ -39,7 +39,7 @@ def classify_chart_family(
     explicit = (technique or "").strip()
     x_text = _normalize(x_label)
     y_text = _normalize(y_label)
-    context = " ".join(_normalize(value) for value in (caption, native_text, x_label, y_label) if value)
+    context = " ".join(_normalize(value) for value in (caption, x_label, y_label) if value)
     if explicit:
         normalized_technique = explicit.upper()
         canonical_technique = CANONICAL_TECHNIQUES.get(normalized_technique, explicit)
@@ -68,6 +68,9 @@ def classify_chart_family(
                 "confidence": 1.0,
                 "evidence": [{"source": "upstream_technique", "value": explicit}],
             }
+
+    if any(token in x_text for token in ("potential", "voltage")) and any(token in y_text for token in ("current", "current density")):
+        return {"technique": "CV", "chart_family": "NON_MONOTONIC_CURVE", "status": "PROVISIONAL_AXIS_SEMANTIC_CLASSIFICATION", "confidence": 0.80, "evidence": [{"source": "paired_axis_labels", "x_label": x_label, "y_label": y_label}]}
 
     matches = []
     for candidate, terms in TECHNIQUE_RULES:
