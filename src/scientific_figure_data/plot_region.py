@@ -632,7 +632,7 @@ def detect_chromatic_color_families(
     image_path: Path,
     plot_box: tuple[int, int, int, int],
     *,
-    max_families: int = 4,
+    max_families: int = 8,
     minimum_family_pixels: int = 24,
     minimum_family_fraction: float = 0.025,
     maximum_distance: float = 52.0,
