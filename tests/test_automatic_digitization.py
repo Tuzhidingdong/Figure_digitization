@@ -137,7 +137,9 @@ def test_plot_frame_detection_recovers_an_open_l_shaped_axis(tmp_path: Path):
     image_path = tmp_path / "open_l_axis.png"
     image = Image.new("RGB", (500, 350), "white")
     draw = ImageDraw.Draw(image)
-    draw.line((60, 40, 60, 300), fill=(15, 15, 15), width=3)
+    # A color-coded left Y-axis spine with a black X-axis is common in
+    # dual-axis scientific plots; candidate detection must retain it.
+    draw.line((60, 40, 60, 300), fill=(225, 25, 35), width=3)
     draw.line((60, 300, 450, 300), fill=(15, 15, 15), width=3)
     draw.line(
         [(x, int(260 - 145 * (x - 75) / 350)) for x in range(75, 436)],
