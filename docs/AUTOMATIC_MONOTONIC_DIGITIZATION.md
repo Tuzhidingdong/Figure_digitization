@@ -18,7 +18,9 @@ UNCLASSIFIED by itself no longer prevents visual colour-candidate detection. How
 
 ## Panel segmentation
 
-When upstream panel boundaries are absent, the pipeline first attempts broad near-white gutter segmentation. If that cannot separate the figure, it scans for multiple spatially distinct plot-frame candidates using achromatic axis-line continuity and local chromatic-content evidence. This catches compact layouts whose panels touch or have no broad blank gutter. An individual large frame is not accepted as the only panel merely because it occupies a large fraction of the source image.
+When upstream panel boundaries are absent, the pipeline first attempts broad near-white gutter segmentation. If that cannot separate the figure, it scans for multiple spatially distinct plot-frame candidates using achromatic axis-line continuity and local chromatic-content evidence. Black/gray horizontal axis lines and continuous colored vertical Y-axis spines are both supported; the detector also recognizes open L-shaped axis corners rather than requiring a closed four-sided frame. This catches compact layouts whose panels touch or have no broad blank gutter. An individual large frame is not accepted as the only panel merely because it occupies a large fraction of the source image.
+
+The candidate scan is bounded to a downsampled image of at most five million pixels, then maps every accepted frame candidate back into the original image coordinate system. Per-series color tracing remains on the original-resolution panel crop.
 
 For frame-candidate segmentation, each frame is expanded into a panel crop with a small shared margin so the plot border and nearby axis labels remain available to the per-panel detector. Adjacent crops may overlap slightly; the underlying plot-frame candidates remain spatially distinct. Candidate score, side coverage, bounding boxes and segmentation provenance are retained.
 
