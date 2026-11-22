@@ -1068,8 +1068,10 @@ def _extract_panel(
             and image_path is not None
             and isinstance(trace_color_rgb, (list, tuple))
             and len(trace_color_rgb) == 3
-            and isinstance(ocr_axis_evidence, dict)
+            and isinstance(axis_label_evidence, dict)
+            and isinstance(axis_label_evidence.get("candidates"), dict)
         ):
+            axis_ocr_rows = ocr_axis_evidence if isinstance(ocr_axis_evidence, dict) else {}
             side_matches = []
             side_color_evidence = {}
             curve_color_match = (
@@ -1088,7 +1090,7 @@ def _extract_panel(
                 ("RIGHT", "y_right_evidence", "y_right"),
             ):
                 tick_ink = estimate_ocr_text_ink_color(
-                    image_path, ocr_axis_evidence.get(evidence_key, [])
+                    image_path, axis_ocr_rows.get(evidence_key, [])
                 )
                 label_rows = (
                     axis_label_evidence.get("candidates", {}).get(label_key, [])
