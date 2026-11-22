@@ -3243,6 +3243,8 @@ def test_bounded_executor_shutdown_reaps_only_its_own_workers():
 
         def shutdown(self, wait=True, cancel_futures=False):
             self.shutdown_arguments = (wait, cancel_futures)
+            self._processes[111].alive = False
+            self._processes[111].exitcode = 0
 
     graceful = FakeProcess(111, terminate_exits=False, kill_exits=False)
     stubborn = FakeProcess(222, terminate_exits=False, kill_exits=True)
@@ -3253,8 +3255,9 @@ def test_bounded_executor_shutdown_reaps_only_its_own_workers():
     assert executor.shutdown_arguments == (False, True)
     assert report["status"] == "WORKERS_REAPED"
     by_pid = {item["pid"]: item for item in report["workers"]}
-    assert by_pid[111]["action"] == "TERMINATE_SENT"
+    assert by_pid[111]["action"] == "EXITED_GRACEFULLY"
     assert by_pid[222]["action"] == "KILL_SENT"
+    assert graceful.terminate_calls == 0
     assert graceful.kill_calls == 0
     assert stubborn.kill_calls == 1
     assert all(not item["still_alive"] for item in report["workers"])
