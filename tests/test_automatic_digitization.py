@@ -157,6 +157,10 @@ def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp
     for y in range(100, 305, 24):
         draw.line((31, y, 319, y), fill=(240, 240, 240), width=1)
         draw.line((321, y, 609, y), fill=(240, 240, 240), width=1)
+    # Thin, low-contrast vertical grid marks keep the horizontal projection
+    # occupied too, ensuring this case exercises the frame-candidate fallback.
+    draw.line((145, 81, 145, 319), fill=(240, 240, 240), width=8)
+    draw.line((465, 81, 465, 319), fill=(240, 240, 240), width=8)
     image.save(image_path, format="PNG")
 
     detected = detect_plot_box_candidates(image_path)
