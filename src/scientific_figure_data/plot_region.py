@@ -665,11 +665,27 @@ def detect_chromatic_color_families(
     if x1 <= x0 or y1 <= y0:
         return {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX", "families": []}
 
-    region = rgb[y0:y1, x0:x1].reshape(-1, 3).astype(np.int16)
+    region_rgb = rgb[y0:y1, x0:x1]
+    boundary_spine_exclusion = np.zeros(region_rgb.shape[:2], dtype=bool)
+    axis_spine_evidence = detect_colored_y_axis_spines(
+        image_path, (x0, y0, x1, y1)
+    )
+    edge_width = max(3, min(14, int(round((x1 - x0) * 0.012))))
+    for side in ("LEFT", "RIGHT"):
+        side_evidence = axis_spine_evidence.get("sides", {}).get(side, {})
+        if side_evidence.get("status") != "CHROMATIC_Y_AXIS_SPINE_DETECTED":
+            continue
+        if side == "LEFT":
+            boundary_spine_exclusion[:, :min(edge_width, region_rgb.shape[1])] = True
+        else:
+            boundary_spine_exclusion[:, max(0, region_rgb.shape[1] - edge_width):] = True
+
+    region = region_rgb.reshape(-1, 3).astype(np.int16)
     hues, saturations, values = _rgb_to_hsv_arrays(region)
     selected_mask = (
         (saturations >= float(minimum_saturation))
         & (values >= float(minimum_value))
+        & ~boundary_spine_exclusion.reshape(-1)
     )
     selected = region[selected_mask]
     selected_hues = hues[selected_mask]
@@ -681,6 +697,7 @@ def detect_chromatic_color_families(
             "status": "NEEDS_REVIEW",
             "reason": "INSUFFICIENT_CHROMATIC_PIXELS",
             "saturated_pixel_count": total,
+            "axis_spine_exclusion": axis_spine_evidence,
             "families": [],
         }
 
@@ -752,6 +769,7 @@ def detect_chromatic_color_families(
         "truncated": bool(remaining.sum() >= minimum_family_pixels),
         "color_space": "HSV_HUE_FAMILY",
         "hue_tolerance_degrees": float(hue_tolerance_degrees),
+        "axis_spine_exclusion": axis_spine_evidence,
         "provisional": True,
     }
 
