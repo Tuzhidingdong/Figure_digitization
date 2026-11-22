@@ -209,6 +209,11 @@ def detect_panel_regions(
                     "label": None,
                     "bbox": [panel_x0, panel_y0, panel_x1, panel_y1],
                     "bbox_coordinate_space": "IMAGE_PIXELS",
+                    "plot_box": [
+                        x0 - panel_x0, y0 - panel_y0,
+                        x1 - panel_x0, y1 - panel_y0,
+                    ],
+                    "plot_box_coordinate_space": "PANEL_IMAGE_PIXELS",
                     "plot_frame_bbox_pixels": [x0, y0, x1, y1],
                     "plot_frame_score": candidate.get("score"),
                     "segmentation_provenance": "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION",
