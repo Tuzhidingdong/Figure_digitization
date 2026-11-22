@@ -196,8 +196,13 @@ def detect_plot_box_candidates(
     # long and nearly horizontal/vertical, so counting them as frame lines
     # creates false plot rectangles and can suppress the true panel candidates.
     axis_ink = dark & (chroma <= 65)
+    chromatic_axis_ink = (chroma >= 80) & (luminance <= 220)
+    # Colored Y-axis spines/ticks are useful vertical-edge evidence. A normal
+    # colored data trace occupies only a few pixels per X column and therefore
+    # does not pass the same long-line coverage threshold.
+    vertical_ink = axis_ink | chromatic_axis_ink
     row_profile = axis_ink.mean(axis=1)
-    column_profile = axis_ink.mean(axis=0)
+    column_profile = vertical_ink.mean(axis=0)
 
     def line_positions(profile, dimension):
         raw = [
@@ -255,8 +260,8 @@ def detect_plot_box_candidates(
 
             horizontal_top = float(axis_ink[max(0, top - 1):min(height, top + 2), left:right].mean())
             horizontal_bottom = float(axis_ink[max(0, bottom - 1):min(height, bottom + 2), left:right].mean())
-            vertical_left = float(axis_ink[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
-            vertical_right = float(axis_ink[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
+            vertical_left = float(vertical_ink[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
+            vertical_right = float(vertical_ink[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
             sides = (horizontal_top, horizontal_bottom, vertical_left, vertical_right)
 
             adjacent = max(
@@ -346,7 +351,7 @@ def detect_plot_box_candidates(
             for segment in horizontal_segments
         }
         for x in columns:
-            vertical_band = axis_ink[:, max(0, x - 1):min(width, x + 2)]
+            vertical_band = vertical_ink[:, max(0, x - 1):min(width, x + 2)]
             vertical_segments = contiguous_segments(
                 vertical_band.any(axis=1), minimum_vertical_length
             )
