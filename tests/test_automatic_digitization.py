@@ -179,6 +179,76 @@ def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp
     )
 
 
+def test_process_paper_auto_segments_adjacent_panels_before_plot_tracing(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-adjacent"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    image = Image.new("RGB", (640, 400), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((30, 80, 320, 320), outline=(20, 20, 20), width=3)
+    draw.rectangle((320, 80, 610, 320), outline=(20, 20, 20), width=3)
+    draw.line(
+        [(x, int(270 - 125 * (x - 48) / 250)) for x in range(48, 304)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(285 - 70 * (x - 48) / 250)) for x in range(48, 304)],
+        fill=(25, 75, 225), width=3,
+    )
+    draw.line(
+        [(x, int(260 - 90 * (x - 338) / 250)) for x in range(338, 594)],
+        fill=(225, 25, 35), width=3,
+    )
+    draw.line(
+        [(x, int(285 - 145 * (x - 338) / 250)) for x in range(338, 594)],
+        fill=(25, 75, 225), width=3,
+    )
+    for y in range(100, 305, 24):
+        draw.line((31, y, 319, y), fill=(240, 240, 240), width=1)
+        draw.line((321, y, 609, y), fill=(240, 240, 240), width=1)
+    draw.line((145, 81, 145, 319), fill=(240, 240, 240), width=8)
+    draw.line((465, 81, 465, 319), fill=(240, 240, 240), width=8)
+    image.save(image_path, format="PNG")
+
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({
+            "figures": [{
+                "figure_id": "Figure1",
+                "image_path": "Figure1.png",
+                "caption": "Two adjacent time-series panels with no white gutter.",
+                "panels": [],
+            }]
+        }),
+        encoding="utf-8",
+    )
+
+    result = process_paper(
+        input_root,
+        Path("paper-adjacent"),
+        tmp_path / "output",
+        options={"ocr": False, "memory_limit_mb": 1024},
+    )
+
+    assert result["panel_count"] >= 2
+    assert result["figure_count"] == 1
+    paper_output = tmp_path / "output" / "papers" / "paper-adjacent"
+    layout = json.loads((paper_output / "panel_layout.json").read_text(encoding="utf-8"))
+    detected = layout["figures"][0]["panel_segmentation"]
+    assert detected["reason"] == "MULTIPLE_PLOT_FRAME_CANDIDATES"
+    auto_panels = [
+        item for item in layout["panels"]
+        if item["segmentation_provenance"] == "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION"
+    ]
+    assert len(auto_panels) >= 2
+    assert all(item["evidence_image_path"] for item in auto_panels)
+
+
 def test_process_paper_auto_traces_and_reconstructs_monotonic_raster_curve(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ):
