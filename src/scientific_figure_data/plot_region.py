@@ -216,7 +216,7 @@ def detect_plot_box_candidates(
 
     rows = line_positions(row_profile, height)
     columns = line_positions(column_profile, width)
-    if len(rows) < 2 or len(columns) < 2:
+    if not rows or not columns:
         return {
             "status": "NEEDS_REVIEW",
             "reason": "INSUFFICIENT_LONG_AXIS_LINES",
