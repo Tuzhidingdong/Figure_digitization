@@ -258,6 +258,9 @@ def detect_panel_regions(
         tuple(int(value) for value in box)
         for box, _ in leaves
     }
+    top_band_y1 = int(round(height * 0.50))
+    if top_band_y1 >= height * 0.18:
+        scan_regions.add((0, 0, width, top_band_y1))
     for start_fraction in (0.50, 0.55):
         band_y0 = int(round(height * start_fraction))
         if height - band_y0 >= height * 0.18:
