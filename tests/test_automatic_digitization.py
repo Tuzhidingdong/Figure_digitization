@@ -216,3 +216,52 @@ def test_process_paper_does_not_route_cv_into_monotonic_raster_tracer(
     assert item["metadata"]["chart_family_classification"]["technique"] == "CV"
     assert item["metadata"]["trace_specification"]["status"] == "NOT_SUPPORTED"
     assert item["metadata"]["points_count"] == 0
+
+
+
+def test_process_paper_records_ocr_failure_and_continues_with_panel_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from scientific_figure_data import ocr
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-ocr-failure"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    _make_monotonic_chart(image_path)
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({
+            "figures": [{
+                "figure_id": "Figure1",
+                "image_path": "Figure1.png",
+                "caption": "A monotonic time-series chart.",
+                "panels": [],
+            }]
+        }),
+        encoding="utf-8",
+    )
+
+    def fail_ocr(_image_path: Path):
+        raise TypeError("RapidOCR engine_type must be an Enum")
+
+    monkeypatch.setattr(ocr, "run_ocr", fail_ocr)
+    result = process_paper(
+        input_root,
+        Path("paper-ocr-failure"),
+        tmp_path / "output",
+        options={"ocr": True, "memory_limit_mb": 1024},
+    )
+
+    assert result["status"] == "COMPLETED_WITH_REVIEW"
+    assert result["job_state"] == "NEEDS_REVIEW"
+    assert result["panel_count"] == 1
+    panel_ocr = result["panels"][0]["ocr_status"]
+    assert panel_ocr["status"] == "FAILED"
+    assert panel_ocr["error_type"] == "TypeError"
+    assert "Enum" in panel_ocr["message"]
+    assert result["series"][0]["metadata"]["ocr_status"] == panel_ocr
+    assert any(
+        warning.startswith("OCR_FAILED:Figure1/")
+        for warning in result["snapshot"]["warnings"]
+    )
