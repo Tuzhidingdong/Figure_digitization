@@ -357,9 +357,18 @@ def estimate_ocr_text_ink_color(
         chromatic = crop[(saturation >= minimum_saturation) & (brightness >= 55) & (brightness < 250)]
         if len(chromatic) < minimum_pixels_per_label:
             continue
-        center = np.median(chromatic.astype(np.float32), axis=0)
+        # Prefer the dominant quantized ink cluster over a raw median:
+        # antialiased glyph edges mix with the white background and can shift
+        # the median far away from the actual axis-label color.
+        quantization = 16
+        quantized = ((chromatic + quantization // 2) // quantization) * quantization
+        quantized = np.clip(quantized, 0, 255).astype(np.uint8)
+        bins, counts = np.unique(quantized, axis=0, return_counts=True)
+        dominant_bin = bins[int(counts.argmax())]
+        dominant_pixels = chromatic[np.all(quantized == dominant_bin, axis=1)]
+        center = np.median(dominant_pixels.astype(np.float32), axis=0)
         label_colors.append(center)
-        label_pixel_counts.append(int(len(chromatic)))
+        label_pixel_counts.append(int(len(dominant_pixels)))
 
     if len(label_colors) < minimum_colored_labels:
         return {
