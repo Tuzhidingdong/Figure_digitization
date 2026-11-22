@@ -1214,8 +1214,18 @@ def _extract_panel(
                     "reason": None,
                     "evidence": {
                         "curve_color_rgb": [int(value) for value in trace_color_rgb],
-                        "axis_text_color_rgb": selected_ink["color_rgb"],
-                        "axis_text_evidence_source": selected_ink["source"],
+                        "axis_color_evidence_rgb": selected_ink["color_rgb"],
+                        "axis_color_evidence_source": selected_ink["source"],
+                        # Preserve the prior text-specific keys for consumers
+                        # that relied on them, but do not mislabel a spine as text.
+                        "axis_text_color_rgb": (
+                            selected_ink["color_rgb"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
+                        "axis_text_evidence_source": (
+                            selected_ink["source"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
                         "distance_kind": distance_kind,
                         "color_distance": round(distance, 3),
                     },
