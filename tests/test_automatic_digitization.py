@@ -210,6 +210,39 @@ def test_colored_y_axis_spine_is_distinguished_from_curve_endpoints(tmp_path: Pa
     )
 
 
+def test_downsampled_plot_frame_candidates_map_back_to_original_pixels(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    image_path = tmp_path / "large_open_axis_figure.png"
+    image = Image.new("RGB", (2600, 2200), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((120, 80, 120, 1980), fill=(20, 20, 20), width=4)
+    draw.line((120, 1980, 2460, 1980), fill=(20, 20, 20), width=4)
+    draw.line(
+        [(x, int(1780 - 650 * (x - 180) / 2200)) for x in range(180, 2420)],
+        fill=(225, 25, 35), width=4,
+    )
+    image.save(image_path, format="PNG")
+
+    result = detect_plot_box_candidates(image_path)
+    assert result["status"] == "PLOT_FRAME_CANDIDATES_FOUND", result
+    assert result["analysis_scale"] < 1.0
+    assert result["analysis_image_size"][0] * result["analysis_image_size"][1] <= 5_000_000
+    candidate = next(
+        item for item in result["candidates"]
+        if item.get("candidate_type") == "OPEN_AXIS_CORNER"
+    )
+    x0, y0, x1, y1 = candidate["pixel_bbox"]
+    assert abs(x0 - 120) <= 8
+    assert abs(y0 - 80) <= 8
+    assert abs(x1 - 2461) <= 8
+    assert abs(y1 - 1981) <= 8
+    assert candidate["image_size"] == [2600, 2200]
+
+
 def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.panel_segmentation import detect_panel_regions
