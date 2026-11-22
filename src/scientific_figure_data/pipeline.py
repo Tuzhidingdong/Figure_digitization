@@ -611,7 +611,7 @@ def _extract_panel(
         and not definitions[0].get("pixel_points")
     ):
         base_definition = definitions[0]
-        pre_plot_box = base_definition.get("plot_box")
+        pre_plot_box = base_definition.get("plot_box") or panel.get("plot_box")
         pre_plot_detection = None
         if not pre_plot_box:
             try:
@@ -936,7 +936,9 @@ def _extract_panel(
             if current_y_state != previous_y_state or len(y_axis_anchors) >= 2:
                 y_anchor_source = "OCR"
             if not explicit_relative_signal and family == "SPECTRUM":
-                relative_signal = len(y_axis_anchors) < 2
+                relative_signal = len(y_axis_anchors) < 2 and not any(
+                    len(values) >= 2 for values in y_axis_anchors_by_side.values()
+                )
 
         if native_axis_evidence or ocr_axis_evidence:
             axis_text_evidence = {
@@ -1121,11 +1123,11 @@ def _extract_panel(
                         "crop_mapping": crop_mapping,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
-                    "y_axis_calibrations": {
-                        side: calibration_to_dict(calibration)
-                        for side, calibration in y_axis_calibrations.items()
-                    },
-                    "series_axis_assignment": series_axis_assignment,
+                        "y_axis_calibrations": {
+                            side: calibration_to_dict(calibration)
+                            for side, calibration in y_axis_calibrations.items()
+                        },
+                        "series_axis_assignment": series_axis_assignment,
                         "calibration_errors": calibration_errors,
                     }
                 else:
@@ -1137,11 +1139,11 @@ def _extract_panel(
                         "chart_family_classification": classification,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
-                    "y_axis_calibrations": {
-                        side: calibration_to_dict(calibration)
-                        for side, calibration in y_axis_calibrations.items()
-                    },
-                    "series_axis_assignment": series_axis_assignment,
+                        "y_axis_calibrations": {
+                            side: calibration_to_dict(calibration)
+                            for side, calibration in y_axis_calibrations.items()
+                        },
+                        "series_axis_assignment": series_axis_assignment,
                         "calibration_errors": calibration_errors,
                     }
             except (OSError, KeyError, TypeError, ValueError) as exc:
@@ -1201,11 +1203,11 @@ def _extract_panel(
                                "axis_text_evidence": axis_text_evidence,
                                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
-                    "y_axis_calibrations": {
-                        side: calibration_to_dict(calibration)
-                        for side, calibration in y_axis_calibrations.items()
-                    },
-                    "series_axis_assignment": series_axis_assignment,
+                        "y_axis_calibrations": {
+                            side: calibration_to_dict(calibration)
+                            for side, calibration in y_axis_calibrations.items()
+                        },
+                        "series_axis_assignment": series_axis_assignment,
                                "calibration_errors": calibration_errors}
         elif image_path and trace_specification.get("status") == "READY":
             specification = trace_specification["specification"]
@@ -1221,11 +1223,11 @@ def _extract_panel(
             )
             record.metadata = {"x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
-                    "y_axis_calibrations": {
-                        side: calibration_to_dict(calibration)
-                        for side, calibration in y_axis_calibrations.items()
-                    },
-                    "series_axis_assignment": series_axis_assignment,
+                        "y_axis_calibrations": {
+                            side: calibration_to_dict(calibration)
+                            for side, calibration in y_axis_calibrations.items()
+                        },
+                        "series_axis_assignment": series_axis_assignment,
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
                                "vector_selection": vector_selection,
@@ -1257,11 +1259,11 @@ def _extract_panel(
                 "plot_box_pixels": list(plot_box_pixels) if plot_box_pixels else None,
                 "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                 "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
-                    "y_axis_calibrations": {
-                        side: calibration_to_dict(calibration)
-                        for side, calibration in y_axis_calibrations.items()
-                    },
-                    "series_axis_assignment": series_axis_assignment,
+                        "y_axis_calibrations": {
+                            side: calibration_to_dict(calibration)
+                            for side, calibration in y_axis_calibrations.items()
+                        },
+                        "series_axis_assignment": series_axis_assignment,
                 "calibration_errors": calibration_errors,
             }
         if record.points:
