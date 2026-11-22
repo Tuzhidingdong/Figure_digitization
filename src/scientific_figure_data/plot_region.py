@@ -174,9 +174,16 @@ def detect_plot_box_candidates(
         + 0.7152 * rgb[:, :, 1].astype(np.float32)
         + 0.0722 * rgb[:, :, 2].astype(np.float32)
     )
+    chroma = (
+        rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2).astype(np.int16)
+    )
     dark = luminance <= 178.0
-    row_profile = dark.mean(axis=1)
-    column_profile = dark.mean(axis=0)
+    # Use mostly achromatic ink to locate axes. Saturated data traces can be
+    # long and nearly horizontal/vertical, so counting them as frame lines
+    # creates false plot rectangles and can suppress the true panel candidates.
+    axis_ink = dark & (chroma <= 65)
+    row_profile = axis_ink.mean(axis=1)
+    column_profile = axis_ink.mean(axis=0)
 
     def line_positions(profile, dimension):
         raw = [
@@ -230,10 +237,10 @@ def detect_plot_box_candidates(
             if not 0.20 <= aspect <= 5.0:
                 continue
 
-            horizontal_top = float(dark[max(0, top - 1):min(height, top + 2), left:right].mean())
-            horizontal_bottom = float(dark[max(0, bottom - 1):min(height, bottom + 2), left:right].mean())
-            vertical_left = float(dark[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
-            vertical_right = float(dark[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
+            horizontal_top = float(axis_ink[max(0, top - 1):min(height, top + 2), left:right].mean())
+            horizontal_bottom = float(axis_ink[max(0, bottom - 1):min(height, bottom + 2), left:right].mean())
+            vertical_left = float(axis_ink[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
+            vertical_right = float(axis_ink[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
             sides = (horizontal_top, horizontal_bottom, vertical_left, vertical_right)
 
             adjacent = max(
