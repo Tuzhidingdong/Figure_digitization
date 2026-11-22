@@ -791,6 +791,42 @@ def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry
     assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
 
 
+def test_multicolor_family_inventory_supports_more_than_four_curves(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+
+    image_path = tmp_path / "five_color_curves.png"
+    image = Image.new("RGB", (400, 260), "white")
+    draw = ImageDraw.Draw(image)
+    colors = [
+        (230, 30, 35),
+        (230, 120, 25),
+        (30, 170, 60),
+        (25, 90, 225),
+        (160, 35, 205),
+    ]
+    for index, color in enumerate(colors):
+        base_y = 48 + index * 34
+        points = [
+            (x, int(base_y - 14 * (x - 35) / 330 + 2 * ((x - 35) / 330) ** 2))
+            for x in range(35, 366)
+        ]
+        draw.line(points, fill=color, width=3)
+    image.save(image_path, format="PNG")
+
+    result = detect_chromatic_color_families(
+        image_path, (20, 20, 380, 230)
+    )
+    assert result["status"] == "MULTIPLE_CHROMATIC_FAMILIES", result
+    assert result["family_count"] == 5, result
+    assert result["truncated"] is False
+    hues = sorted(
+        item["color_match"]["hue_center_degrees"]
+        for item in result["families"]
+    )
+    assert len(hues) == len(set(round(value / 10) for value in hues))
+
+
 def test_geometry_only_trace_specification_does_not_require_a_y_axis_mapping(tmp_path: Path):
     from scientific_figure_data.calibration import fit_linear_axis
     from scientific_figure_data.trace_spec import generate_trace_specification
