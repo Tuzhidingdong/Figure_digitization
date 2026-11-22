@@ -694,10 +694,10 @@ def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
     ]
     context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
     records = _extract_panel(
-        image_path, "paper", "Figure1", "a", {},
+        image_path, "paper", "Figure1", "a",
+        {"plot_box": [55, 40, 360, 270]},
         {"caption": "Two monotonic time-series curves with dual Y axes."},
         {}, context, None, ocr_evidence=rows,
-        panel={"plot_box": [55, 40, 360, 270]},
     )
     assert len(records) == 2
     by_side = {record.y_axis_side: record for record in records}
