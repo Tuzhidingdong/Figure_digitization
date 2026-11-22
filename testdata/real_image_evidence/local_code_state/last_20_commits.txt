@@ -1,0 +1,126 @@
+﻿=== E:\Zinc_batters_datas\Figure_digitization ===
+bcc394a (HEAD -> main, origin/main, origin/HEAD) docs(status): clarify remaining AC-36 legal review
+232f098 docs(status): sync review, licensing and export acceptance
+f597d01 fix(export): clear standardized units for unresolved axes
+c518ee4 feat(export): populate explicitly requested standardized values
+f744414 fix(audit): deduplicate installed package metadata
+7a21534 build(audit): generate resolved dependency and license inventory
+873c3b1 test(review): assert mixed panel classification conflict
+1a1e9ca feat(review): make chart classification revisable
+3cc0747 docs(status): distinguish functional and status-only commits
+eee0fad docs(status): sync current head and acceptance blockers
+df5bbac test(semantics): cover censored limit provenance
+3c127e8 fix(semantics): preserve explicit LOD and LOQ limits
+17cd6b0 fix(pipeline): import math for bbox validation
+eb82e3e docs(status): record additional P0 hardening work
+f0cee4b docs(windows): point resource benchmark at preprocessed paper packages
+1aa7fe1 docs(readme): align run input root with Chem-Literature package layout
+4466e5c test(semantics): assert export uses configured PFAS metric guard
+3fa0d6a fix(panels): label invalid normalized bbox coordinate space
+c97fac1 fix(panels): validate normalized bbox geometry before acceptance
+32fae64 docs(status): reconcile P0 acceptance evidence and remaining blockers
+=== E:\Zinc_batters_datas\Figure_digitization_pr16_test ===
+4ca762e (HEAD, origin/fix/p0-classification-qc-contract) docs(status): record P0 classifier and QC follow-up
+efb7134 test(qc): distinguish axis calibration from QC benchmark state
+3831454 test(classifier,qc): cover weak text and axis calibration state
+b006143 docs(contract): document manual plot box override
+c9b573e feat(qc): expose axis calibration state
+8ae3ca3 fix(classifier): require figure-local CV evidence
+bcc394a (origin/main, origin/HEAD, main) docs(status): clarify remaining AC-36 legal review
+232f098 docs(status): sync review, licensing and export acceptance
+f597d01 fix(export): clear standardized units for unresolved axes
+c518ee4 feat(export): populate explicitly requested standardized values
+f744414 fix(audit): deduplicate installed package metadata
+7a21534 build(audit): generate resolved dependency and license inventory
+873c3b1 test(review): assert mixed panel classification conflict
+1a1e9ca feat(review): make chart classification revisable
+3cc0747 docs(status): distinguish functional and status-only commits
+eee0fad docs(status): sync current head and acceptance blockers
+df5bbac test(semantics): cover censored limit provenance
+3c127e8 fix(semantics): preserve explicit LOD and LOQ limits
+17cd6b0 fix(pipeline): import math for bbox validation
+eb82e3e docs(status): record additional P0 hardening work
+=== E:\Zinc_batters_datas\Figure_digitization_p1_test_20261122 ===
+727cb82 (HEAD, origin/feat/p1-automatic-monotonic-digitization) fix: honor OCR-selected Y-axis side during calibration
+251a66b fix: integrate automatic digitization modules into pipeline
+c80593a ci: run Windows validation for stacked Phase 1 PR
+86dd3d5 feat: add automatic monotonic raster digitization
+4ca762e (origin/fix/p0-classification-qc-contract) docs(status): record P0 classifier and QC follow-up
+efb7134 test(qc): distinguish axis calibration from QC benchmark state
+3831454 test(classifier,qc): cover weak text and axis calibration state
+b006143 docs(contract): document manual plot box override
+c9b573e feat(qc): expose axis calibration state
+8ae3ca3 fix(classifier): require figure-local CV evidence
+bcc394a (origin/main, origin/HEAD, main) docs(status): clarify remaining AC-36 legal review
+232f098 docs(status): sync review, licensing and export acceptance
+f597d01 fix(export): clear standardized units for unresolved axes
+c518ee4 feat(export): populate explicitly requested standardized values
+f744414 fix(audit): deduplicate installed package metadata
+7a21534 build(audit): generate resolved dependency and license inventory
+873c3b1 test(review): assert mixed panel classification conflict
+1a1e9ca feat(review): make chart classification revisable
+3cc0747 docs(status): distinguish functional and status-only commits
+eee0fad docs(status): sync current head and acceptance blockers
+=== E:\Zinc_batters_datas\Figure_digitization_p1_ocrfix_test_20261122 ===
+33f0454 (HEAD, origin/fix/p1-rapidocr-310-compatibility) test(ocr): update RapidOCR fake to expose EngineType enum
+30a0167 test(ocr): verify RapidOCR 3.10 enum initialization
+e278948 fix(ocr): update windows-ci.yml
+fb79e80 fix(ocr): update test_automatic_digitization.py
+3d73433 fix(ocr): update pipeline.py
+9e35d0c fix(ocr): update ocr.py
+727cb82 (origin/feat/p1-automatic-monotonic-digitization) fix: honor OCR-selected Y-axis side during calibration
+251a66b fix: integrate automatic digitization modules into pipeline
+c80593a ci: run Windows validation for stacked Phase 1 PR
+86dd3d5 feat: add automatic monotonic raster digitization
+4ca762e (origin/fix/p0-classification-qc-contract) docs(status): record P0 classifier and QC follow-up
+efb7134 test(qc): distinguish axis calibration from QC benchmark state
+3831454 test(classifier,qc): cover weak text and axis calibration state
+b006143 docs(contract): document manual plot box override
+c9b573e feat(qc): expose axis calibration state
+8ae3ca3 fix(classifier): require figure-local CV evidence
+bcc394a (origin/main, origin/HEAD, main) docs(status): clarify remaining AC-36 legal review
+232f098 docs(status): sync review, licensing and export acceptance
+f597d01 fix(export): clear standardized units for unresolved axes
+c518ee4 feat(export): populate explicitly requested standardized values
+=== E:\Zinc_batters_datas\Figure_digitization_p1_multicolor_test_20261122 ===
+3c49ba3 (HEAD, origin/feat/p1-multicolor-dual-y-axis) fix(digitization): estimate OCR tick ink from dominant quantized glyph pixels
+bc3fc76 test(digitization): diagnose color-coded dual-axis matching evidence
+2af58b2 docs(digitization): document evidence-based dual-Y association
+a3609c5 test(digitization): cover color-coded dual Y-axis association
+7b18232 feat(digitization): associate curves with uniquely color-coded Y axes
+e8d7cb1 feat(digitization): sample OCR tick-label ink color evidence
+3c181ed test(cache): expect current algorithm version 0.3.0
+6584ecd fix(cache): pass algorithm version to artifact writer
+a46ae54 fix(cache): persist current algorithm version in digitization artifact
+ca29f34 fix(digitization): refuse truncated color candidates and respect explicit chart family
+34fce84 ci: run Windows checks for multicolor digitization branch
+e98e8f0 docs(digitization): document multicolor and dual Y behavior
+c5e64c2 test(digitization): cover multicolor series and dual Y axes
+8b698b8 fix(digitization): preserve dual-axis spectrum calibration
+eaa64cb feat(digitization): trace multicolor series and retain dual Y calibrations
+7d097a1 feat(digitization): detect separate chromatic color families
+33f0454 (origin/fix/p1-rapidocr-310-compatibility) test(ocr): update RapidOCR fake to expose EngineType enum
+30a0167 test(ocr): verify RapidOCR 3.10 enum initialization
+e278948 fix(ocr): update windows-ci.yml
+fb79e80 fix(ocr): update test_automatic_digitization.py
+=== E:\Zinc_batters_datas\Figure_digitization_p1_pixel_geometry_test_20261122 ===
+4bb386c (HEAD, origin/feat/p1-pixel-geometry-color-families) test(digitization): keep axis-title text outside trace region
+d7facca fix(digitization): evaluate axis-title color with native tick anchors
+f55ccbd fix(digitization): initialize hue mask geometry and provenance
+d1e0305 feat(digitization): decouple pixel traces from numeric axis mapping
+3c49ba3 (origin/feat/p1-multicolor-dual-y-axis) fix(digitization): estimate OCR tick ink from dominant quantized glyph pixels
+bc3fc76 test(digitization): diagnose color-coded dual-axis matching evidence
+2af58b2 docs(digitization): document evidence-based dual-Y association
+a3609c5 test(digitization): cover color-coded dual Y-axis association
+7b18232 feat(digitization): associate curves with uniquely color-coded Y axes
+e8d7cb1 feat(digitization): sample OCR tick-label ink color evidence
+3c181ed test(cache): expect current algorithm version 0.3.0
+6584ecd fix(cache): pass algorithm version to artifact writer
+a46ae54 fix(cache): persist current algorithm version in digitization artifact
+ca29f34 fix(digitization): refuse truncated color candidates and respect explicit chart family
+34fce84 ci: run Windows checks for multicolor digitization branch
+e98e8f0 docs(digitization): document multicolor and dual Y behavior
+c5e64c2 test(digitization): cover multicolor series and dual Y axes
+8b698b8 fix(digitization): preserve dual-axis spectrum calibration
+eaa64cb feat(digitization): trace multicolor series and retain dual Y calibrations
+7d097a1 feat(digitization): detect separate chromatic color families

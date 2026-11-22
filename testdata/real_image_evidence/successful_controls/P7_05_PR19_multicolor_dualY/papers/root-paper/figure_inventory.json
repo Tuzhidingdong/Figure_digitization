@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "figures": [
+    {
+      "figure_id": "P7_05",
+      "page": null,
+      "source_doc_type": "MAIN",
+      "source_asset_status": "LOCAL_PATH_HASH_VERIFIED",
+      "source_pdf_integrity_status": "NOT_AVAILABLE",
+      "source_image_asset_path": "MAIN_MAIN_FIG_P7_05.png",
+      "source_image_asset_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+      "source_image_asset_id": null,
+      "source_media_asset_metadata": null,
+      "source_bbox": null,
+      "source_bbox_role": "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED",
+      "caption": null,
+      "shared_legends": [],
+      "technique": null,
+      "domain": null,
+      "panel_segmentation": {
+        "status": "PROVISIONAL_PANELS_DETECTED",
+        "reason": "BROAD_WHITESPACE_GUTTERS",
+        "image_size": [
+          1401,
+          677
+        ],
+        "panel_count": 6,
+        "panels": [
+          {
+            "panel_id": "auto-01",
+            "label": null,
+            "bbox": [
+              0,
+              0,
+              434,
+              351
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.7128,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          },
+          {
+            "panel_id": "auto-02",
+            "label": null,
+            "bbox": [
+              471,
+              0,
+              982,
+              351
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.7129,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          },
+          {
+            "panel_id": "auto-03",
+            "label": null,
+            "bbox": [
+              1000,
+              0,
+              1401,
+              351
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.7129,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          },
+          {
+            "panel_id": "auto-04",
+            "label": null,
+            "bbox": [
+              0,
+              356,
+              484,
+              677
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.7174,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          },
+          {
+            "panel_id": "auto-05",
+            "label": null,
+            "bbox": [
+              501,
+              356,
+              950,
+              677
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.7174,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          },
+          {
+            "panel_id": "auto-06",
+            "label": null,
+            "bbox": [
+              974,
+              356,
+              1401,
+              677
+            ],
+            "bbox_coordinate_space": "IMAGE_PIXELS",
+            "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+            "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+            "segmentation_confidence": 0.6815,
+            "segmentation_confidence_status": "UN_CALIBRATED"
+          }
+        ],
+        "provisional": true
+      }
+    }
+  ]
+}

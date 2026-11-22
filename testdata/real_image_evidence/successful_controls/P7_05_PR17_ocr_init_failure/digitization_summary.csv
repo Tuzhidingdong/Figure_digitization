@@ -1,0 +1,2 @@
+figure_id,panel_id,extraction_method,extraction_status,points_count,trace_specification_status,color_detection,calibration_state,reason
+P7_05,auto-01,NOT_RUN,NOT_RUN,0,NOT_GENERATED,NOT_RUN,NOT_RUN,"Pipeline aborted before _extract_panel: ocr.py RapidOCR(params=dict(_RAPIDOCR_PARAMS)) raised TypeError: The value of Det.engine_type must be Enum Type."

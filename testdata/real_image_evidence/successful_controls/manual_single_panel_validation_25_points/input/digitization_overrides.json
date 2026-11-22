@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "figures": {
+    "MAIN_FIG_P7_05": {
+      "panels": {
+        "1": {
+          "series": [
+            {
+              "series_id": "manual_P7_05_a_4th_anodic",
+              "label": "PVO // modified Cu - 4th cycle anodic branch (manual annotation)",
+              "technique": "CV",
+              "domain": "battery",
+              "data_family": "NON_MONOTONIC",
+              "x_unit": "V",
+              "y_unit": "A g-1",
+              "y_axis_side": "LEFT",
+              "plot_box": [83, 45, 421, 296],
+              "x_axis_anchors": [
+                {"pixel": 83.5, "value": 0.0},
+                {"pixel": 420.5, "value": 1.8}
+              ],
+              "y_axis_anchors": [
+                {"pixel": 65.5, "value": 3.0},
+                {"pixel": 274.5, "value": -2.0}
+              ],
+              "pixel_points": [
+                [140, 190],
+                [165, 190],
+                [185, 188],
+                [195, 178],
+                [202, 155],
+                [208, 140],
+                [215, 134],
+                [225, 133],
+                [235, 138],
+                [245, 146],
+                [255, 149],
+                [265, 138],
+                [275, 112],
+                [285, 88],
+                [292, 76],
+                [300, 80],
+                [307, 100],
+                [315, 124],
+                [322, 140],
+                [330, 150],
+                [340, 162],
+                [350, 172],
+                [365, 177],
+                [380, 176],
+                [390, 175]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

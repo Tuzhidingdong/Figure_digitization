@@ -1,0 +1,41 @@
+{
+  "package_version": "1.1.0",
+  "paper_id": "manual-single-panel-validation",
+  "metadata": {
+    "doi": "10.1002/adfm.75805",
+    "title": "Interfacial Adsorption Engineering Enables a Highly Utilized Zinc Anode With 99.9% Coulombic Efficiency",
+    "note": "Isolated controlled-validation package. Contains only the already-generated MAIN figure 5 crop from the existing real-paper test. No external PDF/SI reference is declared."
+  },
+  "inventory": {},
+  "figures": [
+    {
+      "figure_id": "MAIN_FIG_P7_05",
+      "doc_type": "MAIN",
+      "page_number": 7,
+      "bbox": [53.61, 616.1, 558.18, 661.3],
+      "caption": "FIGURE 5 Electrochemical performance of full cell with limited zinc supply. (a) CV curves at 1 mV s-1 (dashed line for first cycle and solid line for fourth cycle) and (b) rate performance of PVO//Cu-Zn full cells. (c) Schematic illustration of the full cell design with limited zinc supply. Cycling performance of (d) PVO//Cu-Zn full cells and (e) PVO//Cu-Zn pouch cell at 8 mA cm-2. (f) Comparison of the energy density and areal capacity of Zn metal full cells with previous reports.",
+      "label": "FIGURE 5"
+    }
+  ],
+  "media_assets": [
+    {
+      "asset_id": "ASSET_00005",
+      "doc_type": "MAIN",
+      "asset_type": "figure",
+      "source_file": "10_1002_adfm_75805.pdf",
+      "source_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+      "relative_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P7_05.png",
+      "sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+      "extraction_method": "pymupdf_vector_image_layout_fallback",
+      "page_number": 7,
+      "bbox": [53.89, 368.83, 557.89, 612.31],
+      "figure_id": "MAIN_FIG_P7_05",
+      "table_id": null,
+      "caption": "FIGURE 5 Electrochemical performance of full cell with limited zinc supply.",
+      "width": null,
+      "height": null,
+      "mime_type": "image/png",
+      "is_tiny_icon": false
+    }
+  ]
+}

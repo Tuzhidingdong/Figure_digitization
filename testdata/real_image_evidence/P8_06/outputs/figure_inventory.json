@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "figures": [
+    {
+      "figure_id": "ADMA_202404834_P8_06",
+      "page": null,
+      "source_doc_type": "MAIN",
+      "source_asset_status": "LOCAL_PATH_HASH_VERIFIED",
+      "source_pdf_integrity_status": "NOT_AVAILABLE",
+      "source_image_asset_path": "MAIN_MAIN_FIG_P8_06.png",
+      "source_image_asset_sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549",
+      "source_image_asset_id": null,
+      "source_media_asset_metadata": null,
+      "source_bbox": null,
+      "source_bbox_role": "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED",
+      "caption": null,
+      "shared_legends": [],
+      "technique": null,
+      "domain": null,
+      "panel_segmentation": {
+        "status": "NO_CONFIDENT_PANEL_SPLIT",
+        "reason": "SPLIT_REGIONS_FAILED_MINIMUM_GEOMETRY",
+        "image_size": [
+          1407,
+          917
+        ],
+        "panels": []
+      }
+    }
+  ]
+}

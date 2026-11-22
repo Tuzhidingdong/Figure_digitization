@@ -1,0 +1,6 @@
+{
+  "reason": "Automatic run found 0 numeric axis anchors for all 7 figures; no calibration was performed, so no calibration artifact was generated.",
+  "calibration_states": [
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED"
+  ]
+}

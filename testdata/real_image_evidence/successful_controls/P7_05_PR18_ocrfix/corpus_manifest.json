@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "input_root_name": "single_figure_P7_05",
+  "paper_count": 1,
+  "paper_manifest_stream": "corpus_manifest.jsonl"
+}

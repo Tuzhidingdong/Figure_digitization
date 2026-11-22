@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "bundle_version": "1.0",
+  "paper_id": "root-paper",
+  "generated_at": "2026-11-22T04:20:03+00:00",
+  "input_fingerprint": "d5bdcc6b1988b8bdc3073693275478abae8a9207e4816da0534f727c55f4db89",
+  "stage_fingerprint": "706b695dd48061336be7a073eff1f8ffb997829f0b8a472b6c002b046dd4dae7",
+  "context_index_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "algorithm_versions": {
+    "core": "0.1.0"
+  },
+  "profile_versions": {},
+  "status": "COMPLETED_WITH_REVIEW",
+  "canonical_artifacts": [
+    "paper_manifest.json",
+    "figure_inventory.json",
+    "panel_layout.json",
+    "digitization.json",
+    "evidence/P7_05_auto-01.png",
+    "evidence/P7_05_auto-02.png",
+    "evidence/P7_05_auto-03.png",
+    "evidence/P7_05_auto-04.png",
+    "evidence/P7_05_auto-05.png",
+    "evidence/P7_05_auto-06.png",
+    "context/paper_context_index.json"
+  ],
+  "content_hashes": {
+    "paper_manifest.json": "805385a3a5b546ba758eeaeae798f859a53a7e16d8635c4831955d5212f722b9",
+    "figure_inventory.json": "6afadfefff179f4d0512a2f13e39bfcba40fe53cfeb38ee267dd54d74dda07f3",
+    "panel_layout.json": "032cfbe5df331942eec4e037b8eca378aab9957d93d4a8bbb906ade38893e7fe",
+    "digitization.json": "6d4cb6ef64f4007d4d3e018bff48fcbfe4d01c84b5d7c4602e45c29a621155cd",
+    "evidence/P7_05_auto-01.png": "2569792f81a0b91d8398ab25b623b6ba695547fd0314f924cf074d755ea55219",
+    "evidence/P7_05_auto-02.png": "2fc65a064fce1cffe79720119d68f9254cdbf3ee773d0199ef876ecf31980724",
+    "evidence/P7_05_auto-03.png": "92ca586eb2f4ed518415c7274c9d77f1d714f4634a7a9bd536822417315161f3",
+    "evidence/P7_05_auto-04.png": "b124bb568df554dde1e1a2d2d31c5c2e1d22668a2eaff4edfd81dddc31b0914a",
+    "evidence/P7_05_auto-05.png": "c8aa326e50e2f9b0be25cf374ab333e29eb7783ff33bee1fbc626b7588fc2b9a",
+    "evidence/P7_05_auto-06.png": "7f5d9cacc2bae5e6f106a8c812bff26207b577a687250b1a83ad169d8541e7a7",
+    "context/paper_context_index.json": "8749df022e0fc07e8cd4fec23f8fd741a17de566a04fc423adc6378cd30dfa1b"
+  },
+  "series_count": 6,
+  "figure_count": 1,
+  "panel_count": 6
+}

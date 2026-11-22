@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.2",
+  "exported_at": "2026-11-22T02:51:47.063665+00:00",
+  "row_granularity": "one_row_per_digitized_series_point",
+  "raw_value_policy": "x_value/y_value and *_raw columns retain the reconstructed original axis values and units. Standardized columns are populated only when digitization_overrides.json explicitly requests a target unit and the deterministic dimensional factor table supports the exact conversion. The original columns are never overwritten.",
+  "standardization_policy": "Per-axis x_target_unit/y_target_unit requests are opt-in. Each axis reports its own status. Unsupported or missing-unit conversions remain unresolved. Electrode-reference scale conversions are separate and are never performed by dimensional unit factors.",
+  "subject_condition_policy": "Every point row carries its series-level subject links and measurement conditions as JSON; series_metadata.jsonl remains a companion audit record.",
+  "format": "csv",
+  "filters": {
+    "paper_id": null,
+    "entity_id": null,
+    "entity": null,
+    "condition": null,
+    "analyte": null,
+    "technique": null,
+    "domain": null,
+    "series_role": null,
+    "qc_status": null,
+    "review_state": null
+  },
+  "include_review_required": true,
+  "series_count": 6,
+  "point_count": 0,
+  "data_file": "dataset.csv",
+  "series_metadata_file": "series_metadata.jsonl",
+  "warnings_file": "warnings.jsonl",
+  "warning_counts": {
+    "QC_PROVISIONAL_UNCALIBRATED": 6,
+    "NOT_REVIEWED_ACCEPTED": 6,
+    "DUAL_AXIS_UNASSIGNED": 6,
+    "SUBJECT_LINK_UNASSIGNED": 6,
+    "CONDITIONS_NOT_LINKED": 6,
+    "CANONICAL_POINTS_FILE_MISSING": 6
+  },
+  "warning_sample_count": 36,
+  "warning_samples": [
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "QC_PROVISIONAL_UNCALIBRATED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "NOT_REVIEWED_ACCEPTED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "DUAL_AXIS_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "SUBJECT_LINK_UNASSIGNED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "CONDITIONS_NOT_LINKED"
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "warning": "CANONICAL_POINTS_FILE_MISSING"
+    }
+  ],
+  "compatibility_policy": "No automatic merging or conversion across unresolved reference scales, units, capacity bases, cell scopes, analyte metrics, or experimental conditions. Rows carry compatibility_status=NOT_HARMONIZED until a separate validated harmonization stage is implemented.",
+  "qc_policy": "Only REVIEWED_ACCEPTED records are included when include_review_required=false. Unreviewed rows remain explicitly flagged otherwise.",
+  "streaming": {
+    "series_batch_size": 250,
+    "point_rows_buffered": 1,
+    "warnings_written_incrementally": true
+  }
+}

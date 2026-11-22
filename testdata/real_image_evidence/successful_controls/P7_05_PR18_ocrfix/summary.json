@@ -1,0 +1,52 @@
+{
+  "head": "33f0454b1d4a9a7bc9781fafaace58a0bdbf3706",
+  "python": "3.13.9",
+  "rapidocr": "3.10.0",
+  "onnxruntime": "1.32.0",
+  "image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+  "job_state": [
+    {
+      "state": "NEEDS_REVIEW",
+      "count": 1
+    }
+  ],
+  "validate": "OK",
+  "panels_detected": 6,
+  "ocr_records_total": 137,
+  "ocr_all_succeeded": true,
+  "x_anchor_total": 22,
+  "y_anchor_total": 5,
+  "both_axes_calibrated_panels": [
+    "auto-01"
+  ],
+  "trace_spec_statuses": {
+    "auto-01": "NOT_SUPPORTED",
+    "auto-02": "NEEDS_REVIEW",
+    "auto-03": "NEEDS_REVIEW",
+    "auto-04": "NEEDS_REVIEW",
+    "auto-05": "NEEDS_REVIEW",
+    "auto-06": "NEEDS_REVIEW"
+  },
+  "automation_statuses": {
+    "auto-01": "NOT_READY",
+    "auto-02": "NOT_READY",
+    "auto-03": "NOT_READY",
+    "auto-04": "NOT_READY",
+    "auto-05": "NOT_READY",
+    "auto-06": "NOT_READY"
+  },
+  "color_detection_runs": [
+    "auto-02",
+    "auto-04",
+    "auto-05"
+  ],
+  "series": 6,
+  "data_points": 0,
+  "csv_data_rows": 0,
+  "comparison_sheet": "papers/root-paper/comparisons/ALL_PANELS_COMPARISON.png",
+  "reconstructed_pngs": [],
+  "overlay_pngs": [],
+  "elapsed_seconds": 17.755,
+  "peak_rss_bytes": 236482560,
+  "llm_tokens": 0
+}

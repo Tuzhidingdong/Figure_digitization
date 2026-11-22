@@ -1,0 +1,59 @@
+{
+  "purpose": "Controlled validation of the explicit-anchor + ordered-pixel-path digitization engine only. Not automatic recognition; not experimental source data.",
+  "source_image": {
+    "figure_id": "MAIN_FIG_P7_05",
+    "asset_id": "ASSET_00005",
+    "original_path": "test_outputs/real_paper_10.1002_adfm.75805/out/papers/root-paper/evidence/MAIN_FIG_P7_05_1.png",
+    "validation_copy_path": "input/extracted_figures/MAIN/MAIN_MAIN_FIG_P7_05.png",
+    "sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+    "size_px": [1401, 677],
+    "coordinate_system": "local panel image pixels; origin (0,0) at top-left; x increases right, y increases down",
+    "upstream_extraction_method": "pymupdf_vector_image_layout_fallback"
+  },
+  "panel": {
+    "panel_id": "1",
+    "semantic_panel": "Figure 5a - CV curves of PVO//modified Cu and PVO//normal Cu full cells",
+    "plot_box_px": [83, 45, 421, 296],
+    "plot_frame_measured_px": {
+      "left": [83, 84],
+      "right": [420, 421],
+      "top": [45, 46],
+      "bottom": [296, 296]
+    },
+    "basis": "Plot frame measured from the image dark-pixel runs; corresponds to the visible rectangular CV frame of panel a."
+  },
+  "x_axis": {
+    "label": "Voltage (V)",
+    "unit": "V",
+    "anchors": [
+      {"pixel": 83.5, "value": 0.0, "basis": "left frame tick labelled 0.0"},
+      {"pixel": 420.5, "value": 1.8, "basis": "right frame tick labelled 1.8"}
+    ],
+    "intermediate_ticks_observed_px": {"0.3": 139.5, "0.6": 195.5, "0.9": 252.0, "1.2": 308.0, "1.5": 364.0},
+    "basis": "Seven visible bottom ticks evenly spaced 56-57 px apart; grid linearity confirmed against intermediates."
+  },
+  "y_axis": {
+    "label": "Current (A g-1)",
+    "unit": "A g-1",
+    "anchors": [
+      {"pixel": 65.5, "value": 3.0, "basis": "left tick labelled 3"},
+      {"pixel": 274.5, "value": -2.0, "basis": "left tick labelled -2"}
+    ],
+    "intermediate_ticks_observed_px": {"2": 107.5, "1": 149.5, "0": 191.5, "-1": 233.0},
+    "basis": "Six visible left ticks spaced about 42 px; intermediates used only as consistency check, not as extra anchors."
+  },
+  "curve": {
+    "series_id": "manual_P7_05_a_4th_anodic",
+    "identity": "PVO // modified Cu, 4th cycle, anodic (positive-current) branch, solid red line",
+    "data_family": "NON_MONOTONIC",
+    "point_count": 25,
+    "ordering": "Visual sweep order from low voltage (left) to high voltage (right); points were NOT sorted by x.",
+    "segment_scope": "Continuous anodic segment from about 0.30 V to 1.64 V; excludes the vertical end-of-sweep drop and the cathodic return branch.",
+    "ambiguity_note": "The dashed red 1st-cycle trace and grey normal-Cu trace run close to the solid red line in places; points were selected on the solid red stroke only. Around x=195-255 and x=307-330 the solid red stroke is visibly distinct."
+  },
+  "limitations": [
+    "Manual annotation by visual inspection of an existing raster crop; no external PDF/SI was consulted.",
+    "A successful map proves only the controlled engine path (explicit anchors + ordered pixel points), not automatic curve detection.",
+    "Not a scientific data product; requires user-approved annotation and review before any research use."
+  ]
+}

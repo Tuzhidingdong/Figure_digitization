@@ -1,0 +1,67 @@
+﻿=== E:\Zinc_batters_datas\Figure_digitization ===
+branch: main
+HEAD: bcc394a3bfaf27c1346156ed2774439169ed69b0
+status:
+   M STATUS.md
+  ?? .agents/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_outputs/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+
+=== E:\Zinc_batters_datas\Figure_digitization_pr16_test ===
+branch: HEAD
+HEAD: 4ca762e40c04045685db15c75838ade145589031
+status:
+  ?? .agents/
+  ?? src/scientific_figure_data.egg-info/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_outputs/
+  ?? tests/__pycache__/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+
+=== E:\Zinc_batters_datas\Figure_digitization_p1_test_20261122 ===
+branch: HEAD
+HEAD: 727cb82f9ce12c3c31d8e872d71aaceb620798e3
+status:
+  ?? .agents/
+  ?? src/scientific_figure_data.egg-info/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_inputs/
+  ?? test_outputs/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+
+=== E:\Zinc_batters_datas\Figure_digitization_p1_ocrfix_test_20261122 ===
+branch: HEAD
+HEAD: 33f0454b1d4a9a7bc9781fafaace58a0bdbf3706
+status:
+  ?? .agents/
+  ?? src/scientific_figure_data.egg-info/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_inputs/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+
+=== E:\Zinc_batters_datas\Figure_digitization_p1_multicolor_test_20261122 ===
+branch: HEAD
+HEAD: 3c49ba37779274abd2c8b249ed4c746d64af5a1d
+status:
+  ?? .agents/
+  ?? src/scientific_figure_data.egg-info/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_inputs/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+
+=== E:\Zinc_batters_datas\Figure_digitization_p1_pixel_geometry_test_20261122 ===
+branch: HEAD
+HEAD: 4bb386c48bb54fe9cde31ff542f96516e58f201f
+status:
+  ?? src/scientific_figure_data.egg-info/
+  ?? src/scientific_figure_data/__pycache__/
+  ?? test_inputs/
+src_tracked_diff_lines: 0
+unpushed_vs_upstream: 0
+

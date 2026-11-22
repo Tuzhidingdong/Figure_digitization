@@ -1,0 +1,2 @@
+panel_id,source_image,source_sha256,crop_file,crop_width,crop_height,segmentation_source,pipeline_status,note
+auto-01,MAIN_MAIN_FIG_P7_05.png,3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de,papers/root-paper/evidence/P7_05_auto-01.png,434,351,AUTO_RASTER_WHITESPACE_SEGMENTATION,FAILED_PERMANENT,"Only one geometric region was emitted before the OCR engine raised TypeError; no panel_layout.json was written. Visual content of this crop corresponds to subpanel a with a small bleed of the subpanel d label at the bottom (Agent observation, not Skill output)."

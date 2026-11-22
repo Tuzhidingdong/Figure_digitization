@@ -1,0 +1,306 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "panels": [
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-01",
+      "bbox": [
+        0,
+        0,
+        434,
+        351
+      ],
+      "source_bbox": [
+        0,
+        0,
+        434,
+        351
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-01.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          0,
+          0,
+          434,
+          351
+        ],
+        "crop_width_pixels": 434,
+        "crop_height_pixels": 351,
+        "crop_image_path": "P7_05_auto-01.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 22
+      },
+      "segmentation_confidence": 0.7128,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "NON_MONOTONIC_CURVE",
+      "chart_family_status": "PROVISIONAL_AXIS_SEMANTIC_CLASSIFICATION",
+      "shared_legend_refs": []
+    },
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-02",
+      "bbox": [
+        471,
+        0,
+        982,
+        351
+      ],
+      "source_bbox": [
+        471,
+        0,
+        982,
+        351
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-02.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          471,
+          0,
+          982,
+          351
+        ],
+        "crop_width_pixels": 511,
+        "crop_height_pixels": 351,
+        "crop_image_path": "P7_05_auto-02.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 38
+      },
+      "segmentation_confidence": 0.7129,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    },
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-03",
+      "bbox": [
+        1000,
+        0,
+        1401,
+        351
+      ],
+      "source_bbox": [
+        1000,
+        0,
+        1401,
+        351
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-03.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          1000,
+          0,
+          1401,
+          351
+        ],
+        "crop_width_pixels": 401,
+        "crop_height_pixels": 351,
+        "crop_image_path": "P7_05_auto-03.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 7
+      },
+      "segmentation_confidence": 0.7129,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    },
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-04",
+      "bbox": [
+        0,
+        356,
+        484,
+        677
+      ],
+      "source_bbox": [
+        0,
+        356,
+        484,
+        677
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-04.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          0,
+          356,
+          484,
+          677
+        ],
+        "crop_width_pixels": 484,
+        "crop_height_pixels": 321,
+        "crop_image_path": "P7_05_auto-04.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 25
+      },
+      "segmentation_confidence": 0.7174,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    },
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-05",
+      "bbox": [
+        501,
+        356,
+        950,
+        677
+      ],
+      "source_bbox": [
+        501,
+        356,
+        950,
+        677
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-05.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          501,
+          356,
+          950,
+          677
+        ],
+        "crop_width_pixels": 449,
+        "crop_height_pixels": 321,
+        "crop_image_path": "P7_05_auto-05.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 23
+      },
+      "segmentation_confidence": 0.7174,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    },
+    {
+      "figure_id": "P7_05",
+      "panel_id": "auto-06",
+      "bbox": [
+        974,
+        356,
+        1401,
+        677
+      ],
+      "source_bbox": [
+        974,
+        356,
+        1401,
+        677
+      ],
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "IMAGE_PIXELS",
+      "bbox_provenance": "UPSTREAM_PANEL_BOUNDARY",
+      "segmentation_provenance": "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+      "segmentation_status": "PROVISIONAL_GEOMETRY_SPLIT",
+      "evidence_image_path": "evidence/P7_05_auto-06.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+        "source_image_size": [
+          1401,
+          677
+        ],
+        "crop_bbox_source_pixels": [
+          974,
+          356,
+          1401,
+          677
+        ],
+        "crop_width_pixels": 427,
+        "crop_height_pixels": 321,
+        "crop_image_path": "P7_05_auto-06.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 22
+      },
+      "segmentation_confidence": 0.6815,
+      "segmentation_confidence_status": "UN_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    }
+  ]
+}

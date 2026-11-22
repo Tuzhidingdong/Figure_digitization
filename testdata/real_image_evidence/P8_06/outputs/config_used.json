@@ -1,0 +1,21 @@
+{
+  "cli_options": {
+    "scan": ["--input-root <per-image fixture>", "--output-root <run output root>"],
+    "run": ["--input-root <per-image fixture>", "--output-root <run output root>", "--paper-id root-paper", "--workers 1", "--max-attempts 1", "--ocr"],
+    "validate": ["--output-root <run output root>", "--input-root <per-image fixture>"],
+    "export": ["--output-root <run output root>", "--out <run output root>\\exports\\digitized_points", "--paper-id root-paper", "--format csv"]
+  },
+  "configuration_source": "All extraction parameters are project defaults from the PR20 worktree; no override JSON, no config file was created or modified by the tester. Only CLI flags above were supplied.",
+  "run1_adma_202404834": {
+    "algorithm_version": "0.4.0",
+    "algorithm_implementation_fingerprint": "b0e3881cf72c00a59b5583422c64a6ae569b17ea36b78c86b3ac08c608d45962",
+    "profile_config_fingerprint": "d2575357f92c5234b15ee7030f8459e4f8db6456d94861b923f4f499ebb1fa6b",
+    "qc_threshold_fingerprint": "5706506fe4a55c98b18c46f34642bc28147eedaec5470b461d4a90d85c4c64bb",
+    "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+    "render_scale_default": 1.5,
+    "memory_limit_mb_default": 2048,
+    "max_open_pdfs_default": 1,
+    "llm_tokens": 0
+  },
+  "run2_adma_202001469": "to be filled from run_report.json after completion"
+}

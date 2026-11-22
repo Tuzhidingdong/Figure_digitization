@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "figures": [
+    {
+      "figure_id": "MAIN_FIG_P7_05",
+      "page": 7,
+      "source_doc_type": "MAIN",
+      "source_asset_status": "VERIFIED",
+      "source_pdf_integrity_status": "NOT_AVAILABLE",
+      "source_image_asset_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P7_05.png",
+      "source_image_asset_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+      "source_image_asset_id": "ASSET_00005",
+      "source_bbox": [
+        53.61,
+        616.1,
+        558.18,
+        661.3
+      ],
+      "source_bbox_role": "UPSTREAM_EVIDENCE_INDEX_BBOX_UNRESOLVED",
+      "caption": "FIGURE 5 Electrochemical performance of full cell with limited zinc supply. (a) CV curves at 1 mV s-1 (dashed line for first cycle and solid line for fourth cycle) and (b) rate performance of PVO//Cu-Zn full cells. (c) Schematic illustration of the full cell design with limited zinc supply. Cycling performance of (d) PVO//Cu-Zn full cells and (e) PVO//Cu-Zn pouch cell at 8 mA cm-2. (f) Comparison of the energy density and areal capacity of Zn metal full cells with previous reports.",
+      "shared_legends": [],
+      "technique": null,
+      "domain": null
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "bundle_version": "1.0",
+  "paper_id": "root-paper",
+  "generated_at": "2026-11-22T02:50:07+00:00",
+  "input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+  "stage_fingerprint": "8f4269e5ab8ba8e029ad3285886356dbe31849f340ab893efc6fc906deb48f83",
+  "context_index_fingerprint": "0ee10cbce2af8bfaf346a12067ceef4134b50e959b8a6f7624931f779dc70939",
+  "algorithm_versions": {
+    "core": "0.1.0"
+  },
+  "profile_versions": {},
+  "status": "COMPLETED_WITH_REVIEW",
+  "canonical_artifacts": [
+    "paper_manifest.json",
+    "figure_inventory.json",
+    "panel_layout.json",
+    "digitization.json",
+    "evidence/MAIN_FIG_P3_01_1.png",
+    "evidence/MAIN_FIG_P4_02_1.png",
+    "evidence/MAIN_FIG_P5_03_1.png",
+    "evidence/MAIN_FIG_P7_04_1.png",
+    "evidence/MAIN_FIG_P7_05_1.png",
+    "evidence/MAIN_FIG_P8_06_1.png",
+    "context/paper_context_index.json"
+  ],
+  "content_hashes": {
+    "paper_manifest.json": "9b6dd6fd74699a27ca1bab78befbd79ec63d4f77f3ca0f295d9cbc46283df152",
+    "figure_inventory.json": "1e9193bf79c7efa1f54e8902a74658d0bdb2db3037722d7ebde306d3a17c58c0",
+    "panel_layout.json": "6477bc277c7011aea32f8cdf446f38d667e79203842235d30a2badfb14be7614",
+    "digitization.json": "80f3f1438ed573a151007f6c248584392d88283f2e8434380a010b1fe4b61d2f",
+    "evidence/MAIN_FIG_P3_01_1.png": "aba4a834d1b7d97bd486989db668ce03c3989e5859a319cbc4757c6d00527ad9",
+    "evidence/MAIN_FIG_P4_02_1.png": "fcb7b3b54a29ee5f789ba6e9024bec92275b36cd5d2dc85842f5d1908e27e84a",
+    "evidence/MAIN_FIG_P5_03_1.png": "d2f7227d6adde22e48aa92824aa46b5a2e8f175c53db6ebda529abf778512cdb",
+    "evidence/MAIN_FIG_P7_04_1.png": "65b6a54e5ca091642a20129ead4708baed18c7d0c3c8b7d1def90564c932bda1",
+    "evidence/MAIN_FIG_P7_05_1.png": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+    "evidence/MAIN_FIG_P8_06_1.png": "1085586d24d733b78a5de75dc1d8aa5ae568b1d32d1596fdc1585e50a0db763b",
+    "context/paper_context_index.json": "ddd96bc73938d6aba0619d0603267ed1840aeeba5f6043007f021cf9f6b19460"
+  },
+  "series_count": 6,
+  "figure_count": 6,
+  "panel_count": 6
+}

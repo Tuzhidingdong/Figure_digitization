@@ -1,0 +1,105 @@
+{
+  "test_target": "10.1002_adfm.75805",
+  "project_version": "4ca762e40c04045685db15c75838ade145589031",
+  "automatic_pipeline": {
+    "auto_run": {
+      "paper_status": "COMPLETED_WITH_REVIEW",
+      "figures": 6,
+      "panels": 6,
+      "series": 6,
+      "total_points": 0,
+      "elapsed_seconds": 0.997,
+      "peak_rss_bytes": 71364608,
+      "llm_tokens": 0,
+      "algorithm_implementation_fingerprint": "c9fc9507098365e508195d2ed36c5fada765e37b3eb83df1ec3254649e54c987"
+    },
+    "classifications": [
+      "UNCLASSIFIED/NEEDS_REVIEW",
+      "UNCLASSIFIED/NEEDS_REVIEW",
+      "UNCLASSIFIED/NEEDS_REVIEW",
+      "UNCLASSIFIED/NEEDS_REVIEW",
+      "UNCLASSIFIED/NEEDS_REVIEW",
+      "UNCLASSIFIED/NEEDS_REVIEW"
+    ],
+    "calibration_states": [
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED"
+    ],
+    "qc_statuses": [
+      "PROVISIONAL_UNCALIBRATED",
+      "PROVISIONAL_UNCALIBRATED",
+      "PROVISIONAL_UNCALIBRATED",
+      "PROVISIONAL_UNCALIBRATED",
+      "PROVISIONAL_UNCALIBRATED",
+      "PROVISIONAL_UNCALIBRATED"
+    ]
+  },
+  "manual_assisted_case": {
+    "source": "manual-assisted controlled validation (PR16 worktree code)",
+    "figure_id": "MAIN_FIG_P7_05",
+    "panel_id": "1",
+    "series_id": "root-paper__manual_P7_05_a_4th_anodic",
+    "extraction_method": "EXPLICIT_ORDERED_PIXEL_POLYLINE",
+    "extraction_status": "EXTRACTED_PROVISIONAL",
+    "point_count": 25,
+    "x_calibration": {
+      "axis": "x",
+      "unit": "V",
+      "slope": 0.005341246290801187,
+      "intercept": -0.4459940652818991,
+      "anchors": [
+        {
+          "pixel": 83.5,
+          "value": 0.0
+        },
+        {
+          "pixel": 420.5,
+          "value": 1.8
+        }
+      ],
+      "rmse": 1.5700924586837752e-16,
+      "status": "CALIBRATED_NUMERIC"
+    },
+    "y_calibration": {
+      "axis": "y",
+      "unit": "A g-1",
+      "slope": -0.023923444976076555,
+      "intercept": 4.5669856459330145,
+      "anchors": [
+        {
+          "pixel": 65.5,
+          "value": 3.0
+        },
+        {
+          "pixel": 274.5,
+          "value": -2.0
+        }
+      ],
+      "rmse": 0.0,
+      "status": "CALIBRATED_NUMERIC"
+    },
+    "calibration_state": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+    "qc_status": "PROVISIONAL_UNCALIBRATED",
+    "review_state": "NEEDS_REVIEW",
+    "warnings": [
+      "SUBJECT_LINK_UNASSIGNED",
+      "CONDITIONS_NOT_LINKED"
+    ],
+    "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK",
+    "data_file": "data\\Figure5_panel_a_4th_cycle_manual.csv",
+    "overlay_file": "images/Figure5_panel_a_manual_overlay.png"
+  },
+  "totals": {
+    "input_files": 70,
+    "images": 34,
+    "pipeline_figures": 6,
+    "pipeline_panels": 6,
+    "pipeline_series": 6,
+    "automatic_points": 0,
+    "manual_assisted_points": 25
+  }
+}

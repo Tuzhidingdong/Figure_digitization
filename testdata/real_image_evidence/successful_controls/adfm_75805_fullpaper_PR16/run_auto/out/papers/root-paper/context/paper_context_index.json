@@ -1,0 +1,393 @@
+{
+  "schema_version": "1.0",
+  "fingerprint": "0ee10cbce2af8bfaf346a12067ceef4134b50e959b8a6f7624931f779dc70939",
+  "storage": "json",
+  "estimated_memory_bytes": 19137,
+  "entries": [
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 6,
+      "snippet": "Advanced Functional Materials"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "materials",
+      "source_path": "main_analysis.md",
+      "line_number": 70,
+      "snippet": "zinc-metal batteries with typical cathode materials can achieve"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 83,
+      "snippet": "© 2026 The Author(s). Advanced Functional Materials published by Wiley-VCH GmbH"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 85,
+      "snippet": "Advanced Functional Materials, 2026; 36:e75805"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "materials",
+      "source_path": "main_analysis.md",
+      "line_number": 109,
+      "snippet": "former strategy, various materials such as oxides [14], sulfides"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "catalyst can",
+      "source_path": "main_analysis.md",
+      "line_number": 134,
+      "snippet": "in which the electronic structure of catalyst can module the"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrodeposited",
+      "source_path": "main_analysis.md",
+      "line_number": 189,
+      "snippet": "for zinc stripping, even though most of the electrodeposited"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "main_analysis.md",
+      "line_number": 193,
+      "snippet": "For convenience, the samples featured with normal Cu interface,"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 224,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "main_analysis.md",
+      "line_number": 234,
+      "snippet": "(b) normal Cu and (e) modified Cu; Cross-sectional images of the FIB-HRTEM samples: (c) normal Cu and (f) modified Cu; Cross-sectional HRTEM"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "main_analysis.md",
+      "line_number": 256,
+      "snippet": "photoelectron spectroscopy (XPS). All three Cu samples have"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 267,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 351,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 405,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "material are",
+      "source_path": "main_analysis.md",
+      "line_number": 526,
+      "snippet": "characterizations of the PVO material are shown in Figures S24"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 540,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "main_analysis.md",
+      "line_number": 549,
+      "snippet": "Electrochemical analysis and simulations about HER at Cu interfaces. (a) LSV curves of various Cu samples in 1 m Na2SO4 electrolyte."
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 569,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 704,
+      "snippet": "Advanced Materials 37 (2025): 2417775, https://doi.org."
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Electrode Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 718,
+      "snippet": "to Electrode Materials,” Energy & Environmental Science 14 (2021):"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 722,
+      "snippet": "High-Voltage Aqueous Batteries,” Nature Materials 19 (2020): 1006–1011,"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 734,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 762,
+      "snippet": "Advanced Energy Materials 13 (2023): 2300331, https://doi.org/10.1002/"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 771,
+      "snippet": "Strategy for Stable Zn Metal Anodes,” Advanced Materials 36 (2024):"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 781,
+      "snippet": "Advanced Functional Materials 36 (2026): 09648, https://doi.org/10.1002/"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 792,
+      "snippet": "Journal of Materials Chemistry A 10 (2022): 10043–10050, https://doi.org/"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 801,
+      "snippet": "Batteries,” Advanced Materials 31 (2019): 1903675, https://doi.org/10.1002/"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 819,
+      "snippet": "Materials 24 (2025): 424–432, https://doi.org/10.1038/s41563-024-02098-2."
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 833,
+      "snippet": "Advanced Energy Materials 14 (2024): 2402306, https://doi.org/10.1002/"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 868,
+      "snippet": "Performance of Aqueous Zinc-Ion Batteries,” Advanced Energy Materials"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 872,
+      "snippet": "Attachment for Highly Utilized Zn Anodes,” Advanced Materials 35"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "main_analysis.md",
+      "line_number": 883,
+      "snippet": "Advanced Functional Materials, 2026"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Material Synthesis",
+      "source_path": "si_analysis.md",
+      "line_number": 17,
+      "snippet": "Material Synthesis: All reagents were received from Sigma-Aldrich and used without further purification"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "sample was",
+      "source_path": "si_analysis.md",
+      "line_number": 18,
+      "snippet": "Preparation of balanced amorphous Cu interface: The balanced amorphous Cu interface was prepared by chemical etching and galvanic Cu regrowth. In brief, a commercial Cu foil (99.97%, 9 μm) was firstly washed in 1 M HCl solution for about 20 minutes to remove the oxide layer, and then washed with acetone, ethanol, and deionized (DI) water to remove the organic substances for a clean surface. This sample was named as normal Cu."
+    },
+    {
+      "kind": "sample_alias",
+      "value": "sample was",
+      "source_path": "si_analysis.md",
+      "line_number": 19,
+      "snippet": "After that, the fresh and clean Cu foil was fully immersed in a typical APS solution (0.18 g (NH4)2S2O8 and 0.6 g KOH dissolved in 30 ml DI water) for 8 minutes’ etching[1], and then transferred into 1 M HCl solution again for the removal of newly formed oxide layer. It could be observed that the color of normal Cu foil turned black during the etching process, and then became dark red in the acid solution. After washed with DI water, this sample was named as etched Cu."
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrodes",
+      "source_path": "si_analysis.md",
+      "line_number": 20,
+      "snippet": "Based on the etched Cu sample, coin-type full cell or the expanded version of pouch cell was assembled using Zn foil (99.99%, 100 μm) and the etched Cu as electrodes and 2 M ZnSO4 as electrolyte. After performing a zinc plating/stripping process on etched Cu at parameters of 15 mA cm−2 / 1 mAh cm−2 with a cut off voltage of −0.3 V, some zinc residue could be observed at the etched Cu surface. Then the stripped Cu sample was put into a solution of 1 M H2SO4 and 6 mM CuSO4 for galvanic replacement"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "sample was",
+      "source_path": "si_analysis.md",
+      "line_number": 20,
+      "snippet": "Based on the etched Cu sample, coin-type full cell or the expanded version of pouch cell was assembled using Zn foil (99.99%, 100 μm) and the etched Cu as electrodes and 2 M ZnSO4 as electrolyte. After performing a zinc plating/stripping process on etched Cu at parameters of 15 mA cm−2 / 1 mAh cm−2 with a cut off voltage of −0.3 V, some zinc residue could be observed at the etched Cu surface. Then the stripped Cu sample was put into a solution of 1 M H2SO4 and 6 mM CuSO4 for galvanic replacement"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "sample was",
+      "source_path": "si_analysis.md",
+      "line_number": 20,
+      "snippet": "Based on the etched Cu sample, coin-type full cell or the expanded version of pouch cell was assembled using Zn foil (99.99%, 100 μm) and the etched Cu as electrodes and 2 M ZnSO4 as electrolyte. After performing a zinc plating/stripping process on etched Cu at parameters of 15 mA cm−2 / 1 mAh cm−2 with a cut off voltage of −0.3 V, some zinc residue could be observed at the etched Cu surface. Then the stripped Cu sample was put into a solution of 1 M H2SO4 and 6 mM CuSO4 for galvanic replacement"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "sample was",
+      "source_path": "si_analysis.md",
+      "line_number": 21,
+      "snippet": "Preparation of cathode material: Following previous work, a hydrothermal method was adopted to prepare PANI-doped V2O5 (PVO) cathode.[2-3] Typically, 0.1814 g V2O5 powder and 60 μL aniline were added into 30 mL DI water with stirring at room temperature. Then the pH of the above solution was adjusted to 3 by adding dilute HCl and stirring for 30 min. The formed dark green cloudy suspension was then transferred into a 50 mL Teflon-lined sealed autoclave and maintained at 120 ℃ for 24 h. Finally, "
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "si_analysis.md",
+      "line_number": 22,
+      "snippet": "Characterization: The in situ optical microscopy was conducted with the assistance of Olympus Bx53M. The morphologies of various Cu samples and cathode were characterized by scanning electron microscopy (SEM, FEI Nova SEM 450). The focused ion beam (FIB) samples were prepared by Zeiss Crossbeam 550 FIB electron microscope (FIB-SEM), and the subsequent HRTEM images were collected by JEM-ARM300F2 (GrandARM). X-ray diffraction (XRD) was carried out on a Malvern Panalytical Aeris diffractometer with"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "si_analysis.md",
+      "line_number": 22,
+      "snippet": "Characterization: The in situ optical microscopy was conducted with the assistance of Olympus Bx53M. The morphologies of various Cu samples and cathode were characterized by scanning electron microscopy (SEM, FEI Nova SEM 450). The focused ion beam (FIB) samples were prepared by Zeiss Crossbeam 550 FIB electron microscope (FIB-SEM), and the subsequent HRTEM images were collected by JEM-ARM300F2 (GrandARM). X-ray diffraction (XRD) was carried out on a Malvern Panalytical Aeris diffractometer with"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode and",
+      "source_path": "si_analysis.md",
+      "line_number": 24,
+      "snippet": "In the Zn plating/stripping CE measurements, CR2032 coin cells were utilized. Firstly, zinc was pre-deposited on various Cu substrates in coin cell with Zn plate as the counter electrode and glass fiber as the separator. The deposition current density was 10 mA cm−2. Then the pre-deposited Zn served as the new counter electrode in coin cell, and pure Cu substrate worked as working electrode. To avoid some effect from the shell of coin cell, Cu substrate and zinc plate are put at the anode side a"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode in",
+      "source_path": "si_analysis.md",
+      "line_number": 24,
+      "snippet": "In the Zn plating/stripping CE measurements, CR2032 coin cells were utilized. Firstly, zinc was pre-deposited on various Cu substrates in coin cell with Zn plate as the counter electrode and glass fiber as the separator. The deposition current density was 10 mA cm−2. Then the pre-deposited Zn served as the new counter electrode in coin cell, and pure Cu substrate worked as working electrode. To avoid some effect from the shell of coin cell, Cu substrate and zinc plate are put at the anode side a"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrodes",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode beaker",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode system",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode and",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrodes",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode system",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "reference_electrode",
+      "value": "vs. SCE",
+      "source_path": "si_analysis.md",
+      "line_number": 25,
+      "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "electrode models",
+      "source_path": "si_analysis.md",
+      "line_number": 28,
+      "snippet": "In FEA, a series of two-dimensional electrode models with various surface morphologies were constructed to simulate the zinc stripping behavior. The geometric boundary of the model represents the zinc uniformly plated on Cu surface. The material parameters for both metals were adopted from the built-in COMSOL material library. The electrolyte was assumed to be homogeneously mixed and was represented by a single electrolyte domain with an electrical conductivity of 2.5 S m−1. A free triangular me"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "material parameters",
+      "source_path": "si_analysis.md",
+      "line_number": 28,
+      "snippet": "In FEA, a series of two-dimensional electrode models with various surface morphologies were constructed to simulate the zinc stripping behavior. The geometric boundary of the model represents the zinc uniformly plated on Cu surface. The material parameters for both metals were adopted from the built-in COMSOL material library. The electrolyte was assumed to be homogeneously mixed and was represented by a single electrolyte domain with an electrical conductivity of 2.5 S m−1. A free triangular me"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "material library",
+      "source_path": "si_analysis.md",
+      "line_number": 28,
+      "snippet": "In FEA, a series of two-dimensional electrode models with various surface morphologies were constructed to simulate the zinc stripping behavior. The geometric boundary of the model represents the zinc uniformly plated on Cu surface. The material parameters for both metals were adopted from the built-in COMSOL material library. The electrolyte was assumed to be homogeneously mixed and was represented by a single electrolyte domain with an electrical conductivity of 2.5 S m−1. A free triangular me"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "Materials",
+      "source_path": "si_analysis.md",
+      "line_number": 29,
+      "snippet": "DFT simulations were performed using the Castep program package Materials Studio 2020. The exchange-correlate interaction was described by generalized gradient approximation (GGA) with the Perdew-Burke-Ernzerhof (PBE) function. The plane wave basis was set with an energy cut-off of 600 eV for all structural optimizations and self-consistent calculations. The slabs were relaxed until the total energy differences were lower than 1.0 × 10–5 eV per atom and the atomic force smaller than –0.02 eV Å–1"
+    },
+    {
+      "kind": "sample_alias",
+      "value": "samples",
+      "source_path": "si_analysis.md",
+      "line_number": 68,
+      "snippet": "Figure S20. (a) Part of the LSV curves around zinc reduction potential, and (b) the derived Tafel plot of various samples. (c) EIS curves about various Cu interface with deposited zinc."
+    }
+  ]
+}

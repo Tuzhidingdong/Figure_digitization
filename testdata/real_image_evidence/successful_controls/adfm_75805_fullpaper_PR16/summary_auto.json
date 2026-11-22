@@ -1,0 +1,37 @@
+{
+  "auto_run": {
+    "paper_status": "COMPLETED_WITH_REVIEW",
+    "figures": 6,
+    "panels": 6,
+    "series": 6,
+    "total_points": 0,
+    "elapsed_seconds": 0.997,
+    "peak_rss_bytes": 71364608,
+    "llm_tokens": 0,
+    "algorithm_implementation_fingerprint": "c9fc9507098365e508195d2ed36c5fada765e37b3eb83df1ec3254649e54c987"
+  },
+  "classifications": [
+    "UNCLASSIFIED/NEEDS_REVIEW",
+    "UNCLASSIFIED/NEEDS_REVIEW",
+    "UNCLASSIFIED/NEEDS_REVIEW",
+    "UNCLASSIFIED/NEEDS_REVIEW",
+    "UNCLASSIFIED/NEEDS_REVIEW",
+    "UNCLASSIFIED/NEEDS_REVIEW"
+  ],
+  "calibration_states": [
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+    "NUMERIC_AXIS_CALIBRATION_UNRESOLVED"
+  ],
+  "qc_statuses": [
+    "PROVISIONAL_UNCALIBRATED",
+    "PROVISIONAL_UNCALIBRATED",
+    "PROVISIONAL_UNCALIBRATED",
+    "PROVISIONAL_UNCALIBRATED",
+    "PROVISIONAL_UNCALIBRATED",
+    "PROVISIONAL_UNCALIBRATED"
+  ]
+}

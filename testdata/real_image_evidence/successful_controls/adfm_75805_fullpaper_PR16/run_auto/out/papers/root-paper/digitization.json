@@ -1,0 +1,1065 @@
+{
+  "schema_version": "1.0",
+  "algorithm_version": "0.1.0",
+  "paper_id": "root-paper",
+  "input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+  "stage_fingerprint": "8f4269e5ab8ba8e029ad3285886356dbe31849f340ab893efc6fc906deb48f83",
+  "context_index_fingerprint": "0ee10cbce2af8bfaf346a12067ceef4134b50e959b8a6f7624931f779dc70939",
+  "generated_at": "2026-11-22T02:50:07+00:00",
+  "status": "COMPLETED_WITH_REVIEW",
+  "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+  "series": [
+    {
+      "series_id": "root-paper__MAIN_FIG_P3_01_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P3_01",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P3_01_1_unassigned_745f76541605",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P3_01",
+          "panel_id": "1",
+          "source_page": 3,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P3_01_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P3_01.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "aba4a834d1b7d97bd486989db668ce03c3989e5859a319cbc4757c6d00527ad9",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "NO_RECTANGULAR_FRAME_PASSED_SIDE_COVERAGE",
+          "horizontal_candidates": 4,
+          "vertical_candidates": 3
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P4_02_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P4_02",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P4_02_1_unassigned_66b74d2f689b",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P4_02",
+          "panel_id": "1",
+          "source_page": 4,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P4_02_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P4_02.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "fcb7b3b54a29ee5f789ba6e9024bec92275b36cd5d2dc85842f5d1908e27e84a",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "NO_UNAMBIGUOUS_RECTANGULAR_FRAME",
+          "horizontal_candidates": 13,
+          "vertical_candidates": 0
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P5_03_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P5_03",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P5_03_1_unassigned_819a5261fa1f",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P5_03",
+          "panel_id": "1",
+          "source_page": 5,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P5_03_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P5_03.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "d2f7227d6adde22e48aa92824aa46b5a2e8f175c53db6ebda529abf778512cdb",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "NO_RECTANGULAR_FRAME_PASSED_SIDE_COVERAGE",
+          "horizontal_candidates": 2,
+          "vertical_candidates": 2
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_04_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P7_04",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P7_04_1_unassigned_7a1c21a7323a",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P7_04",
+          "panel_id": "1",
+          "source_page": 7,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P7_04_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P7_04.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "65b6a54e5ca091642a20129ead4708baed18c7d0c3c8b7d1def90564c932bda1",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "MULTIPLE_SIMILAR_PLOT_FRAME_CANDIDATES",
+          "candidate_boxes": [
+            [
+              544,
+              52,
+              917,
+              328
+            ],
+            [
+              84,
+              52,
+              917,
+              328
+            ]
+          ],
+          "scores": [
+            0.7173975806723706,
+            0.7135447231090479
+          ]
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P7_05_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P7_05",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P7_05_1_unassigned_796069fd3b48",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P7_05",
+          "panel_id": "1",
+          "source_page": 7,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P7_05_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P7_05.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "PROVISIONAL_PLOT_BOX",
+          "pixel_bbox": [
+            83,
+            358,
+            891,
+            608
+          ],
+          "normalized_bbox": [
+            0.05924339757316203,
+            0.5288035450516987,
+            0.6359743040685225,
+            0.8980797636632201
+          ],
+          "image_size": [
+            1401,
+            677
+          ],
+          "side_coverage": {
+            "top": 0.8452970297029703,
+            "bottom": 0.8663366336633663,
+            "left": 1.0,
+            "right": 1.0
+          },
+          "score": 0.6984385178870447,
+          "provisional": true
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    },
+    {
+      "series_id": "root-paper__MAIN_FIG_P8_06_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P8_06",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": null,
+      "y_label": null,
+      "x_unit": null,
+      "y_unit": null,
+      "measurement_id": "root-paper__measurement-root-paper__MAIN_FIG_P8_06_1_unassigned_22e83978a957",
+      "y_axis_side": "UNASSIGNED",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P8_06",
+          "panel_id": "1",
+          "source_page": 8,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P8_06_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P8_06.png",
+          "source_pdf_integrity_status": "HASH_VERIFIED",
+          "source_image_sha256": "1085586d24d733b78a5de75dc1d8aa5ae568b1d32d1596fdc1585e50a0db763b",
+          "source_pdf_sha256": "36cc04d8a0017118bb9de433cd85c8233a69ad67d0c1618f1f8fc97c6265bee5",
+          "paper_input_fingerprint": "2fdf77313a7fba2a946c4d90e3a95bc6eb09066e3832c7b70943211512162533",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [
+            {
+              "kind": "reference_electrode",
+              "value": "vs. SCE",
+              "source_path": "si_analysis.md",
+              "line_number": 25,
+              "snippet": "The subsequent electrochemical analyses were mainly based on CHI 760 electrochemical station. For zinc deposition analyses, the test device was based on asymmetric cell with zinc plate and pure Cu as electrodes and 2 M ZnSO4 as electrolyte. In details, cyclic voltammetry (CV) tests were conducted in an asymmetric cell at 1 mV s−1. The electrochemical impedance spectroscopy (EIS) measurements were performed in an asymmetric cell at −0.02 V with an amplitude of 5 mV in a frequency range from 0.1 M"
+            }
+          ],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {
+            "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+            "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+          },
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Provide ordered pixel_points for non-monotonic paths or explicit color and calibrations for monotonic raster traces.",
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "NO_UNAMBIGUOUS_RECTANGULAR_FRAME",
+          "horizontal_candidates": 0,
+          "vertical_candidates": 0
+        },
+        "color_detection": null,
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "x_calibration": null,
+        "y_calibration": null,
+        "calibration_errors": {
+          "x": "ValueError: At least two numeric anchors are required for linear calibration",
+          "y": "ValueError: At least two numeric anchors are required for linear calibration"
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "UNRESOLVED",
+            "axis_calibration_y": "UNRESOLVED",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "UNKNOWN",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            },
+            "y": {
+              "status": "UNRESOLVED",
+              "anchor_count": 0,
+              "rmse": null,
+              "unit": null
+            }
+          },
+          "calibration_state": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "DUAL_AXIS_UNASSIGNED",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "NUMERIC_AXIS_CALIBRATION_UNRESOLVED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "UNRESOLVED",
+          "axis_calibration_y": "UNRESOLVED",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "UNKNOWN",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    }
+  ],
+  "extra": {
+    "context_index_fingerprint": "0ee10cbce2af8bfaf346a12067ceef4134b50e959b8a6f7624931f779dc70939",
+    "figure_inventory_source": "evidence_index.json",
+    "pdf_source": "10_1002_adfm_75805.pdf",
+    "native_page_evidence": {
+      "3": {
+        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+        "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+      },
+      "4": {
+        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+        "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+      },
+      "5": {
+        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+        "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+      },
+      "7": {
+        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+        "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+      },
+      "8": {
+        "status": "NATIVE_EVIDENCE_UNAVAILABLE",
+        "error": "OptionalDependencyError: PDF rendering requires the optional dependency: pip install '.[pdf]'"
+      }
+    },
+    "stage_fingerprint": "8f4269e5ab8ba8e029ad3285886356dbe31849f340ab893efc6fc906deb48f83",
+    "memory_limit_mb": 2048,
+    "render_scale": 1.5,
+    "temp_disk_limit_mb": 2048,
+    "evidence_bytes": 3816796,
+    "context_index_bytes": 21637,
+    "budgeted_storage_bytes": 3838433,
+    "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+    "qc_thresholds": {
+      "schema_version": "1.0",
+      "status": "PROVISIONAL_UNCALIBRATED",
+      "notes": "Engineering defaults only; not calibrated against annotated real papers.",
+      "minimum_calibration_anchors": 2,
+      "maximum_axis_anchor_rmse": null,
+      "minimum_trace_points": 8,
+      "minimum_trace_pixel_fraction": 0.15,
+      "allow_automatic_same_color_crossing": false,
+      "allow_automatic_marker_disambiguation": false
+    },
+    "algorithm_implementation_fingerprint": "c9fc9507098365e508195d2ed36c5fada765e37b3eb83df1ec3254649e54c987",
+    "profile_config_fingerprint": "d2575357f92c5234b15ee7030f8459e4f8db6456d94861b923f4f499ebb1fa6b",
+    "llm_tokens": 0
+  }
+}

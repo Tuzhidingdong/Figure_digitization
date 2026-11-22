@@ -1,0 +1,48 @@
+{
+  "test_target": "MAIN_MAIN_FIG_P7_05.png",
+  "project_version": "727cb82f9ce12c3c31d8e872d71aaceb620798e3",
+  "skill_loaded": true,
+  "image_sha256_before": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+  "image_sha256_after": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+  "input_fixture": {
+    "files": ["MAIN_MAIN_FIG_P7_05.png", "figure_inventory.json"],
+    "manual_annotations": 0,
+    "figure_inventory_fields": ["figure_id", "image_path"]
+  },
+  "pipeline": {
+    "scan_discovered": 1,
+    "run_state": "FAILED_PERMANENT",
+    "attempt_count": 1,
+    "failure_stage": "PAPER_PROCESSING / OCR_ENGINE_INITIALIZATION",
+    "error_type": "TypeError",
+    "error_message": "The value of Det.engine_type must be Enum Type.",
+    "error_source": "src/scientific_figure_data/ocr.py:43 RapidOCR(params=dict(_RAPIDOCR_PARAMS)) with string engine_type values at ocr.py:12-14",
+    "algorithm_version": "0.2.0",
+    "elapsed_seconds": 2.719,
+    "peak_rss_bytes": 100933632,
+    "default_llm_tokens": 0
+  },
+  "automatic_results": {
+    "auto_panels_emitted_before_failure": 1,
+    "panel_layout_json_written": false,
+    "ocr_rows": 0,
+    "numeric_anchors": 0,
+    "trace_specifications": 0,
+    "color_detections": 0,
+    "series": 0,
+    "data_points": 0,
+    "reconstructed_pngs": 0,
+    "overlay_pngs": 0,
+    "export_rows": 0
+  },
+  "validate": {
+    "status": "INVALID",
+    "missing_canonical_artifacts": 5
+  },
+  "export": {
+    "requested_out": "exports/digitized_points.csv",
+    "actual_layout": "exports/digitized_points.csv/dataset.csv (header only, 0 data rows)",
+    "data_rows": 0
+  },
+  "verdict": "FAIL - OCR engine initialization defect in PR17 blocks the automatic digitization path on real image; no automatic data points were produced."
+}

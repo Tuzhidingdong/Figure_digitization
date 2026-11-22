@@ -1,0 +1,81 @@
+﻿=== E:\Zinc_batters_datas\Figure_digitization ===
+=== E:\Zinc_batters_datas\Figure_digitization_pr16_test ===
+ STATUS.md                                      | 12 +-----
+ docs/INPUT_CONTRACT.md                         |  5 +--
+ src/scientific_figure_data/chart_classifier.py |  7 +---
+ src/scientific_figure_data/qc.py               | 13 -------
+ tests/test_core.py                             | 51 --------------------------
+ 5 files changed, 4 insertions(+), 84 deletions(-)
+=== E:\Zinc_batters_datas\Figure_digitization_p1_test_20261122 ===
+ .github/workflows/windows-ci.yml                 |   8 +-
+ STATUS.md                                        |  22 +-
+ docs/AUTOMATIC_MONOTONIC_DIGITIZATION.md         |  66 -----
+ docs/INPUT_CONTRACT.md                           |   5 +-
+ src/scientific_figure_data/axis_text.py          |  92 -------
+ src/scientific_figure_data/chart_classifier.py   |   7 +-
+ src/scientific_figure_data/panel_segmentation.py | 199 ---------------
+ src/scientific_figure_data/pipeline.py           | 297 ++---------------------
+ src/scientific_figure_data/qc.py                 |  13 -
+ src/scientific_figure_data/reconstruction.py     | 188 --------------
+ src/scientific_figure_data/storage.py            |   2 +-
+ src/scientific_figure_data/trace_spec.py         | 115 ---------
+ tests/test_automatic_digitization.py             | 218 -----------------
+ tests/test_core.py                               |  53 +---
+ 14 files changed, 22 insertions(+), 1263 deletions(-)
+=== E:\Zinc_batters_datas\Figure_digitization_p1_ocrfix_test_20261122 ===
+ .github/workflows/windows-ci.yml                 |  24 +-
+ STATUS.md                                        |  22 +-
+ docs/AUTOMATIC_MONOTONIC_DIGITIZATION.md         |  66 -----
+ docs/INPUT_CONTRACT.md                           |   5 +-
+ src/scientific_figure_data/axis_text.py          |  92 -------
+ src/scientific_figure_data/chart_classifier.py   |   7 +-
+ src/scientific_figure_data/ocr.py                |  42 +--
+ src/scientific_figure_data/panel_segmentation.py | 199 --------------
+ src/scientific_figure_data/pipeline.py           | 329 ++---------------------
+ src/scientific_figure_data/qc.py                 |  13 -
+ src/scientific_figure_data/reconstruction.py     | 188 -------------
+ src/scientific_figure_data/storage.py            |   2 +-
+ src/scientific_figure_data/trace_spec.py         | 115 --------
+ tests/test_automatic_digitization.py             | 267 ------------------
+ tests/test_core.py                               |  61 +----
+ tests/test_ocr_rapidocr.py                       |  22 --
+ 16 files changed, 33 insertions(+), 1421 deletions(-)
+=== E:\Zinc_batters_datas\Figure_digitization_p1_multicolor_test_20261122 ===
+ .github/workflows/windows-ci.yml                 |  26 +-
+ STATUS.md                                        |  22 +-
+ docs/AUTOMATIC_MONOTONIC_DIGITIZATION.md         |  78 ---
+ docs/INPUT_CONTRACT.md                           |   5 +-
+ src/scientific_figure_data/axis_text.py          |  92 ----
+ src/scientific_figure_data/chart_classifier.py   |   7 +-
+ src/scientific_figure_data/ocr.py                |  42 +-
+ src/scientific_figure_data/panel_segmentation.py | 199 --------
+ src/scientific_figure_data/pipeline.py           | 625 ++---------------------
+ src/scientific_figure_data/plot_region.py        | 197 -------
+ src/scientific_figure_data/qc.py                 |  13 -
+ src/scientific_figure_data/reconstruction.py     | 188 -------
+ src/scientific_figure_data/storage.py            |   2 +-
+ src/scientific_figure_data/trace_spec.py         | 115 -----
+ tests/test_automatic_digitization.py             | 469 -----------------
+ tests/test_core.py                               |  61 +--
+ tests/test_ocr_rapidocr.py                       |  22 -
+ 17 files changed, 58 insertions(+), 2105 deletions(-)
+=== E:\Zinc_batters_datas\Figure_digitization_p1_pixel_geometry_test_20261122 ===
+ .github/workflows/windows-ci.yml                 |  28 +-
+ STATUS.md                                        |  22 +-
+ docs/AUTOMATIC_MONOTONIC_DIGITIZATION.md         |  78 ---
+ docs/INPUT_CONTRACT.md                           |   5 +-
+ src/scientific_figure_data/axis_text.py          |  92 ---
+ src/scientific_figure_data/chart_classifier.py   |   7 +-
+ src/scientific_figure_data/ocr.py                |  42 +-
+ src/scientific_figure_data/panel_segmentation.py | 199 -------
+ src/scientific_figure_data/pipeline.py           | 721 ++---------------------
+ src/scientific_figure_data/plot_region.py        | 257 --------
+ src/scientific_figure_data/qc.py                 |  13 -
+ src/scientific_figure_data/raster.py             |  28 +-
+ src/scientific_figure_data/reconstruction.py     | 229 -------
+ src/scientific_figure_data/storage.py            |   2 +-
+ src/scientific_figure_data/trace_spec.py         | 136 -----
+ tests/test_automatic_digitization.py             | 632 --------------------
+ tests/test_core.py                               |  61 +-
+ tests/test_ocr_rapidocr.py                       |  22 -
+ 18 files changed, 59 insertions(+), 2515 deletions(-)

@@ -1,0 +1,8 @@
+figure_id,skill_chart_family,skill_classification_status,skill_confidence,skill_evidence,agent_visual_content,content_source,skill_identified_content,needs_review
+WHOLE_IMAGE,UNCLASSIFIED,NEEDS_REVIEW,,[],composite of six subpanels,Agent visual reference,NO,NEEDS_REVIEW
+PANEL_A,UNCLASSIFIED,NEEDS_REVIEW,,[],"cyclic voltammetry (CV) curves; two samples, dashed 1st / solid 4th cycle; axes Voltage (V), Current (A g-1)",Agent visual reference,NO,NEEDS_REVIEW
+PANEL_B,UNCLASSIFIED,NEEDS_REVIEW,,[],rate performance: capacity vs cycle number with right-hand coulombic-efficiency axis; two scatter series,Agent visual reference,NO,NEEDS_REVIEW
+PANEL_C,UNCLASSIFIED,NEEDS_REVIEW,,[],schematic illustration of cell configurations; no numeric axes,Agent visual reference,NO,NEEDS_REVIEW
+PANEL_D,UNCLASSIFIED,NEEDS_REVIEW,,[],cycling capacity vs cycle number with right-hand CE axis; two series,Agent visual reference,NO,NEEDS_REVIEW
+PANEL_E,UNCLASSIFIED,NEEDS_REVIEW,,[],cycling capacity vs cycle number with right-hand CE axis plus photograph inset,Agent visual reference,NO,NEEDS_REVIEW
+PANEL_F,UNCLASSIFIED,NEEDS_REVIEW,,[],scatter comparison of energy density vs areal capacity with reference labels,Agent visual reference,NO,NEEDS_REVIEW

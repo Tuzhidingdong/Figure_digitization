@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "panels": [
+    {
+      "figure_id": "ADMA_202404834_P8_06",
+      "panel_id": "1",
+      "bbox": null,
+      "source_bbox": null,
+      "normalized_bbox": null,
+      "bbox_coordinate_space": "NOT_PROVIDED",
+      "bbox_provenance": "NOT_PROVIDED",
+      "segmentation_provenance": "SINGLE_PANEL_FALLBACK",
+      "segmentation_status": "WHOLE_FIGURE_NOT_SEGMENTED",
+      "evidence_image_path": "evidence/ADMA_202404834_P8_06_1.png",
+      "crop_mapping": {
+        "coordinate_space": "SOURCE_IMAGE_PIXELS",
+        "source_image_sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549",
+        "source_image_size": [
+          1407,
+          917
+        ],
+        "crop_bbox_source_pixels": [
+          0,
+          0,
+          1407,
+          917
+        ],
+        "crop_width_pixels": 1407,
+        "crop_height_pixels": 917,
+        "crop_image_path": "ADMA_202404834_P8_06_1.png",
+        "render_scale": 1.0
+      },
+      "status": "NEEDS_REVIEW",
+      "ocr_status": {
+        "status": "SUCCEEDED",
+        "record_count": 63
+      },
+      "segmentation_confidence": null,
+      "segmentation_confidence_status": "NOT_CALIBRATED",
+      "chart_family": "UNCLASSIFIED",
+      "chart_family_status": "NEEDS_REVIEW",
+      "shared_legend_refs": []
+    }
+  ]
+}

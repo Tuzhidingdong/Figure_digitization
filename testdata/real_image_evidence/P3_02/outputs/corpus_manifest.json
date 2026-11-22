@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "input_root_name": "single_figure_adma_202001469_P3_02",
+  "paper_count": 1,
+  "paper_manifest_stream": "corpus_manifest.jsonl"
+}

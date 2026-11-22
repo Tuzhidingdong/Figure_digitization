@@ -1,0 +1,8 @@
+panel_id,box_px,crop_file,width,height,preparation
+WHOLE_IMAGE,,extracted_figures/MAIN/WHOLE_IMAGE.png,1401,677,verbatim copy
+PANEL_A,"[18, 12, 442, 322]",panels\panel_a\source_crop.png,424,310,Agent visual crop only; no labels/anchors/points supplied
+PANEL_B,"[442, 12, 922, 322]",panels\panel_b\source_crop.png,480,310,Agent visual crop only; no labels/anchors/points supplied
+PANEL_C,"[930, 12, 1400, 318]",panels\panel_c\source_crop.png,470,306,Agent visual crop only; no labels/anchors/points supplied
+PANEL_D,"[15, 322, 442, 674]",panels\panel_d\source_crop.png,427,352,Agent visual crop only; no labels/anchors/points supplied
+PANEL_E,"[442, 322, 922, 674]",panels\panel_e\source_crop.png,480,352,Agent visual crop only; no labels/anchors/points supplied
+PANEL_F,"[930, 322, 1400, 674]",panels\panel_f\source_crop.png,470,352,Agent visual crop only; no labels/anchors/points supplied

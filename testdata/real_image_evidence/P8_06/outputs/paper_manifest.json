@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "root-paper",
+  "source_dir": ".",
+  "input_fingerprint": "e1725a85fbcff50cc2fd8ff0044c9d41367b971bf7e923196ddcefbb9f5843f3",
+  "upstream_version": null,
+  "adapter_version": "0.2.0",
+  "created_at": "2026-11-22T06:45:05+00:00",
+  "artifacts": [
+    {
+      "path": "MAIN_MAIN_FIG_P8_06.png",
+      "role": "figure_image",
+      "size_bytes": 450356,
+      "mtime_ns": 1794013961622356700,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    },
+    {
+      "path": "figure_inventory.json",
+      "role": "figure_inventory",
+      "size_bytes": 124,
+      "mtime_ns": 1795329890411426500,
+      "sha256": "dd991a17955580e558d542216cf94fd48128eacb50787290a78799a6c92b404a"
+    }
+  ],
+  "missing_roles": [
+    "main_pdf"
+  ],
+  "warnings": [
+    "Upstream version marker not detected; artifact discovery adapter used."
+  ],
+  "processing_status": "COMPLETED_WITH_REVIEW"
+}

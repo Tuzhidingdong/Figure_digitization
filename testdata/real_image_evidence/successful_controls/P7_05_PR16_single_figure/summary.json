@@ -1,0 +1,35 @@
+{
+  "target_image": "MAIN_MAIN_FIG_P7_05.png",
+  "project_version": "4ca762e40c04045685db15c75838ade145589031",
+  "automatic_run": {
+    "figures_submitted": 7,
+    "subpanels": 6,
+    "panel_segmentation_by_skill": "NONE (all WHOLE_FIGURE_NOT_SEGMENTED)",
+    "plot_boxes_found": 6,
+    "series": 7,
+    "series_with_points": 0,
+    "total_points": 0,
+    "axis_anchors_found": 0,
+    "calibration_states": [
+      "NUMERIC_AXIS_CALIBRATION_UNRESOLVED"
+    ],
+    "qc_statuses": [
+      "PROVISIONAL_UNCALIBRATED"
+    ],
+    "validate_status": "OK",
+    "elapsed_seconds": 0.749,
+    "peak_rss_bytes": 70590464,
+    "llm_tokens": 0
+  },
+  "extractability_counts": {
+    "CONDITIONALLY_EXTRACTABLE": 4,
+    "NOT_SUPPORTED": 3
+  },
+  "note": "All content descriptions are Agent visual reference; Skill identified no specific chart content.",
+  "optional_manual_assisted_diagnostic": {
+    "directory": "manual_assisted_diagnostic",
+    "not_counted_in_automatic_statistics": true,
+    "points": 25,
+    "note": "Uses previously documented manual plot_box/anchors/ordered path; reconstruction and overlay provided for visual reference only."
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "head": "3c49ba37779274abd2c8b249ed4c746d64af5a1d",
+  "algorithm_version": "0.3.0",
+  "environment": {
+    "python": "3.13.9",
+    "rapidocr": "3.10.0",
+    "onnxruntime": "1.32.0"
+  },
+  "image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+  "input_fixture": "reused verbatim from PR18 worktree (image + minimal figure_inventory.json)",
+  "job_state": [
+    {
+      "state": "NEEDS_REVIEW",
+      "count": 1
+    }
+  ],
+  "validate": "OK",
+  "panels": 6,
+  "ocr_records_total": 137,
+  "series": 9,
+  "data_points": 0,
+  "csv_data_rows": 0,
+  "color_candidate_series": [
+    "root-paper__P7_05_auto-04_unassigned_auto_color_01",
+    "root-paper__P7_05_auto-04_unassigned_auto_color_02",
+    "root-paper__P7_05_auto-04_unassigned_auto_color_03",
+    "root-paper__P7_05_auto-04_unassigned_auto_color_04"
+  ],
+  "dual_y_calibrated_panels": [
+    "auto-02",
+    "auto-04",
+    "auto-05"
+  ],
+  "axis_assignment_statuses": [
+    "AMBIGUOUS_DUAL_Y_AXIS",
+    "ASSIGNED",
+    "UNRESOLVED"
+  ],
+  "y_axis_text_color_association_statuses": [
+    "NOT_EVALUATED",
+    "NO_UNIQUE_MATCH"
+  ],
+  "trace_spec_statuses": [
+    "NEEDS_REVIEW",
+    "NOT_SUPPORTED"
+  ],
+  "automation_statuses": [
+    "NOT_READY"
+  ],
+  "reconstructed_pngs": [],
+  "overlay_pngs": [],
+  "comparison_sheet": "papers/root-paper/comparisons/ALL_PANELS_COMPARISON.png",
+  "elapsed_seconds": 22.947,
+  "peak_rss_bytes": 215375872,
+  "llm_tokens": 0,
+  "export_warning_counts": {
+    "QC_PROVISIONAL_UNCALIBRATED": 9,
+    "NOT_REVIEWED_ACCEPTED": 9,
+    "SUBJECT_LINK_UNASSIGNED": 9,
+    "CONDITIONS_NOT_LINKED": 9,
+    "CANONICAL_POINTS_FILE_MISSING": 9,
+    "DUAL_AXIS_UNASSIGNED": 8
+  }
+}

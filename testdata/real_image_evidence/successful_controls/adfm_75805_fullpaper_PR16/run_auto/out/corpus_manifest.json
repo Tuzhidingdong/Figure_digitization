@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "input_root_name": "10.1002_adfm.75805",
+  "paper_count": 1,
+  "paper_manifest_stream": "corpus_manifest.jsonl"
+}

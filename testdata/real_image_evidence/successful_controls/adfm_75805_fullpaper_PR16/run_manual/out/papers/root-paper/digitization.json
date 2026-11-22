@@ -1,0 +1,222 @@
+{
+  "schema_version": "1.0",
+  "algorithm_version": "0.1.0",
+  "paper_id": "root-paper",
+  "input_fingerprint": "4faebbf93df2c52dff221824d238898eba4dbc864a7dd4a05ddd79734da35a0d",
+  "stage_fingerprint": "220dd01c28a9fae1d79d0d5e498bb1b1dc8530970beca8ad7ac343f608793f72",
+  "context_index_fingerprint": "b0230edd77679833854d295c24a6dcb15c144c62d0b5483f03ef09f17a8b27ce",
+  "generated_at": "2026-11-22T02:51:59+00:00",
+  "status": "COMPLETED_WITH_REVIEW",
+  "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+  "series": [
+    {
+      "series_id": "root-paper__manual_P7_05_a_4th_anodic",
+      "paper_id": "root-paper",
+      "figure_id": "MAIN_FIG_P7_05",
+      "panel_id": "1",
+      "technique": "CV",
+      "domain": "battery",
+      "label": "PVO // modified Cu - 4th cycle anodic branch (manual annotation)",
+      "x_label": null,
+      "y_label": null,
+      "x_unit": "V",
+      "y_unit": "A g-1",
+      "measurement_id": "root-paper__measurement-root-paper__manual_P7_05_a_4th_anodic_d97b3f523e4e",
+      "y_axis_side": "LEFT",
+      "extraction_method": "EXPLICIT_ORDERED_PIXEL_POLYLINE",
+      "extraction_status": "EXTRACTED_PROVISIONAL",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "MAIN_FIG_P7_05",
+          "panel_id": "1",
+          "source_page": 7,
+          "source_image_asset_status": "VERIFIED",
+          "source_image": "MAIN_FIG_P7_05_1.png",
+          "source_image_upstream_path": "extracted_figures/MAIN/MAIN_MAIN_FIG_P7_05.png",
+          "source_pdf_integrity_status": "NOT_AVAILABLE",
+          "source_image_sha256": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+          "source_pdf_sha256": null,
+          "paper_input_fingerprint": "4faebbf93df2c52dff221824d238898eba4dbc864a7dd4a05ddd79734da35a0d",
+          "extraction_channel": "EXPLICIT_ORDERED_PIXEL_POLYLINE",
+          "algorithm_version": "0.1.0",
+          "context_reference_candidates": [],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {},
+          "ocr_evidence": []
+        }
+      ],
+      "metadata": {
+        "path_order": "PRESERVED",
+        "data_family": "NON_MONOTONIC",
+        "chart_family_classification": {
+          "technique": "CV",
+          "chart_family": "NON_MONOTONIC_CURVE",
+          "status": "CLASSIFIED_FROM_UPSTREAM_METADATA",
+          "confidence": 1.0,
+          "evidence": [
+            {
+              "source": "upstream_technique",
+              "value": "CV"
+            }
+          ]
+        },
+        "plot_detection": null,
+        "color_detection": null,
+        "axis_text_evidence": null,
+        "x_calibration": {
+          "axis": "x",
+          "unit": "V",
+          "slope": 0.005341246290801187,
+          "intercept": -0.4459940652818991,
+          "anchors": [
+            {
+              "pixel": 83.5,
+              "value": 0.0
+            },
+            {
+              "pixel": 420.5,
+              "value": 1.8
+            }
+          ],
+          "rmse": 1.5700924586837752e-16,
+          "status": "CALIBRATED_NUMERIC"
+        },
+        "y_calibration": {
+          "axis": "y",
+          "unit": "A g-1",
+          "slope": -0.023923444976076555,
+          "intercept": 4.5669856459330145,
+          "anchors": [
+            {
+              "pixel": 65.5,
+              "value": 3.0
+            },
+            {
+              "pixel": 274.5,
+              "value": -2.0
+            }
+          ],
+          "rmse": 0.0,
+          "status": "CALIBRATED_NUMERIC"
+        },
+        "calibration_errors": {},
+        "points_count": 25,
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "CLASSIFIED_FROM_UPSTREAM_METADATA",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "CALIBRATION_EVIDENCE_PRESENT",
+            "axis_calibration_y": "CALIBRATION_EVIDENCE_PRESENT",
+            "series_extraction": "EXTRACTED_PROVISIONAL",
+            "point_reconstruction": "PIXEL_GEOMETRY_PRESENT",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "RAW_UNIT_RETAINED",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "CALIBRATION_EVIDENCE_PRESENT",
+              "anchor_count": 2,
+              "rmse": 1.5700924586837752e-16,
+              "unit": "V",
+              "calibration_status": "CALIBRATED_NUMERIC"
+            },
+            "y": {
+              "status": "CALIBRATION_EVIDENCE_PRESENT",
+              "anchor_count": 2,
+              "rmse": 0.0,
+              "unit": "A g-1",
+              "calibration_status": "CALIBRATED_NUMERIC"
+            }
+          },
+          "calibration_state": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+          "trace_metrics": {
+            "point_count": 25,
+            "pixel_coordinate_count": 25,
+            "pixel_coordinate_fraction": 1.0,
+            "pixel_x_span": 250.0,
+            "pixel_y_span": 114.0,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "ORDERED_NON_MONOTONIC_ALLOWED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "CLASSIFIED_FROM_UPSTREAM_METADATA",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "CALIBRATION_EVIDENCE_PRESENT",
+          "axis_calibration_y": "CALIBRATION_EVIDENCE_PRESENT",
+          "series_extraction": "EXTRACTED_PROVISIONAL",
+          "point_reconstruction": "PIXEL_GEOMETRY_PRESENT",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "RAW_UNIT_RETAINED",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        }
+      },
+      "points_count": 25
+    }
+  ],
+  "extra": {
+    "context_index_fingerprint": "b0230edd77679833854d295c24a6dcb15c144c62d0b5483f03ef09f17a8b27ce",
+    "figure_inventory_source": "evidence_index.json",
+    "pdf_source": null,
+    "native_page_evidence": {},
+    "stage_fingerprint": "220dd01c28a9fae1d79d0d5e498bb1b1dc8530970beca8ad7ac343f608793f72",
+    "memory_limit_mb": 2048,
+    "render_scale": 1.5,
+    "temp_disk_limit_mb": 2048,
+    "evidence_bytes": 510721,
+    "context_index_bytes": 184,
+    "budgeted_storage_bytes": 510905,
+    "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+    "qc_thresholds": {
+      "schema_version": "1.0",
+      "status": "PROVISIONAL_UNCALIBRATED",
+      "notes": "Engineering defaults only; not calibrated against annotated real papers.",
+      "minimum_calibration_anchors": 2,
+      "maximum_axis_anchor_rmse": null,
+      "minimum_trace_points": 8,
+      "minimum_trace_pixel_fraction": 0.15,
+      "allow_automatic_same_color_crossing": false,
+      "allow_automatic_marker_disambiguation": false
+    },
+    "algorithm_implementation_fingerprint": "c9fc9507098365e508195d2ed36c5fada765e37b3eb83df1ec3254649e54c987",
+    "profile_config_fingerprint": "d2575357f92c5234b15ee7030f8459e4f8db6456d94861b923f4f499ebb1fa6b",
+    "llm_tokens": 0
+  }
+}

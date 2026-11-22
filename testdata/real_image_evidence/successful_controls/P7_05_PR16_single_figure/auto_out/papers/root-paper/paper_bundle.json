@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "bundle_version": "1.0",
+  "paper_id": "root-paper",
+  "generated_at": "2026-11-22T03:03:29+00:00",
+  "input_fingerprint": "34f962a668bfdb40c9fb6d0cdd5e7bddbfd6f66cb3158190ca18e8935b522083",
+  "stage_fingerprint": "a44f0efe7fa4d33af215c0cb1d32152c5c326e0baa3aa442399446a2fa61e982",
+  "context_index_fingerprint": "15c9729fe4923e9e61ac4c1c2b6e26dce74b089217a01b11abd0b27fd26e4828",
+  "algorithm_versions": {
+    "core": "0.1.0"
+  },
+  "profile_versions": {},
+  "status": "COMPLETED_WITH_REVIEW",
+  "canonical_artifacts": [
+    "paper_manifest.json",
+    "figure_inventory.json",
+    "panel_layout.json",
+    "digitization.json",
+    "evidence/PANEL_A_1.png",
+    "evidence/PANEL_B_1.png",
+    "evidence/PANEL_C_1.png",
+    "evidence/PANEL_D_1.png",
+    "evidence/PANEL_E_1.png",
+    "evidence/PANEL_F_1.png",
+    "evidence/WHOLE_IMAGE_1.png",
+    "context/paper_context_index.json"
+  ],
+  "content_hashes": {
+    "paper_manifest.json": "0f9438100102d97a57ba8ca9005492689a715cc9f9b0f343c2e77ac28879d24f",
+    "figure_inventory.json": "8efaea1bb5b94049d068a7a9cdcb6334c434bf09cffbed7473505c92a5c8c4b8",
+    "panel_layout.json": "1c1f72b66dc805665c722f54df1c2667377dddcaed85b8c1e65171e3e2599ec6",
+    "digitization.json": "7c3e42177f10664ef0745b106d6b020d77b21b0db74a3b6519c59c618a0b70c1",
+    "evidence/PANEL_A_1.png": "237875f9df219a96639b1b3de8ceee4667d76f0b6008cf0c340d40afdfdbdfce",
+    "evidence/PANEL_B_1.png": "c113f5e4f23359502c9323f589cd5f47c468c8dc37bed7bb237f3b1a32b30b61",
+    "evidence/PANEL_C_1.png": "a031c8399355d898d81b16ef4172a331514f6e56fddd04e7e7252858bba36e40",
+    "evidence/PANEL_D_1.png": "c3a04e77bf5e4d8fd943aa180385ea1c34b1e7673d9862c8814b1dda52882539",
+    "evidence/PANEL_E_1.png": "9bea9cca51e5d687b1743dcea7ad0c28205e9ea263077589389bf6bf56e0531d",
+    "evidence/PANEL_F_1.png": "be85a8298909cca2bb9b3fced94f3646eaa7a9d499de0e3c502e0a2492531cc2",
+    "evidence/WHOLE_IMAGE_1.png": "3b860297e333f07e54618a4e1059191682fb538339b4c75c6e3f862a6ecc10de",
+    "context/paper_context_index.json": "86e51e9a5b9a820d834e1dd7c32fcbc914d7e9a36fd45321f69599b17625f78c"
+  },
+  "series_count": 7,
+  "figure_count": 7,
+  "panel_count": 7
+}

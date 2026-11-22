@@ -1,0 +1,1927 @@
+{
+  "schema_version": "1.0",
+  "algorithm_version": "0.4.0",
+  "paper_id": "root-paper",
+  "input_fingerprint": "e1725a85fbcff50cc2fd8ff0044c9d41367b971bf7e923196ddcefbb9f5843f3",
+  "stage_fingerprint": "70de240b902b9e2e908f4d5b2825e4df13bb1a1424018529df01423f3957a3a1",
+  "context_index_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "generated_at": "2026-11-22T06:45:12+00:00",
+  "status": "COMPLETED_WITH_REVIEW",
+  "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+  "series": [
+    {
+      "series_id": "root-paper__ADMA_202404834_P8_06_1_unassigned",
+      "paper_id": "root-paper",
+      "figure_id": "ADMA_202404834_P8_06",
+      "panel_id": "1",
+      "technique": null,
+      "domain": null,
+      "label": null,
+      "x_label": "Time ()",
+      "y_label": "Voltage",
+      "x_unit": null,
+      "y_unit": "V",
+      "measurement_id": "root-paper__measurement-root-paper__ADMA_202404834_P8_06_1_unassigned_7c0f2bfb256c",
+      "y_axis_side": "LEFT",
+      "extraction_method": "UNRESOLVED",
+      "extraction_status": "NEEDS_REVIEW",
+      "qc_status": "PROVISIONAL_UNCALIBRATED",
+      "review_state": "NEEDS_REVIEW",
+      "subject_links": [],
+      "conditions": [],
+      "evidence": [
+        {
+          "figure_id": "ADMA_202404834_P8_06",
+          "panel_id": "1",
+          "source_page": null,
+          "source_image_asset_status": "LOCAL_PATH_HASH_VERIFIED",
+          "source_image": "ADMA_202404834_P8_06_1.png",
+          "source_image_upstream_path": "MAIN_MAIN_FIG_P8_06.png",
+          "source_pdf_integrity_status": "NOT_AVAILABLE",
+          "source_image_sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549",
+          "source_pdf_sha256": null,
+          "paper_input_fingerprint": "e1725a85fbcff50cc2fd8ff0044c9d41367b971bf7e923196ddcefbb9f5843f3",
+          "extraction_channel": "UNRESOLVED",
+          "algorithm_version": "0.4.0",
+          "context_reference_candidates": [],
+          "context_statistics_candidates": [],
+          "native_page_evidence": {},
+          "ocr_evidence": [
+            {
+              "text": "ADVANCED",
+              "confidence": 0.99973,
+              "polygon": [
+                [
+                  28.0,
+                  12.0
+                ],
+                [
+                  253.0,
+                  12.0
+                ],
+                [
+                  253.0,
+                  54.0
+                ],
+                [
+                  28.0,
+                  54.0
+                ]
+              ]
+            },
+            {
+              "text": "ADVANCED",
+              "confidence": 0.99859,
+              "polygon": [
+                [
+                  1175.0,
+                  14.0
+                ],
+                [
+                  1386.0,
+                  14.0
+                ],
+                [
+                  1386.0,
+                  53.0
+                ],
+                [
+                  1175.0,
+                  53.0
+                ]
+              ]
+            },
+            {
+              "text": "SCIENCE NEWS",
+              "confidence": 0.96099,
+              "polygon": [
+                [
+                  14.0,
+                  45.0
+                ],
+                [
+                  267.0,
+                  45.0
+                ],
+                [
+                  267.0,
+                  81.0
+                ],
+                [
+                  14.0,
+                  81.0
+                ]
+              ]
+            },
+            {
+              "text": "MATERIALS",
+              "confidence": 0.93999,
+              "polygon": [
+                [
+                  1180.0,
+                  44.0
+                ],
+                [
+                  1399.0,
+                  41.0
+                ],
+                [
+                  1399.0,
+                  81.0
+                ],
+                [
+                  1180.0,
+                  83.0
+                ]
+              ]
+            },
+            {
+              "text": "www.advancedsciencenews.com",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  13.0,
+                  83.0
+                ],
+                [
+                  357.0,
+                  84.0
+                ],
+                [
+                  357.0,
+                  114.0
+                ],
+                [
+                  13.0,
+                  113.0
+                ]
+              ]
+            },
+            {
+              "text": "www.advmat.de",
+              "confidence": 0.98471,
+              "polygon": [
+                [
+                  1226.0,
+                  85.0
+                ],
+                [
+                  1399.0,
+                  85.0
+                ],
+                [
+                  1399.0,
+                  112.0
+                ],
+                [
+                  1226.0,
+                  112.0
+                ]
+              ]
+            },
+            {
+              "text": "a",
+              "confidence": 0.99631,
+              "polygon": [
+                [
+                  26.0,
+                  165.0
+                ],
+                [
+                  44.0,
+                  165.0
+                ],
+                [
+                  44.0,
+                  184.0
+                ],
+                [
+                  26.0,
+                  184.0
+                ]
+              ]
+            },
+            {
+              "text": "3",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  73.0,
+                  184.0
+                ],
+                [
+                  89.0,
+                  184.0
+                ],
+                [
+                  89.0,
+                  204.0
+                ],
+                [
+                  73.0,
+                  204.0
+                ]
+              ]
+            },
+            {
+              "text": "without urea",
+              "confidence": 0.99837,
+              "polygon": [
+                [
+                  1195.0,
+                  197.0
+                ],
+                [
+                  1300.0,
+                  197.0
+                ],
+                [
+                  1300.0,
+                  219.0
+                ],
+                [
+                  1195.0,
+                  219.0
+                ]
+              ]
+            },
+            {
+              "text": "with urea",
+              "confidence": 0.99975,
+              "polygon": [
+                [
+                  1195.0,
+                  218.0
+                ],
+                [
+                  1275.0,
+                  218.0
+                ],
+                [
+                  1275.0,
+                  239.0
+                ],
+                [
+                  1195.0,
+                  239.0
+                ]
+              ]
+            },
+            {
+              "text": "@ 50 mA cm^{²2",
+              "confidence": 0.88283,
+              "polygon": [
+                [
+                  1168.0,
+                  255.0
+                ],
+                [
+                  1288.0,
+                  252.0
+                ],
+                [
+                  1288.0,
+                  279.0
+                ],
+                [
+                  1169.0,
+                  283.0
+                ]
+              ]
+            },
+            {
+              "text": "Voltage (V)",
+              "confidence": 0.99984,
+              "polygon": [
+                [
+                  27.0,
+                  278.0
+                ],
+                [
+                  55.0,
+                  279.0
+                ],
+                [
+                  53.0,
+                  376.0
+                ],
+                [
+                  25.0,
+                  375.0
+                ]
+              ]
+            },
+            {
+              "text": "2-",
+              "confidence": 0.80754,
+              "polygon": [
+                [
+                  70.0,
+                  270.0
+                ],
+                [
+                  96.0,
+                  270.0
+                ],
+                [
+                  96.0,
+                  295.0
+                ],
+                [
+                  70.0,
+                  295.0
+                ]
+              ]
+            },
+            {
+              "text": "1",
+              "confidence": 0.99994,
+              "polygon": [
+                [
+                  74.0,
+                  361.0
+                ],
+                [
+                  90.0,
+                  361.0
+                ],
+                [
+                  90.0,
+                  381.0
+                ],
+                [
+                  74.0,
+                  381.0
+                ]
+              ]
+            },
+            {
+              "text": "0",
+              "confidence": 0.99959,
+              "polygon": [
+                [
+                  75.0,
+                  452.0
+                ],
+                [
+                  88.0,
+                  452.0
+                ],
+                [
+                  88.0,
+                  467.0
+                ],
+                [
+                  75.0,
+                  467.0
+                ]
+              ]
+            },
+            {
+              "text": "0",
+              "confidence": 0.99969,
+              "polygon": [
+                [
+                  88.0,
+                  469.0
+                ],
+                [
+                  100.0,
+                  469.0
+                ],
+                [
+                  100.0,
+                  486.0
+                ],
+                [
+                  88.0,
+                  486.0
+                ]
+              ]
+            },
+            {
+              "text": "20",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  286.0,
+                  466.0
+                ],
+                [
+                  316.0,
+                  466.0
+                ],
+                [
+                  316.0,
+                  490.0
+                ],
+                [
+                  286.0,
+                  490.0
+                ]
+              ]
+            },
+            {
+              "text": "40",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  497.0,
+                  466.0
+                ],
+                [
+                  522.0,
+                  466.0
+                ],
+                [
+                  522.0,
+                  488.0
+                ],
+                [
+                  497.0,
+                  488.0
+                ]
+              ]
+            },
+            {
+              "text": "60",
+              "confidence": 1.0,
+              "polygon": [
+                [
+                  703.0,
+                  466.0
+                ],
+                [
+                  728.0,
+                  466.0
+                ],
+                [
+                  728.0,
+                  488.0
+                ],
+                [
+                  703.0,
+                  488.0
+                ]
+              ]
+            },
+            {
+              "text": "80",
+              "confidence": 1.0,
+              "polygon": [
+                [
+                  908.0,
+                  466.0
+                ],
+                [
+                  937.0,
+                  466.0
+                ],
+                [
+                  937.0,
+                  490.0
+                ],
+                [
+                  908.0,
+                  490.0
+                ]
+              ]
+            },
+            {
+              "text": "100",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  1113.0,
+                  466.0
+                ],
+                [
+                  1150.0,
+                  466.0
+                ],
+                [
+                  1150.0,
+                  490.0
+                ],
+                [
+                  1113.0,
+                  490.0
+                ]
+              ]
+            },
+            {
+              "text": "120",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  1319.0,
+                  464.0
+                ],
+                [
+                  1358.0,
+                  464.0
+                ],
+                [
+                  1358.0,
+                  491.0
+                ],
+                [
+                  1319.0,
+                  491.0
+                ]
+              ]
+            },
+            {
+              "text": "Time ()",
+              "confidence": 0.75817,
+              "polygon": [
+                [
+                  679.0,
+                  492.0
+                ],
+                [
+                  753.0,
+                  494.0
+                ],
+                [
+                  752.0,
+                  519.0
+                ],
+                [
+                  678.0,
+                  517.0
+                ]
+              ]
+            },
+            {
+              "text": "b",
+              "confidence": 0.99993,
+              "polygon": [
+                [
+                  21.0,
+                  551.0
+                ],
+                [
+                  42.0,
+                  551.0
+                ],
+                [
+                  42.0,
+                  577.0
+                ],
+                [
+                  21.0,
+                  577.0
+                ]
+              ]
+            },
+            {
+              "text": "C",
+              "confidence": 0.74616,
+              "polygon": [
+                [
+                  498.0,
+                  556.0
+                ],
+                [
+                  516.0,
+                  556.0
+                ],
+                [
+                  516.0,
+                  576.0
+                ],
+                [
+                  498.0,
+                  576.0
+                ]
+              ]
+            },
+            {
+              "text": "p",
+              "confidence": 0.9986,
+              "polygon": [
+                [
+                  937.0,
+                  551.0
+                ],
+                [
+                  958.0,
+                  551.0
+                ],
+                [
+                  958.0,
+                  577.0
+                ],
+                [
+                  937.0,
+                  577.0
+                ]
+              ]
+            },
+            {
+              "text": "2",
+              "confidence": 0.99995,
+              "polygon": [
+                [
+                  72.0,
+                  583.0
+                ],
+                [
+                  89.0,
+                  583.0
+                ],
+                [
+                  89.0,
+                  603.0
+                ],
+                [
+                  72.0,
+                  603.0
+                ]
+              ]
+            },
+            {
+              "text": "100",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  970.0,
+                  581.0
+                ],
+                [
+                  1006.0,
+                  581.0
+                ],
+                [
+                  1006.0,
+                  605.0
+                ],
+                [
+                  970.0,
+                  605.0
+                ]
+              ]
+            },
+            {
+              "text": "20",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  1342.0,
+                  584.0
+                ],
+                [
+                  1367.0,
+                  584.0
+                ],
+                [
+                  1367.0,
+                  604.0
+                ],
+                [
+                  1342.0,
+                  604.0
+                ]
+              ]
+            },
+            {
+              "text": "Discharge Capacity (Ah L-1)",
+              "confidence": 0.99845,
+              "polygon": [
+                [
+                  1364.0,
+                  615.0
+                ],
+                [
+                  1391.0,
+                  615.0
+                ],
+                [
+                  1391.0,
+                  820.0
+                ],
+                [
+                  1364.0,
+                  820.0
+                ]
+              ]
+            },
+            {
+              "text": "2",
+              "confidence": 0.99988,
+              "polygon": [
+                [
+                  526.0,
+                  632.0
+                ],
+                [
+                  548.0,
+                  632.0
+                ],
+                [
+                  548.0,
+                  657.0
+                ],
+                [
+                  526.0,
+                  657.0
+                ]
+              ]
+            },
+            {
+              "text": "80",
+              "confidence": 0.99997,
+              "polygon": [
+                [
+                  977.0,
+                  630.0
+                ],
+                [
+                  1008.0,
+                  630.0
+                ],
+                [
+                  1008.0,
+                  654.0
+                ],
+                [
+                  977.0,
+                  654.0
+                ]
+              ]
+            },
+            {
+              "text": "Voltage (V)",
+              "confidence": 0.99967,
+              "polygon": [
+                [
+                  30.0,
+                  671.0
+                ],
+                [
+                  58.0,
+                  671.0
+                ],
+                [
+                  56.0,
+                  763.0
+                ],
+                [
+                  28.0,
+                  762.0
+                ]
+              ]
+            },
+            {
+              "text": "Voltage (V)",
+              "confidence": 0.99902,
+              "polygon": [
+                [
+                  484.0,
+                  673.0
+                ],
+                [
+                  512.0,
+                  673.0
+                ],
+                [
+                  509.0,
+                  765.0
+                ],
+                [
+                  481.0,
+                  764.0
+                ]
+              ]
+            },
+            {
+              "text": "Efficiency (%)",
+              "confidence": 0.99904,
+              "polygon": [
+                [
+                  927.0,
+                  664.0
+                ],
+                [
+                  954.0,
+                  664.0
+                ],
+                [
+                  954.0,
+                  770.0
+                ],
+                [
+                  927.0,
+                  770.0
+                ]
+              ]
+            },
+            {
+              "text": "60",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  978.0,
+                  680.0
+                ],
+                [
+                  1007.0,
+                  680.0
+                ],
+                [
+                  1007.0,
+                  705.0
+                ],
+                [
+                  978.0,
+                  705.0
+                ]
+              ]
+            },
+            {
+              "text": "15",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  1346.0,
+                  672.0
+                ],
+                [
+                  1365.0,
+                  672.0
+                ],
+                [
+                  1365.0,
+                  691.0
+                ],
+                [
+                  1346.0,
+                  691.0
+                ]
+              ]
+            },
+            {
+              "text": "1",
+              "confidence": 0.99987,
+              "polygon": [
+                [
+                  74.0,
+                  713.0
+                ],
+                [
+                  90.0,
+                  713.0
+                ],
+                [
+                  90.0,
+                  731.0
+                ],
+                [
+                  74.0,
+                  731.0
+                ]
+              ]
+            },
+            {
+              "text": "1",
+              "confidence": 0.99989,
+              "polygon": [
+                [
+                  529.0,
+                  739.0
+                ],
+                [
+                  546.0,
+                  739.0
+                ],
+                [
+                  546.0,
+                  760.0
+                ],
+                [
+                  529.0,
+                  760.0
+                ]
+              ]
+            },
+            {
+              "text": "40",
+              "confidence": 0.99996,
+              "polygon": [
+                [
+                  977.0,
+                  729.0
+                ],
+                [
+                  1008.0,
+                  729.0
+                ],
+                [
+                  1008.0,
+                  753.0
+                ],
+                [
+                  977.0,
+                  753.0
+                ]
+              ]
+            },
+            {
+              "text": "CE",
+              "confidence": 0.9993,
+              "polygon": [
+                [
+                  1045.0,
+                  737.0
+                ],
+                [
+                  1078.0,
+                  737.0
+                ],
+                [
+                  1078.0,
+                  762.0
+                ],
+                [
+                  1045.0,
+                  762.0
+                ]
+              ]
+            },
+            {
+              "text": "EE",
+              "confidence": 0.99972,
+              "polygon": [
+                [
+                  1046.0,
+                  758.0
+                ],
+                [
+                  1078.0,
+                  758.0
+                ],
+                [
+                  1078.0,
+                  781.0
+                ],
+                [
+                  1046.0,
+                  781.0
+                ]
+              ]
+            },
+            {
+              "text": "10",
+              "confidence": 0.99997,
+              "polygon": [
+                [
+                  1344.0,
+                  760.0
+                ],
+                [
+                  1367.0,
+                  760.0
+                ],
+                [
+                  1367.0,
+                  780.0
+                ],
+                [
+                  1344.0,
+                  780.0
+                ]
+              ]
+            },
+            {
+              "text": "20",
+              "confidence": 0.99996,
+              "polygon": [
+                [
+                  977.0,
+                  779.0
+                ],
+                [
+                  1008.0,
+                  779.0
+                ],
+                [
+                  1008.0,
+                  803.0
+                ],
+                [
+                  977.0,
+                  803.0
+                ]
+              ]
+            },
+            {
+              "text": "@ 50 mA cm^{²",
+              "confidence": 0.93048,
+              "polygon": [
+                [
+                  1020.0,
+                  807.0
+                ],
+                [
+                  1134.0,
+                  803.0
+                ],
+                [
+                  1134.0,
+                  830.0
+                ],
+                [
+                  1021.0,
+                  833.0
+                ]
+              ]
+            },
+            {
+              "text": "0",
+              "confidence": 0.99858,
+              "polygon": [
+                [
+                  987.0,
+                  832.0
+                ],
+                [
+                  1003.0,
+                  829.0
+                ],
+                [
+                  1006.0,
+                  849.0
+                ],
+                [
+                  990.0,
+                  852.0
+                ]
+              ]
+            },
+            {
+              "text": "16.0",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  74.0,
+                  846.0
+                ],
+                [
+                  113.0,
+                  846.0
+                ],
+                [
+                  113.0,
+                  869.0
+                ],
+                [
+                  74.0,
+                  869.0
+                ]
+              ]
+            },
+            {
+              "text": "16.5",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  156.0,
+                  845.0
+                ],
+                [
+                  198.0,
+                  845.0
+                ],
+                [
+                  198.0,
+                  871.0
+                ],
+                [
+                  156.0,
+                  871.0
+                ]
+              ]
+            },
+            {
+              "text": "17.0",
+              "confidence": 0.99996,
+              "polygon": [
+                [
+                  238.0,
+                  844.0
+                ],
+                [
+                  281.0,
+                  844.0
+                ],
+                [
+                  281.0,
+                  870.0
+                ],
+                [
+                  238.0,
+                  870.0
+                ]
+              ]
+            },
+            {
+              "text": "17.5",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  321.0,
+                  844.0
+                ],
+                [
+                  364.0,
+                  844.0
+                ],
+                [
+                  364.0,
+                  870.0
+                ],
+                [
+                  321.0,
+                  870.0
+                ]
+              ]
+            },
+            {
+              "text": "18.0",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  405.0,
+                  846.0
+                ],
+                [
+                  446.0,
+                  846.0
+                ],
+                [
+                  446.0,
+                  869.0
+                ],
+                [
+                  405.0,
+                  869.0
+                ]
+              ]
+            },
+            {
+              "text": "39.0",
+              "confidence": 1.0,
+              "polygon": [
+                [
+                  528.0,
+                  850.0
+                ],
+                [
+                  570.0,
+                  850.0
+                ],
+                [
+                  570.0,
+                  873.0
+                ],
+                [
+                  528.0,
+                  873.0
+                ]
+              ]
+            },
+            {
+              "text": "39.5",
+              "confidence": 1.0,
+              "polygon": [
+                [
+                  611.0,
+                  848.0
+                ],
+                [
+                  655.0,
+                  848.0
+                ],
+                [
+                  655.0,
+                  874.0
+                ],
+                [
+                  611.0,
+                  874.0
+                ]
+              ]
+            },
+            {
+              "text": "40.0",
+              "confidence": 0.99998,
+              "polygon": [
+                [
+                  695.0,
+                  848.0
+                ],
+                [
+                  737.0,
+                  848.0
+                ],
+                [
+                  737.0,
+                  874.0
+                ],
+                [
+                  695.0,
+                  874.0
+                ]
+              ]
+            },
+            {
+              "text": "40.5",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  778.0,
+                  848.0
+                ],
+                [
+                  822.0,
+                  848.0
+                ],
+                [
+                  822.0,
+                  874.0
+                ],
+                [
+                  778.0,
+                  874.0
+                ]
+              ]
+            },
+            {
+              "text": "41.0",
+              "confidence": 0.99996,
+              "polygon": [
+                [
+                  863.0,
+                  850.0
+                ],
+                [
+                  905.0,
+                  850.0
+                ],
+                [
+                  905.0,
+                  873.0
+                ],
+                [
+                  863.0,
+                  873.0
+                ]
+              ]
+            },
+            {
+              "text": "0",
+              "confidence": 0.9991,
+              "polygon": [
+                [
+                  999.0,
+                  847.0
+                ],
+                [
+                  1016.0,
+                  847.0
+                ],
+                [
+                  1016.0,
+                  866.0
+                ],
+                [
+                  999.0,
+                  866.0
+                ]
+              ]
+            },
+            {
+              "text": "50",
+              "confidence": 1.0,
+              "polygon": [
+                [
+                  1106.0,
+                  846.0
+                ],
+                [
+                  1131.0,
+                  846.0
+                ],
+                [
+                  1131.0,
+                  868.0
+                ],
+                [
+                  1106.0,
+                  868.0
+                ]
+              ]
+            },
+            {
+              "text": "100",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  1211.0,
+                  845.0
+                ],
+                [
+                  1247.0,
+                  845.0
+                ],
+                [
+                  1247.0,
+                  869.0
+                ],
+                [
+                  1211.0,
+                  869.0
+                ]
+              ]
+            },
+            {
+              "text": "150",
+              "confidence": 0.99999,
+              "polygon": [
+                [
+                  1321.0,
+                  845.0
+                ],
+                [
+                  1357.0,
+                  845.0
+                ],
+                [
+                  1357.0,
+                  869.0
+                ],
+                [
+                  1321.0,
+                  869.0
+                ]
+              ]
+            },
+            {
+              "text": "Time (h)",
+              "confidence": 0.99944,
+              "polygon": [
+                [
+                  223.0,
+                  868.0
+                ],
+                [
+                  295.0,
+                  871.0
+                ],
+                [
+                  294.0,
+                  899.0
+                ],
+                [
+                  222.0,
+                  896.0
+                ]
+              ]
+            },
+            {
+              "text": "Time (h)",
+              "confidence": 0.54463,
+              "polygon": [
+                [
+                  680.0,
+                  872.0
+                ],
+                [
+                  753.0,
+                  875.0
+                ],
+                [
+                  752.0,
+                  903.0
+                ],
+                [
+                  679.0,
+                  901.0
+                ]
+              ]
+            },
+            {
+              "text": "Cycle number",
+              "confidence": 0.96667,
+              "polygon": [
+                [
+                  1121.0,
+                  872.0
+                ],
+                [
+                  1228.0,
+                  872.0
+                ],
+                [
+                  1228.0,
+                  895.0
+                ],
+                [
+                  1121.0,
+                  895.0
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "reason": "NO_SUPPORTED_TRACE_SPECIFICATION",
+        "note": "Automatic tracing requires supported monotonic X-axis semantics, a resolved plot region, and a separable chromatic family. Numeric axis mapping is recorded separately and may remain unresolved.",
+        "trace_specification": {
+          "status": "NEEDS_REVIEW",
+          "reason": "UNIQUE_SINGLE_TRACE_COLOR_NOT_ESTABLISHED",
+          "color_detection_status": "NEEDS_REVIEW",
+          "series_axis_assignment": {
+            "status": "ASSIGNED",
+            "selected_side": "LEFT",
+            "available_sides": [
+              "LEFT"
+            ],
+            "reason": null
+          },
+          "y_axis_text_color_association": {
+            "status": "NOT_EVALUATED"
+          },
+          "input_provenance": {
+            "plot_box": "AUTO_PLOT_FRAME",
+            "x_axis_anchors": "OCR",
+            "y_axis_anchors": "OCR",
+            "color": "AUTOMATIC_COLOR_DETECTOR",
+            "ocr": "OCR_EVIDENCE_PRESENT",
+            "automation_status": "NOT_READY"
+          }
+        },
+        "data_family": "UNCLASSIFIED",
+        "plot_detection": {
+          "status": "PROVISIONAL_PLOT_BOX",
+          "pixel_bbox": [
+            93,
+            194,
+            1338,
+            461
+          ],
+          "normalized_bbox": [
+            0.06609808102345416,
+            0.21155943293347873,
+            0.9509594882729211,
+            0.5027262813522355
+          ],
+          "image_size": [
+            1407,
+            917
+          ],
+          "side_coverage": {
+            "top": 1.0,
+            "bottom": 1.0,
+            "left": 1.0,
+            "right": 1.0
+          },
+          "score": 0.7463332038979429,
+          "provisional": true
+        },
+        "color_detection": {
+          "status": "NEEDS_REVIEW",
+          "reason": "MULTIPLE_CHROMATIC_FAMILIES",
+          "saturated_pixel_count": 98962,
+          "dominant_family_pixels": 50120,
+          "dominant_family_purity": 0.5064570239081668,
+          "dominant_color_rgb": [
+            237,
+            36,
+            48
+          ]
+        },
+        "chart_family_classification": {
+          "technique": null,
+          "chart_family": "UNCLASSIFIED",
+          "status": "NEEDS_REVIEW",
+          "confidence": null,
+          "evidence": []
+        },
+        "axis_label_evidence": {
+          "x_label": "Time ()",
+          "y_left_label": "Voltage (V)",
+          "y_right_label": null,
+          "selected": {
+            "x": {
+              "text": "Time ()",
+              "confidence": 0.75817,
+              "center_x": 715.5,
+              "center_y": 505.5,
+              "polygon": [
+                [
+                  679.0,
+                  492.0
+                ],
+                [
+                  753.0,
+                  494.0
+                ],
+                [
+                  752.0,
+                  519.0
+                ],
+                [
+                  678.0,
+                  517.0
+                ]
+              ],
+              "score": 0.8285319615384616
+            },
+            "y_left": {
+              "text": "Voltage (V)",
+              "confidence": 0.99984,
+              "center_x": 40.0,
+              "center_y": 327.0,
+              "polygon": [
+                [
+                  27.0,
+                  278.0
+                ],
+                [
+                  55.0,
+                  279.0
+                ],
+                [
+                  53.0,
+                  376.0
+                ],
+                [
+                  25.0,
+                  375.0
+                ]
+              ],
+              "score": 0.9835068149521161
+            },
+            "y_right": null
+          },
+          "candidates": {
+            "x": [
+              {
+                "text": "Time ()",
+                "confidence": 0.75817,
+                "center_x": 715.5,
+                "center_y": 505.5,
+                "polygon": [
+                  [
+                    679.0,
+                    492.0
+                  ],
+                  [
+                    753.0,
+                    494.0
+                  ],
+                  [
+                    752.0,
+                    519.0
+                  ],
+                  [
+                    678.0,
+                    517.0
+                  ]
+                ],
+                "score": 0.8285319615384616
+              },
+              {
+                "text": "p",
+                "confidence": 0.9986,
+                "center_x": 947.5,
+                "center_y": 564.0,
+                "polygon": [
+                  [
+                    937.0,
+                    551.0
+                  ],
+                  [
+                    958.0,
+                    551.0
+                  ],
+                  [
+                    958.0,
+                    577.0
+                  ],
+                  [
+                    937.0,
+                    577.0
+                  ]
+                ],
+                "score": 0.7983994348699901
+              },
+              {
+                "text": "C",
+                "confidence": 0.74616,
+                "center_x": 507.0,
+                "center_y": 566.0,
+                "polygon": [
+                  [
+                    498.0,
+                    556.0
+                  ],
+                  [
+                    516.0,
+                    556.0
+                  ],
+                  [
+                    516.0,
+                    576.0
+                  ],
+                  [
+                    498.0,
+                    576.0
+                  ]
+                ],
+                "score": 0.6691541276046277
+              }
+            ],
+            "y_left": [
+              {
+                "text": "Voltage (V)",
+                "confidence": 0.99984,
+                "center_x": 40.0,
+                "center_y": 327.0,
+                "polygon": [
+                  [
+                    27.0,
+                    278.0
+                  ],
+                  [
+                    55.0,
+                    279.0
+                  ],
+                  [
+                    53.0,
+                    376.0
+                  ],
+                  [
+                    25.0,
+                    375.0
+                  ]
+                ],
+                "score": 0.9835068149521161
+              }
+            ],
+            "y_right": []
+          },
+          "status": "AXIS_LABEL_CANDIDATES_FOUND",
+          "min_confidence": 0.55,
+          "provisional": true
+        },
+        "crop_mapping": {
+          "coordinate_space": "SOURCE_IMAGE_PIXELS",
+          "source_image_sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549",
+          "source_image_size": [
+            1407,
+            917
+          ],
+          "crop_bbox_source_pixels": [
+            0,
+            0,
+            1407,
+            917
+          ],
+          "crop_width_pixels": 1407,
+          "crop_height_pixels": 917,
+          "crop_image_path": "ADMA_202404834_P8_06_1.png",
+          "render_scale": 1.0
+        },
+        "plot_box_pixels": [
+          93,
+          194,
+          1338,
+          461
+        ],
+        "x_calibration": {
+          "axis": "x",
+          "unit": null,
+          "slope": 0.0964449917170876,
+          "intercept": -9.056483261429982,
+          "anchors": [
+            {
+              "pixel": 94.0,
+              "value": 0.0
+            },
+            {
+              "pixel": 301.0,
+              "value": 20.0
+            },
+            {
+              "pixel": 509.5,
+              "value": 40.0
+            },
+            {
+              "pixel": 715.5,
+              "value": 60.0
+            },
+            {
+              "pixel": 922.5,
+              "value": 80.0
+            },
+            {
+              "pixel": 1131.5,
+              "value": 100.0
+            }
+          ],
+          "rmse": 0.06123884086332652,
+          "status": "CALIBRATED_NUMERIC"
+        },
+        "y_calibration": {
+          "axis": "y",
+          "unit": null,
+          "slope": -0.011299435028248588,
+          "intercept": 5.192090395480226,
+          "anchors": [
+            {
+              "pixel": 194.0,
+              "value": 3.0
+            },
+            {
+              "pixel": 371.0,
+              "value": 1.0
+            },
+            {
+              "pixel": 459.5,
+              "value": 0.0
+            }
+          ],
+          "rmse": 0.0,
+          "status": "CALIBRATED_NUMERIC"
+        },
+        "y_axis_calibrations": {
+          "LEFT": {
+            "axis": "y",
+            "unit": null,
+            "slope": -0.011299435028248588,
+            "intercept": 5.192090395480226,
+            "anchors": [
+              {
+                "pixel": 194.0,
+                "value": 3.0
+              },
+              {
+                "pixel": 371.0,
+                "value": 1.0
+              },
+              {
+                "pixel": 459.5,
+                "value": 0.0
+              }
+            ],
+            "rmse": 0.0,
+            "status": "CALIBRATED_NUMERIC"
+          }
+        },
+        "series_axis_assignment": {
+          "status": "ASSIGNED",
+          "selected_side": "LEFT",
+          "available_sides": [
+            "LEFT"
+          ],
+          "reason": null
+        },
+        "y_axis_text_color_association": {
+          "status": "NOT_EVALUATED"
+        },
+        "calibration_errors": {},
+        "ocr_status": {
+          "status": "SUCCEEDED",
+          "record_count": 63
+        },
+        "qc_report": {
+          "schema_version": "1.0",
+          "status": "PROVISIONAL_UNCALIBRATED",
+          "assessment_mode": "INDEPENDENT_DIMENSIONS_NO_AGGREGATE_SCORE",
+          "components": {
+            "axis_calibration": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+            "panel_segmentation": "UNKNOWN",
+            "chart_family": "NEEDS_REVIEW",
+            "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+            "axis_calibration_x": "CALIBRATION_EVIDENCE_PRESENT",
+            "axis_calibration_y": "CALIBRATION_EVIDENCE_PRESENT",
+            "series_extraction": "NEEDS_REVIEW",
+            "point_reconstruction": "NO_PIXEL_GEOMETRY",
+            "legend_association": "UNKNOWN",
+            "subject_link": "UNASSIGNED",
+            "condition_interpretation": "UNKNOWN",
+            "unit_interpretation": "RAW_UNIT_RETAINED",
+            "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+          },
+          "panel_segmentation": {
+            "status": "UNKNOWN",
+            "provenance": "SINGLE_PANEL_FALLBACK",
+            "bbox_provenance": "NOT_PROVIDED",
+            "boundary_present": false,
+            "confidence": null,
+            "confidence_status": "NOT_CALIBRATED"
+          },
+          "axes": {
+            "x": {
+              "status": "CALIBRATION_EVIDENCE_PRESENT",
+              "anchor_count": 6,
+              "rmse": 0.06123884086332652,
+              "unit": null,
+              "calibration_status": "CALIBRATED_NUMERIC"
+            },
+            "y": {
+              "status": "CALIBRATION_EVIDENCE_PRESENT",
+              "anchor_count": 3,
+              "rmse": 0.0,
+              "unit": null,
+              "calibration_status": "CALIBRATED_NUMERIC"
+            }
+          },
+          "calibration_state": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+          "trace_metrics": {
+            "point_count": 0,
+            "pixel_coordinate_count": 0,
+            "pixel_coordinate_fraction": 0.0,
+            "pixel_x_span": null,
+            "pixel_y_span": null,
+            "matched_columns": null,
+            "matched_pixel_fraction": null,
+            "coverage_status": "NOT_MEASURED",
+            "max_gap_columns": null,
+            "continuity_status": "NOT_MEASURED",
+            "point_index_valid": true,
+            "x_direction_changes": 0,
+            "path_constraint": "UNRESOLVED"
+          },
+          "threshold_source": "PROVISIONAL_UNCALIBRATED",
+          "warnings": [
+            "TRACE_POINT_COUNT_BELOW_PROVISIONAL_ENGINEERING_FLOOR",
+            "SUBJECT_LINK_UNASSIGNED",
+            "CONDITIONS_NOT_LINKED"
+          ],
+          "aggregate_score": null,
+          "scientific_acceptance": "NOT_ASSESSED_WITHOUT_ANNOTATED_REAL_PAPER_BENCHMARK"
+        },
+        "qc_components": {
+          "axis_calibration": "BOTH_AXES_NUMERICALLY_CALIBRATED",
+          "panel_segmentation": "UNKNOWN",
+          "chart_family": "NEEDS_REVIEW",
+          "axis_detection": "EXPLICIT_OVERRIDE_OR_UNRESOLVED",
+          "axis_calibration_x": "CALIBRATION_EVIDENCE_PRESENT",
+          "axis_calibration_y": "CALIBRATION_EVIDENCE_PRESENT",
+          "series_extraction": "NEEDS_REVIEW",
+          "point_reconstruction": "NO_PIXEL_GEOMETRY",
+          "legend_association": "UNKNOWN",
+          "subject_link": "UNASSIGNED",
+          "condition_interpretation": "UNKNOWN",
+          "unit_interpretation": "RAW_UNIT_RETAINED",
+          "reference_scale_conversion": "NO_CONVERSION_CLAIMED"
+        },
+        "points_count": 0
+      },
+      "points_count": 0
+    }
+  ],
+  "extra": {
+    "algorithm_version": "0.4.0",
+    "context_index_fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "figure_inventory_source": "figure_inventory.json",
+    "pdf_source": null,
+    "native_page_evidence": {},
+    "stage_fingerprint": "70de240b902b9e2e908f4d5b2825e4df13bb1a1424018529df01423f3957a3a1",
+    "memory_limit_mb": 2048,
+    "render_scale": 1.5,
+    "temp_disk_limit_mb": 2048,
+    "evidence_bytes": 450356,
+    "context_index_bytes": 184,
+    "budgeted_storage_bytes": 450540,
+    "qc_threshold_status": "PROVISIONAL_UNCALIBRATED",
+    "qc_thresholds": {
+      "schema_version": "1.0",
+      "status": "PROVISIONAL_UNCALIBRATED",
+      "notes": "Engineering defaults only; not calibrated against annotated real papers.",
+      "minimum_calibration_anchors": 2,
+      "maximum_axis_anchor_rmse": null,
+      "minimum_trace_points": 8,
+      "minimum_trace_pixel_fraction": 0.15,
+      "allow_automatic_same_color_crossing": false,
+      "allow_automatic_marker_disambiguation": false
+    },
+    "algorithm_implementation_fingerprint": "b0e3881cf72c00a59b5583422c64a6ae569b17ea36b78c86b3ac08c608d45962",
+    "profile_config_fingerprint": "d2575357f92c5234b15ee7030f8459e4f8db6456d94861b923f4f499ebb1fa6b",
+    "llm_tokens": 0,
+    "panel_comparison": {
+      "status": "WRITTEN",
+      "path": "comparisons/ALL_PANELS_COMPARISON.png",
+      "panel_count": 1,
+      "image_size": [
+        1100,
+        292
+      ]
+    }
+  }
+}
