@@ -17,6 +17,7 @@ def trace_monotonic_color(
     min_pixels_per_column: int = 1,
     max_gap_columns: int = 3,
     plot_box: tuple[float, float, float, float] | None = None,
+    color_match: dict | None = None,
 ) -> tuple[list[SeriesPoint], dict]:
     """Conservative monotonic raster tracer for one explicitly selected color.
 
@@ -33,7 +34,24 @@ def trace_monotonic_color(
     with Image.open(image_path) as source:
         image = np.asarray(source.convert("RGB"), dtype=np.int16)
     target = np.asarray(rgb, dtype=np.int16)
-    mask = np.max(np.abs(image - target), axis=2) <= int(tolerance)
+    if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
+        from .plot_region import _rgb_to_hsv_arrays
+
+        height, width = image.shape[:2]
+        flat = image.reshape(-1, 3)
+        hues, saturations, values = _rgb_to_hsv_arrays(flat)
+        hue_center = float(color_match.get("hue_center_degrees", 0.0))
+        hue_tolerance = float(color_match.get("hue_tolerance_degrees", 12.0))
+        minimum_saturation = float(color_match.get("minimum_saturation", 0.14))
+        minimum_value = float(color_match.get("minimum_value", 0.20))
+        hue_distance = np.abs((hues - hue_center + 180.0) % 360.0 - 180.0)
+        mask = (
+            (hue_distance <= hue_tolerance)
+            & (saturations >= minimum_saturation)
+            & (values >= minimum_value)
+        ).reshape(height, width)
+    else:
+        mask = np.max(np.abs(image - target), axis=2) <= int(tolerance)
     height, width = mask.shape
     if plot_box is None:
         x0, y0, x1, y1 = 0, 0, width, height
@@ -104,6 +122,14 @@ def trace_monotonic_color(
         "path_constraint": "X_MONOTONIC_ONLY",
         "qc_status": "PROVISIONAL_UNCALIBRATED",
         "geometry_only": x_calibration is None or y_calibration is None,
+        "numeric_mapping_status": (
+            "CALIBRATED_NUMERIC" if x_calibration is not None and y_calibration is not None
+            else "PARTIALLY_CALIBRATED" if x_calibration is not None or y_calibration is not None
+            else "PIXEL_GEOMETRY_ONLY"
+        ),
+        "color_matching_space": (
+            color_match.get("space") if isinstance(color_match, dict) else "RGB_DISTANCE"
+        ),
     }
 
 

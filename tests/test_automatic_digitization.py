@@ -383,8 +383,13 @@ def test_dual_y_axis_calibrations_are_retained_without_guessing_series_side(tmp_
     assert set(metadata["y_axis_calibrations"]) == {"LEFT", "RIGHT"}
     assert metadata["series_axis_assignment"]["status"] == "AMBIGUOUS_DUAL_Y_AXIS"
     assert metadata["series_axis_assignment"]["selected_side"] is None
-    assert metadata["trace_specification"]["status"] == "NEEDS_REVIEW"
+    assert metadata["trace_specification"]["status"] == "READY"
+    assert metadata["trace_specification"]["specification"]["numeric_mapping_status"] == "PARTIALLY_CALIBRATED"
+    assert metadata["trace_specification"]["input_provenance"]["automation_status"] == "FULLY_AUTOMATIC_GEOMETRY_ONLY"
     assert metadata["calibration_errors"]["y"] == "AMBIGUOUS_DUAL_Y_AXIS_SERIES_ASSOCIATION"
+    assert len(result[0].points) >= 100
+    assert all(point.x is not None and point.y is None for point in result[0].points)
+    assert all(point.pixel_x is not None and point.pixel_y is not None for point in result[0].points)
 
 
 def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: Path):
@@ -464,6 +469,164 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
     assert all(record.metadata["trace_specification"]["status"] == "READY"
                for record in records)
     assert all(record.metadata["series_axis_assignment"]["status"]
-               == "COLOR_MATCHED_TO_Y_AXIS_TICK_LABELS" for record in records)
+               == "COLOR_MATCHED_TO_Y_AXIS_TEXT" for record in records)
     assert all(record.metadata["y_axis_text_color_association"]["status"] == "MATCHED"
                for record in records)
+
+
+def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    path = tmp_path / "hue_family_shades.png"
+    image = Image.new("RGB", (340, 240), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((24, 18, 315, 205), outline=(20, 20, 20), width=3)
+    red_shades = [(253, 11, 12), (252, 69, 69), (253, 120, 120), (253, 185, 184)]
+    for x in range(35, 306):
+        fraction = (x - 35) / 270
+        y = int(166 - 95 * fraction + 8 * fraction * fraction)
+        for offset, color in enumerate(red_shades):
+            image.putpixel((x, y + offset), color)
+    blue = [(x, int(178 - 65 * (x - 35) / 270)) for x in range(35, 306)]
+    draw.line(blue, fill=(20, 65, 225), width=3)
+    image.save(path)
+
+    detected = detect_chromatic_color_families(path, (28, 22, 312, 202))
+    assert detected["status"] == "MULTIPLE_CHROMATIC_FAMILIES"
+    assert detected["family_count"] == 2
+    red_family = next(
+        item for item in detected["families"]
+        if item["color_match"]["hue_center_degrees"] < 20
+        or item["color_match"]["hue_center_degrees"] > 340
+    )
+    points, qc = trace_monotonic_color(
+        str(path), tuple(red_family["color_rgb"]), red_family["color_tolerance"],
+        None, None, plot_box=(28, 22, 312, 202),
+        color_match=red_family["color_match"],
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+    assert qc["geometry_only"] is True
+    assert len(points) >= 200
+    assert all(point.x is None and point.y is None for point in points)
+    assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
+
+
+def test_geometry_only_trace_specification_does_not_require_a_y_axis_mapping(tmp_path: Path):
+    from scientific_figure_data.calibration import fit_linear_axis
+    from scientific_figure_data.trace_spec import generate_trace_specification
+
+    image = tmp_path / "chart.png"
+    image.write_bytes(b"image fixture")
+    x_cal = fit_linear_axis("x", [{"pixel": 10, "value": 0}, {"pixel": 90, "value": 10}], "s")
+    color = {
+        "status": "UNIQUE_CHROMATIC_FAMILY",
+        "color_rgb": [230, 20, 30],
+        "color_tolerance": 24,
+        "color_match": {
+            "space": "HSV_HUE_FAMILY",
+            "hue_center_degrees": 0.0,
+            "hue_tolerance_degrees": 12.0,
+            "minimum_saturation": 0.14,
+            "minimum_value": 0.20,
+        },
+    }
+
+    result = generate_trace_specification(
+        image, (10, 10, 90, 90), color, x_cal, None,
+        "UNCLASSIFIED", "Time (s)", allow_geometry_only=True,
+    )
+    assert result["status"] == "READY"
+    spec = result["specification"]
+    assert spec["numeric_mapping_status"] == "PARTIALLY_CALIBRATED"
+    assert spec["x_calibration"]["status"] == "CALIBRATED_NUMERIC"
+    assert spec["y_calibration"] is None
+    assert spec["color_match"]["space"] == "HSV_HUE_FAMILY"
+
+
+def test_geometry_only_series_gets_overlay_but_no_numeric_reconstruction(tmp_path: Path):
+    from PIL import Image
+    from scientific_figure_data.models import SeriesPoint, SeriesRecord
+    from scientific_figure_data.reconstruction import render_series_artifacts
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (100, 80), "white").save(source)
+    item = SeriesRecord(
+        series_id="geometry-only", paper_id="paper", figure_id="Figure1", panel_id="a",
+        technique=None, domain=None, label=None, x_label="Time", y_label="Unassigned",
+        x_unit="s", y_unit=None,
+        points=[
+            SeriesPoint(0, 0.0, None, 10.0, 60.0),
+            SeriesPoint(1, 1.0, None, 40.0, 45.0),
+            SeriesPoint(2, 2.0, None, 70.0, 25.0),
+        ],
+    )
+    result = render_series_artifacts(item, source, tmp_path / "rendered")
+    assert result["status"] == "GEOMETRY_ONLY_OVERLAY"
+    assert Path(result["overlay_path"]).is_file()
+    assert result["numeric_reconstruction_status"] == "NOT_CREATED_NUMERIC_MAPPING_UNRESOLVED"
+    assert not list((tmp_path / "rendered").glob("*_reconstructed.png"))
+
+
+def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path):
+    from PIL import Image, ImageDraw, ImageFont
+    from scientific_figure_data.pipeline import _extract_panel
+
+    image_path = tmp_path / "axis_title_colors.png"
+    image = Image.new("RGB", (440, 340), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=4)
+    red_curve, blue_curve = [], []
+    for x in range(70, 346):
+        fraction = (x - 70) / 275
+        red_curve.append((x, int(220 - 110 * fraction)))
+        blue_curve.append((x, int(238 - 65 * fraction)))
+    draw.line(red_curve, fill=(230, 20, 30), width=3)
+    draw.line(blue_curve, fill=(20, 65, 225), width=3)
+
+    def colored_row(text, x, y, color):
+        bounds = draw.textbbox((0, 0), text, font=font)
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+        draw.text((x, y), text, fill=color, font=font)
+        return {
+            "text": text,
+            "confidence": 0.99,
+            "polygon": [
+                [x, y], [x + width, y],
+                [x + width, y + height], [x, y + height],
+            ],
+        }
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("100", 378, 65), _ocr_row("50", 378, 155), _ocr_row("0", 378, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+        colored_row("Left (mA)", 0, 148, (230, 20, 30)),
+        colored_row("Right (mAh)", 365, 148, (20, 65, 225)),
+    ]
+    image.save(image_path)
+    context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
+    records = _extract_panel(
+        image_path, "paper", "Figure1", "a", {},
+        {"caption": "Dual-axis time series."}, {}, context, None,
+        ocr_evidence=rows,
+    )
+    assert len(records) == 2
+    by_side = {item.y_axis_side: item for item in records}
+    assert set(by_side) == {"LEFT", "RIGHT"}
+    assert all(
+        item.metadata["series_axis_assignment"]["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
+        for item in records
+    )
+    assert all(len(item.points) >= 100 for item in records), [
+        {
+            "series_id": item.series_id,
+            "point_count": len(item.points),
+            "raster_qc": item.metadata.get("raster_qc"),
+            "trace_specification": item.metadata.get("trace_specification"),
+        }
+        for item in records
+    ]

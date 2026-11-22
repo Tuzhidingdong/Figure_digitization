@@ -26,13 +26,29 @@ def _display_text(value: Any) -> str:
     return str(value).encode("ascii", errors="replace").decode("ascii")
 
 
+def _geometry_points(points):
+    output = []
+    for point in points:
+        try:
+            px, py = float(point.pixel_x), float(point.pixel_y)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not (
+            px == px and py == py
+            and abs(px) != float("inf") and abs(py) != float("inf")
+        ):
+            continue
+        output.append((int(point.point_index), px, py))
+    return sorted(output, key=lambda item: item[0])
+
+
 def render_series_artifacts(
     series,
     source_image: Path,
     output_root: Path,
     plot_box: tuple[int, int, int, int] | None = None,
 ) -> dict[str, Any]:
-    """Write an independent numeric reconstruction and a pixel-coordinate overlay."""
+    """Render numeric reconstruction when calibrated, otherwise a geometry-only overlay."""
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError as exc:
@@ -41,23 +57,60 @@ def render_series_artifacts(
             "Reconstruction rendering requires Pillow: pip install '.[images]'"
         ) from exc
 
-    points = _finite_points(series.points)
-    if len(points) < 2:
-        return {"status": "NOT_RENDERED", "reason": "FEWER_THAN_TWO_NUMERIC_POINTS"}
-    if any(item[3] is None or item[4] is None for item in points):
-        return {"status": "NOT_RENDERED", "reason": "PIXEL_PROVENANCE_INCOMPLETE"}
+    geometry = _geometry_points(series.points)
+    if len(geometry) < 2:
+        return {"status": "NOT_RENDERED", "reason": "FEWER_THAN_TWO_PIXEL_POINTS"}
 
     output_root.mkdir(parents=True, exist_ok=True)
     safe = "".join(char if char.isalnum() or char in "-_." else "_" for char in series.series_id)
-    reconstructed = output_root / f"{safe}_reconstructed.png"
     overlay = output_root / f"{safe}_overlay.png"
+    with Image.open(source_image) as source:
+        original = source.convert("RGB")
+        overlay_draw = ImageDraw.Draw(original)
+        pixel_coords = [(item[1], item[2]) for item in geometry]
+        overlay_draw.line(pixel_coords, fill=(0, 190, 80), width=2)
+        radius = 3
+        for px, py in pixel_coords:
+            overlay_draw.ellipse((px - radius, py - radius, px + radius, py + radius),
+                                 outline=(0, 120, 50), width=2)
+        if plot_box:
+            overlay_draw.rectangle(tuple(int(v) for v in plot_box), outline=(30, 100, 240), width=2)
+        original.save(overlay, format="PNG")
 
+    points = _finite_points(series.points)
+    if len(points) < 2:
+        return {
+            "status": "GEOMETRY_ONLY_OVERLAY",
+            "overlay_path": overlay.as_posix(),
+            "point_count": len(geometry),
+            "numeric_point_count": len(points),
+            "numeric_reconstruction_status": "NOT_CREATED_NUMERIC_MAPPING_UNRESOLVED",
+            "point_order": "PRESERVED",
+            "source_image_sha256": series.evidence[0].get("source_image_sha256")
+            if series.evidence else None,
+        }
+    if any(item[3] is None or item[4] is None for item in points):
+        return {
+            "status": "GEOMETRY_ONLY_OVERLAY",
+            "overlay_path": overlay.as_posix(),
+            "point_count": len(geometry),
+            "numeric_point_count": len(points),
+            "numeric_reconstruction_status": "NOT_CREATED_PIXEL_PROVENANCE_INCOMPLETE",
+        }
+
+    reconstructed = output_root / f"{safe}_reconstructed.png"
     xs = [item[1] for item in points]
     ys = [item[2] for item in points]
     xmin, xmax = min(xs), max(xs)
     ymin, ymax = min(ys), max(ys)
     if xmax <= xmin or ymax <= ymin:
-        return {"status": "NOT_RENDERED", "reason": "DEGENERATE_NUMERIC_RANGE"}
+        return {
+            "status": "GEOMETRY_ONLY_OVERLAY",
+            "overlay_path": overlay.as_posix(),
+            "point_count": len(geometry),
+            "numeric_point_count": len(points),
+            "numeric_reconstruction_status": "NOT_CREATED_DEGENERATE_NUMERIC_RANGE",
+        }
     xpad = (xmax - xmin) * 0.04
     ypad = (ymax - ymin) * 0.06
     xmin, xmax = xmin - xpad, xmax + xpad
@@ -107,24 +160,12 @@ def render_series_artifacts(
               fill=(20, 20, 20), font=font)
     image.save(reconstructed, format="PNG")
 
-    with Image.open(source_image) as source:
-        original = source.convert("RGB")
-        overlay_draw = ImageDraw.Draw(original)
-        pixel_coords = [(float(item[3]), float(item[4])) for item in points]
-        overlay_draw.line(pixel_coords, fill=(0, 190, 80), width=2)
-        radius = 3
-        for px, py in pixel_coords:
-            overlay_draw.ellipse((px-radius, py-radius, px+radius, py+radius),
-                                 outline=(0, 120, 50), width=2)
-        if plot_box:
-            overlay_draw.rectangle(tuple(int(v) for v in plot_box), outline=(30, 100, 240), width=2)
-        original.save(overlay, format="PNG")
-
     return {
         "status": "RENDERED",
         "reconstructed_path": reconstructed.as_posix(),
         "overlay_path": overlay.as_posix(),
         "point_count": len(points),
+        "numeric_point_count": len(points),
         "point_order": "PRESERVED",
         "source_image_sha256": series.evidence[0].get("source_image_sha256")
         if series.evidence else None,
@@ -150,12 +191,12 @@ def build_panel_comparison_sheet(items: list[dict], output_path: Path) -> dict[s
     sheet = Image.new("RGB", (total_width, total_height), "white")
     draw = ImageDraw.Draw(sheet)
     draw.text((12, 12), "Original panel", fill=(20, 20, 20), font=font)
-    draw.text((column_widths[0] + 12, 12), "Independent reconstruction", fill=(20, 20, 20), font=font)
+    draw.text((column_widths[0] + 12, 12), "Trace overlay / numeric reconstruction", fill=(20, 20, 20), font=font)
     draw.text((sum(column_widths[:2]) + 12, 12), "Automatic result", fill=(20, 20, 20), font=font)
 
     for index, item in enumerate(items):
         top = header_height + index * row_height
-        sources = (item.get("original_path"), item.get("reconstructed_path"))
+        sources = (item.get("original_path"), item.get("reconstructed_path") or item.get("overlay_path"))
         for column, source_path in enumerate(sources):
             x = sum(column_widths[:column])
             draw.rectangle((x, top, x + column_widths[column] - 1, top + row_height - 1),

@@ -34,6 +34,7 @@ def generate_trace_specification(
     chart_family: str | None,
     x_axis_label: str | None = None,
     allow_unlabelled_manual_override: bool = False,
+    allow_geometry_only: bool = False,
 ) -> dict[str, Any]:
     """Create a trace contract only from observed image/color/axis evidence.
 
@@ -70,11 +71,23 @@ def generate_trace_specification(
                 color_detection.get("status") if isinstance(color_detection, dict) else None
             ),
         }
-    if not isinstance(x_calibration, AxisCalibration) or not isinstance(y_calibration, AxisCalibration):
+    x_is_calibrated = (
+        isinstance(x_calibration, AxisCalibration)
+        and x_calibration.status == "CALIBRATED_NUMERIC"
+        and len(x_calibration.anchors) >= 2
+    )
+    y_is_calibrated = (
+        isinstance(y_calibration, AxisCalibration)
+        and y_calibration.status == "CALIBRATED_NUMERIC"
+        and len(y_calibration.anchors) >= 2
+    )
+    if x_calibration is not None and not x_is_calibrated:
+        return {"status": "NEEDS_REVIEW", "reason": "INVALID_X_AXIS_CALIBRATION"}
+    if y_calibration is not None and not y_is_calibrated:
+        return {"status": "NEEDS_REVIEW", "reason": "INVALID_Y_AXIS_CALIBRATION"}
+    if not (x_is_calibrated and y_is_calibrated) and not allow_geometry_only:
         return {"status": "NEEDS_REVIEW", "reason": "BOTH_NUMERIC_AXIS_CALIBRATIONS_REQUIRED"}
-    if x_calibration.status != "CALIBRATED_NUMERIC" or y_calibration.status != "CALIBRATED_NUMERIC":
-        return {"status": "NEEDS_REVIEW", "reason": "BOTH_NUMERIC_AXIS_CALIBRATIONS_REQUIRED"}
-    if len(x_calibration.anchors) < 2 or len(y_calibration.anchors) < 2:
+    if not x_is_calibrated and not y_is_calibrated and not allow_geometry_only:
         return {"status": "NEEDS_REVIEW", "reason": "INSUFFICIENT_NUMERIC_AXIS_ANCHORS"}
 
     color = color_detection.get("color_rgb")
@@ -92,19 +105,27 @@ def generate_trace_specification(
         "specification": {
             "schema_version": "1.0",
             "specification_type": "SINGLE_COLOR_X_MONOTONIC_RASTER_TRACE",
+            "numeric_mapping_status": (
+                "CALIBRATED_NUMERIC" if x_is_calibrated and y_is_calibrated
+                else "PARTIALLY_CALIBRATED" if x_is_calibrated or y_is_calibrated
+                else "PIXEL_GEOMETRY_ONLY"
+            ),
+            "geometry_only_allowed": bool(allow_geometry_only),
             "source_image_sha256": sha256_file(image_path),
             "plot_box_pixels": [x0, y0, x1, y1],
             "color_rgb": rgb,
             "color_tolerance": int(color_detection.get("color_tolerance", 24)),
-            "x_calibration": calibration_to_dict(x_calibration),
-            "y_calibration": calibration_to_dict(y_calibration),
+            "color_match": color_detection.get("color_match"),
+            "x_calibration": calibration_to_dict(x_calibration) if x_calibration else None,
+            "y_calibration": calibration_to_dict(y_calibration) if y_calibration else None,
             "chart_family": family,
             "x_axis_label": x_axis_label,
             "path_order": "X_MONOTONIC",
             "generated_from": [
                 "AUTOMATIC_PLOT_REGION_CANDIDATE",
                 "AUTOMATIC_SINGLE_COLOR_DETECTION",
-                "AUTOMATIC_NUMERIC_AXIS_ANCHORS",
+                *(["AUTOMATIC_X_AXIS_NUMERIC_ANCHORS"] if x_is_calibrated else []),
+                *(["AUTOMATIC_Y_AXIS_NUMERIC_ANCHORS"] if y_is_calibrated else []),
                 *(
                     ["OCR_X_AXIS_SEMANTICS"] if ordered_label
                     else ["EXPLICIT_MONOTONIC_FAMILY_OR_MANUAL_OVERRIDE"]
