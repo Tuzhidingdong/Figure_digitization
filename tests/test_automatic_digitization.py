@@ -434,6 +434,12 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
     ]
     image.save(image_path)
 
+    from scientific_figure_data.plot_region import estimate_ocr_text_ink_color
+    left_ink = estimate_ocr_text_ink_color(image_path, rows[3:6])
+    right_ink = estimate_ocr_text_ink_color(image_path, rows[6:9])
+    assert left_ink["status"] == "CHROMATIC_TEXT_COLOR_DETECTED", left_ink
+    assert right_ink["status"] == "CHROMATIC_TEXT_COLOR_DETECTED", right_ink
+
     context = type("EmptyContext", (), {"search": lambda self, kind, text="": []})()
     records = _extract_panel(
         image_path, "paper", "Figure1", "a", {},
@@ -442,7 +448,18 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
     )
     assert len(records) == 2
     by_side = {record.y_axis_side: record for record in records}
-    assert set(by_side) == {"LEFT", "RIGHT"}
+    assert set(by_side) == {"LEFT", "RIGHT"}, [
+        {
+            "side": record.y_axis_side,
+            "y_axis_calibrations": record.metadata.get("y_axis_calibrations"),
+            "series_axis_assignment": record.metadata.get("series_axis_assignment"),
+            "y_axis_text_color_association": record.metadata.get("y_axis_text_color_association"),
+            "color_detection": record.metadata.get("color_detection"),
+            "trace_specification": record.metadata.get("trace_specification"),
+            "calibration_errors": record.metadata.get("calibration_errors"),
+        }
+        for record in records
+    ]
     assert all(len(record.points) >= 100 for record in records)
     assert all(record.metadata["trace_specification"]["status"] == "READY"
                for record in records)
