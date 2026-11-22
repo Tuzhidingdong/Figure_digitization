@@ -249,11 +249,24 @@ def detect_panel_regions(
             "provisional": True,
         })
 
-    # Analyze each sufficiently large whitespace leaf independently. This
-    # prevents a visually dominant upper subplot from consuming the global
-    # axis-line budget and masking smaller plots in a lower multi-panel row.
+    # Analyze each sufficiently large whitespace leaf independently, and
+    # also scan lower horizontal bands. Some real figures have no uninterrupted
+    # white gutter between a dominant upper plot and a compact lower row because
+    # panel letters/tick labels occupy the apparent gap. A lower-band scan keeps
+    # those upper traces from consuming the detector's global axis-line budget.
+    scan_regions = {
+        tuple(int(value) for value in box)
+        for box, _ in leaves
+    }
+    for start_fraction in (0.50, 0.55):
+        band_y0 = int(round(height * start_fraction))
+        if height - band_y0 >= height * 0.18:
+            scan_regions.add((0, band_y0, width, height))
+
     with Image.open(image_path) as source:
-        for (region_x0, region_y0, region_x1, region_y1), _ in leaves:
+        for region_x0, region_y0, region_x1, region_y1 in sorted(
+            scan_regions, key=lambda box: (box[1], box[0], box[3], box[2])
+        ):
             region_width = region_x1 - region_x0
             region_height = region_y1 - region_y0
             if (
