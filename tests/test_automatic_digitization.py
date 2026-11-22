@@ -238,8 +238,9 @@ def test_process_paper_auto_segments_adjacent_panels_before_plot_tracing(
     assert result["panel_count"] >= 2
     assert result["figure_count"] == 1
     paper_output = tmp_path / "output" / "papers" / "paper-adjacent"
+    inventory = json.loads((paper_output / "figure_inventory.json").read_text(encoding="utf-8"))
     layout = json.loads((paper_output / "panel_layout.json").read_text(encoding="utf-8"))
-    detected = layout["figures"][0]["panel_segmentation"]
+    detected = inventory["figures"][0]["panel_segmentation"]
     assert detected["reason"] == "MULTIPLE_PLOT_FRAME_CANDIDATES"
     auto_panels = [
         item for item in layout["panels"]
