@@ -155,8 +155,8 @@ def test_panel_segmentation_finds_adjacent_plot_frames_without_white_gutters(tmp
     # Dense low-contrast chart ink avoids a completely empty row/column
     # projection while retaining the true plot-frame geometry.
     for y in range(100, 305, 24):
-        draw.line((31, y, 319, y), fill=(246, 246, 246), width=1)
-        draw.line((321, y, 609, y), fill=(246, 246, 246), width=1)
+        draw.line((31, y, 319, y), fill=(240, 240, 240), width=1)
+        draw.line((321, y, 609, y), fill=(240, 240, 240), width=1)
     image.save(image_path, format="PNG")
 
     detected = detect_plot_box_candidates(image_path)
