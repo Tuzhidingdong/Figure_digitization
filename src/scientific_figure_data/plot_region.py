@@ -125,6 +125,241 @@ def detect_plot_box(
     }
 
 
+
+def detect_plot_box_candidates(
+    image_path: Path,
+    *,
+    max_candidates: int = 12,
+    minimum_width_fraction: float = 0.18,
+    minimum_height_fraction: float = 0.18,
+    minimum_line_fraction: float = 0.12,
+    minimum_adjacent_coverage: float = 0.50,
+    max_axis_lines: int = 40,
+) -> dict:
+    """Detect multiple independent chart frames in one source figure.
+
+    Unlike the single-frame detector, this function does not rank the largest
+    rectangle as the sole plot. It retains spatially distinct frame candidates
+    so a large subplot cannot hide the remaining plots in a multi-panel figure.
+    Three-sided/open-axis plots are allowed when two adjacent sides provide
+    strong evidence. Candidates remain provisional and are never treated as
+    scientific data until panel-level axis and trace checks pass.
+    """
+    if max_candidates < 1 or max_axis_lines < 4:
+        raise ValueError("max_candidates must be positive and max_axis_lines at least 4")
+    if not 0 < minimum_line_fraction < 1 or not 0 < minimum_adjacent_coverage <= 1:
+        raise ValueError("line and side coverage thresholds must be in (0, 1]")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Plot-frame detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        rgb = np.asarray(source.convert("RGB"), dtype=np.uint8)
+    height, width = rgb.shape[:2]
+    if width < 100 or height < 100:
+        return {
+            "status": "NEEDS_REVIEW",
+            "reason": "IMAGE_TOO_SMALL_FOR_PLOT_FRAME_CANDIDATES",
+            "image_size": [width, height],
+            "candidates": [],
+        }
+
+    luminance = (
+        0.2126 * rgb[:, :, 0].astype(np.float32)
+        + 0.7152 * rgb[:, :, 1].astype(np.float32)
+        + 0.0722 * rgb[:, :, 2].astype(np.float32)
+    )
+    dark = luminance <= 178.0
+    row_profile = dark.mean(axis=1)
+    column_profile = dark.mean(axis=0)
+
+    def line_positions(profile, dimension):
+        raw = [
+            index for index, fraction in enumerate(profile)
+            if fraction >= minimum_line_fraction
+            and dimension * 0.015 <= index <= dimension * 0.985
+        ]
+        clusters = _collapse_nearby(raw, max(1, round(dimension * 0.004)))
+        ranked = []
+        for position in clusters:
+            radius = max(1, round(dimension * 0.002))
+            start, end = max(0, position - radius), min(dimension, position + radius + 1)
+            ranked.append((float(profile[start:end].max()), int(position)))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return sorted(position for _, position in ranked[:max_axis_lines])
+
+    rows = line_positions(row_profile, height)
+    columns = line_positions(column_profile, width)
+    if len(rows) < 2 or len(columns) < 2:
+        return {
+            "status": "NEEDS_REVIEW",
+            "reason": "INSUFFICIENT_LONG_AXIS_LINES",
+            "image_size": [width, height],
+            "horizontal_candidate_count": len(rows),
+            "vertical_candidate_count": len(columns),
+            "candidates": [],
+        }
+
+    horizontal_pairs = []
+    for top_index, top in enumerate(rows[:-1]):
+        for bottom in rows[top_index + 1:]:
+            box_height = bottom - top
+            if box_height < height * minimum_height_fraction or box_height > height * 0.96:
+                continue
+            horizontal_pairs.append((top, bottom))
+
+    vertical_pairs = []
+    for left_index, left in enumerate(columns[:-1]):
+        for right in columns[left_index + 1:]:
+            box_width = right - left
+            if box_width < width * minimum_width_fraction or box_width > width * 0.96:
+                continue
+            vertical_pairs.append((left, right))
+
+    candidates = []
+    for top, bottom in horizontal_pairs:
+        box_height = bottom - top
+        for left, right in vertical_pairs:
+            box_width = right - left
+            aspect = box_width / max(1, box_height)
+            if not 0.20 <= aspect <= 5.0:
+                continue
+
+            horizontal_top = float(dark[max(0, top - 1):min(height, top + 2), left:right].mean())
+            horizontal_bottom = float(dark[max(0, bottom - 1):min(height, bottom + 2), left:right].mean())
+            vertical_left = float(dark[top:bottom, max(0, left - 1):min(width, left + 2)].mean())
+            vertical_right = float(dark[top:bottom, max(0, right - 1):min(width, right + 2)].mean())
+            sides = (horizontal_top, horizontal_bottom, vertical_left, vertical_right)
+
+            adjacent = max(
+                min(horizontal_top, vertical_left),
+                min(horizontal_top, vertical_right),
+                min(horizontal_bottom, vertical_left),
+                min(horizontal_bottom, vertical_right),
+            )
+            if adjacent < minimum_adjacent_coverage:
+                continue
+
+            strongest = sorted(sides, reverse=True)
+            # Full rectangular frames are preferred, while ordinary L-shaped
+            # axes remain discoverable from one horizontal and one vertical side.
+            if strongest[1] < minimum_adjacent_coverage:
+                continue
+
+            area_fraction = (box_width * box_height) / float(width * height)
+            if area_fraction < 0.035:
+                continue
+            size_score = max(0.25, 1.0 - max(0.0, area_fraction - 0.38) * 1.7)
+            interior = rgb[
+                min(height - 1, top + 2):max(top + 3, bottom - 1),
+                min(width - 1, left + 2):max(left + 3, right - 1),
+            ].astype(np.int16)
+            if interior.size:
+                chroma_fraction = float(
+                    ((interior.max(axis=2) - interior.min(axis=2)) >= 32).mean()
+                )
+            else:
+                chroma_fraction = 0.0
+            chroma_score = min(1.0, chroma_fraction / 0.018)
+            side_score = 0.55 * adjacent + 0.45 * (sum(strongest[:2]) / 2.0)
+            score = 0.55 * side_score + 0.22 * size_score + 0.23 * chroma_score
+            if score < 0.44:
+                continue
+            candidates.append({
+                "pixel_bbox": [int(left), int(top), int(right), int(bottom)],
+                "normalized_bbox": [
+                    left / width, top / height, right / width, bottom / height,
+                ],
+                "image_size": [width, height],
+                "side_coverage": {
+                    "top": horizontal_top, "bottom": horizontal_bottom,
+                    "left": vertical_left, "right": vertical_right,
+                },
+                "adjacent_side_coverage": adjacent,
+                "area_fraction": area_fraction,
+                "chromatic_pixel_fraction": chroma_fraction,
+                "score": float(score),
+                "provisional": True,
+            })
+
+    candidates.sort(key=lambda item: (
+        -item["score"],
+        (item["pixel_bbox"][2] - item["pixel_bbox"][0])
+        * (item["pixel_bbox"][3] - item["pixel_bbox"][1]),
+        item["pixel_bbox"][1], item["pixel_bbox"][0],
+    ))
+
+    def intersection_over_union(first, second):
+        ax0, ay0, ax1, ay1 = first
+        bx0, by0, bx1, by1 = second
+        ix0, iy0, ix1, iy1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+        intersection = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+        area_a = max(1, ax1 - ax0) * max(1, ay1 - ay0)
+        area_b = max(1, bx1 - bx0) * max(1, by1 - by0)
+        return intersection / max(1, area_a + area_b - intersection)
+
+    deduplicated = []
+    for candidate in candidates:
+        box = candidate["pixel_bbox"]
+        if any(intersection_over_union(box, prior["pixel_bbox"]) >= 0.72
+               for prior in deduplicated):
+            continue
+        deduplicated.append(candidate)
+
+    # Remove an enclosing rectangle when one or more similarly supported
+    # internal frames explain the chart area more precisely.
+    rejected = set()
+    for outer_index, outer in enumerate(deduplicated):
+        ox0, oy0, ox1, oy1 = outer["pixel_bbox"]
+        outer_area = max(1, (ox1 - ox0) * (oy1 - oy0))
+        children = []
+        for inner_index, inner in enumerate(deduplicated):
+            if inner_index == outer_index:
+                continue
+            ix0, iy0, ix1, iy1 = inner["pixel_bbox"]
+            contained = ox0 <= ix0 and oy0 <= iy0 and ox1 >= ix1 and oy1 >= iy1
+            if not contained:
+                continue
+            inner_area = max(1, (ix1 - ix0) * (iy1 - iy0))
+            ratio = inner_area / outer_area
+            if 0.12 <= ratio <= 0.82 and inner["score"] >= outer["score"] - 0.12:
+                children.append(inner_index)
+        if len(children) >= 2:
+            rejected.add(outer_index)
+        elif len(children) == 1:
+            child = deduplicated[children[0]]
+            if child["score"] >= outer["score"] - 0.06:
+                rejected.add(outer_index)
+
+    selected = [
+        item for index, item in enumerate(deduplicated)
+        if index not in rejected
+    ][:max_candidates]
+    selected.sort(key=lambda item: (
+        item["pixel_bbox"][1], item["pixel_bbox"][0], -item["score"]
+    ))
+    return {
+        "status": "PLOT_FRAME_CANDIDATES_FOUND" if selected else "NEEDS_REVIEW",
+        "reason": (
+            "MULTIPLE_SPATIALLY_DISTINCT_PLOT_FRAMES"
+            if len(selected) >= 2 else
+            "ONE_SUPPORTED_PLOT_FRAME" if len(selected) == 1 else
+            "NO_PLOT_FRAME_CANDIDATE_PASSED_GEOMETRY"
+        ),
+        "image_size": [width, height],
+        "horizontal_candidate_count": len(rows),
+        "vertical_candidate_count": len(columns),
+        "candidate_count": len(selected),
+        "candidates": selected,
+        "provisional": True,
+    }
+
+
 def _collapse_nearby(values: list[int], gap: int) -> list[int]:
     if not values:
         return []
