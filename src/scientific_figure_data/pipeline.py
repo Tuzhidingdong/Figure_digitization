@@ -21,7 +21,7 @@ from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, Serie
 from .pdf_backend import PdfiumBackend
 from .raster import map_explicit_polyline, trace_monotonic_color
 from .profiles import profile_registry_fingerprint
-from .plot_region import detect_plot_box, detect_single_trace_color
+from .plot_region import detect_plot_box, detect_single_trace_color, detect_chromatic_color_families
 from .panel_segmentation import detect_panel_regions
 from .trace_spec import generate_trace_specification
 from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
@@ -30,7 +30,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.2.0"
+ALGORITHM_VERSION = "0.3.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -592,6 +592,7 @@ def _extract_panel(
     native_page_path: Path | None = None, crop_mapping: dict | None = None,
 ) -> list[SeriesRecord]:
     definitions = _series_overrides(overrides, figure_id, panel_id)
+    generated_default_definition = not definitions
     native_text_preview = str((native_page_evidence or {}).get("native_text_preview", ""))
     base_technique = panel.get("technique") or figure.get("technique")
     if not definitions:
@@ -600,6 +601,71 @@ def _extract_panel(
             "technique": base_technique,
             "domain": panel.get("domain") or figure.get("domain"),
         }]
+
+    # Expand only an unconfigured default record, and only when chart semantics
+    # and plot geometry support the X-monotonic tracer. Explicit series definitions
+    # are never replaced or reinterpreted by this visual candidate pass.
+    if (
+        generated_default_definition and image_path and len(definitions) == 1
+        and not definitions[0].get("color_rgb")
+        and not definitions[0].get("pixel_points")
+    ):
+        base_definition = definitions[0]
+        pre_plot_box = base_definition.get("plot_box")
+        pre_plot_detection = None
+        if not pre_plot_box:
+            try:
+                pre_plot_detection = detect_plot_box(image_path)
+                if pre_plot_detection.get("status") == "PROVISIONAL_PLOT_BOX":
+                    pre_plot_box = pre_plot_detection.get("pixel_bbox")
+            except OptionalDependencyError:
+                pre_plot_detection = {"status": "UNAVAILABLE"}
+        pre_plot_box_pixels = _plot_box_pixels(image_path, pre_plot_box) if pre_plot_box else None
+        pre_axis_labels = {}
+        if ocr_evidence and pre_plot_box_pixels:
+            try:
+                pre_axis_labels = extract_axis_labels(ocr_evidence, tuple(pre_plot_box_pixels))
+            except (TypeError, ValueError):
+                pre_axis_labels = {}
+        pre_x_label = (
+            base_definition.get("x_label") or panel.get("x_label")
+            or pre_axis_labels.get("x_label")
+        )
+        pre_classification = classify_chart_family(
+            base_definition.get("technique") or panel.get("technique") or figure.get("technique"),
+            pre_x_label,
+            base_definition.get("y_label") or panel.get("y_label"),
+            figure.get("caption"),
+            native_text_preview,
+        )
+        pre_family = str(pre_classification.get("chart_family") or "UNCLASSIFIED").upper()
+        from .trace_spec import is_supported_monotonic_x_label
+        ordered_x_supported = (
+            is_supported_monotonic_x_label(pre_x_label)
+            or pre_family in {"TIME_SERIES", "SPECTRUM"}
+        )
+        if (
+            pre_plot_box_pixels and ordered_x_supported
+            and pre_family not in {"CV", "EIS", "NON_MONOTONIC", "NON_MONOTONIC_CURVE"}
+        ):
+            family_detection = detect_chromatic_color_families(
+                image_path, tuple(pre_plot_box_pixels)
+            )
+            candidates = family_detection.get("families", [])
+            if family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES" and len(candidates) >= 2:
+                expanded = []
+                base_id = str(base_definition.get("series_id") or f"{figure_id}_{panel_id}_unassigned")
+                for color_index, candidate in enumerate(candidates, 1):
+                    definition = dict(base_definition)
+                    definition["series_id"] = f"{base_id}_auto_color_{color_index:02d}"
+                    definition["color_rgb"] = list(candidate["color_rgb"])
+                    definition["_auto_color_candidate"] = dict(candidate)
+                    definition["_auto_color_detection"] = family_detection
+                    definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
+                    definition["_auto_plot_detection"] = pre_plot_detection
+                    expanded.append(definition)
+                definitions = expanded
+
     evidence = {
         "figure_id": figure_id, "panel_id": panel_id, "source_page": pdf_page,
         "source_image_asset_status": figure.get("source_asset_status"),
@@ -704,8 +770,8 @@ def _extract_panel(
         family = explicit_family or str(classification.get("chart_family", "UNCLASSIFIED")).upper()
         record.metadata["chart_family_classification"] = classification
 
-        plot_box = definition.get("plot_box")
-        plot_detection = None
+        plot_box = definition.get("plot_box") or definition.get("_auto_plot_box_pixels")
+        plot_detection = definition.get("_auto_plot_detection")
         if not plot_box and image_path:
             try:
                 plot_detection = detect_plot_box(image_path)
@@ -785,6 +851,14 @@ def _extract_panel(
         native_payload = None
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+        requested_y_side = str(
+            definition.get("y_axis_side") or panel.get("y_axis_side") or record.y_axis_side or "UNASSIGNED"
+        ).upper()
+        if requested_y_side not in {"LEFT", "RIGHT"}:
+            requested_y_side = "UNASSIGNED"
+        y_axis_anchors_by_side = {"LEFT": [], "RIGHT": []}
+        if len(y_axis_anchors) >= 2 and requested_y_side in y_axis_anchors_by_side:
+            y_axis_anchors_by_side[requested_y_side] = list(y_axis_anchors)
         x_anchor_source = "MANUAL_OVERRIDE" if x_axis_anchors else None
         y_anchor_source = "MANUAL_OVERRIDE" if y_axis_anchors else None
         explicit_relative_signal = str(definition.get("y_signal_mode", "")).upper() in {
@@ -792,6 +866,7 @@ def _extract_panel(
         }
         relative_signal = explicit_relative_signal or (
             family == "SPECTRUM" and len(y_axis_anchors) < 2
+            and not any(len(values) >= 2 for values in y_axis_anchors_by_side.values())
         )
 
         if (native_page_path and native_page_path.is_file() and plot_bbox_pdf and crop_mapping
@@ -807,34 +882,46 @@ def _extract_panel(
 
         def use_y_axis_candidates(axis_candidates):
             nonlocal y_axis_anchors
-            if explicit_relative_signal or len(y_axis_anchors) >= 2 or not axis_candidates:
+            if explicit_relative_signal or not axis_candidates:
                 return
-            requested_side = str(
-                definition.get("y_axis_side") or panel.get("y_axis_side") or record.y_axis_side or "UNASSIGNED"
-            ).upper()
-            left_anchors = axis_candidates["y_left_anchors"]
-            right_anchors = axis_candidates["y_right_anchors"]
-            if requested_side == "LEFT" and len(left_anchors) >= 2:
-                y_axis_anchors = left_anchors
-            elif requested_side == "RIGHT" and len(right_anchors) >= 2:
-                y_axis_anchors = right_anchors
-            elif len(left_anchors) >= 2 and len(right_anchors) < 2:
-                y_axis_anchors = left_anchors
-                record.y_axis_side = "LEFT"
-            elif len(right_anchors) >= 2 and len(left_anchors) < 2:
-                y_axis_anchors = right_anchors
-                record.y_axis_side = "RIGHT"
+            for side, key in (("LEFT", "y_left_anchors"), ("RIGHT", "y_right_anchors")):
+                values = axis_candidates.get(key, [])
+                if len(values) >= 2 and not y_axis_anchors_by_side[side]:
+                    y_axis_anchors_by_side[side] = list(values)
+
+            available = [
+                side for side, values in y_axis_anchors_by_side.items()
+                if len(values) >= 2
+            ]
+            if len(y_axis_anchors) >= 2 and requested_y_side == "UNASSIGNED":
+                return
+            if requested_y_side in {"LEFT", "RIGHT"}:
+                if len(y_axis_anchors_by_side[requested_y_side]) >= 2:
+                    y_axis_anchors = y_axis_anchors_by_side[requested_y_side]
+                    record.y_axis_side = requested_y_side
+                else:
+                    y_axis_anchors = []
+            elif len(available) == 1:
+                selected_side = available[0]
+                y_axis_anchors = y_axis_anchors_by_side[selected_side]
+                record.y_axis_side = selected_side
+            elif len(available) == 2:
+                y_axis_anchors = []
+                record.y_axis_side = "UNASSIGNED"
 
         if native_axis_evidence:
             if len(x_axis_anchors) < 2 and len(native_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = native_axis_evidence["x_anchors"]
                 x_anchor_source = "PDF_NATIVE_TEXT"
-            previous_y_count = len(y_axis_anchors)
+            previous_y_state = tuple(len(values) for values in y_axis_anchors_by_side.values())
             use_y_axis_candidates(native_axis_evidence)
-            if len(y_axis_anchors) >= 2 and len(y_axis_anchors) != previous_y_count:
+            current_y_state = tuple(len(values) for values in y_axis_anchors_by_side.values())
+            if current_y_state != previous_y_state or len(y_axis_anchors) >= 2:
                 y_anchor_source = "PDF_NATIVE_TEXT"
         if not explicit_relative_signal and family == "SPECTRUM":
-            relative_signal = len(y_axis_anchors) < 2
+            relative_signal = len(y_axis_anchors) < 2 and not any(
+                len(values) >= 2 for values in y_axis_anchors_by_side.values()
+            )
 
         if ocr_evidence and plot_box_pixels and (
             len(x_axis_anchors) < 2 or (not explicit_relative_signal and len(y_axis_anchors) < 2)
@@ -843,9 +930,10 @@ def _extract_panel(
             if len(x_axis_anchors) < 2 and len(ocr_axis_evidence["x_anchors"]) >= 2:
                 x_axis_anchors = ocr_axis_evidence["x_anchors"]
                 x_anchor_source = "OCR"
-            previous_y_count = len(y_axis_anchors)
+            previous_y_state = tuple(len(values) for values in y_axis_anchors_by_side.values())
             use_y_axis_candidates(ocr_axis_evidence)
-            if len(y_axis_anchors) >= 2 and len(y_axis_anchors) != previous_y_count:
+            current_y_state = tuple(len(values) for values in y_axis_anchors_by_side.values())
+            if current_y_state != previous_y_state or len(y_axis_anchors) >= 2:
                 y_anchor_source = "OCR"
             if not explicit_relative_signal and family == "SPECTRUM":
                 relative_signal = len(y_axis_anchors) < 2
@@ -871,26 +959,77 @@ def _extract_panel(
         except (ValueError, TypeError) as exc:
             calibration_errors["x"] = f"{type(exc).__name__}: {exc}"
 
+        y_axis_calibrations = {}
         if relative_signal:
             try:
                 if not plot_box_pixels:
                     raise ValueError("Relative signal requires a resolved plot box and panel image")
                 _, by0, _, by1 = plot_box_pixels
                 y_cal = AxisCalibration(
-                    "y", None, -1.0 / (by1 - by0), by1 / (by1 - by0), [], 0.0,
-                    status="SERIES_RELATIVE_SIGNAL",
+                    "y", None, -1.0 / (by1 - by0), by1 / (by1 - by0), [],
+                    0.0, status="SERIES_RELATIVE_SIGNAL",
                 )
             except (ValueError, TypeError, ImportError) as exc:
                 calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
         else:
-            try:
-                y_cal = fit_linear_axis("y", y_axis_anchors, definition.get("y_unit"))
-            except (ValueError, TypeError) as exc:
-                calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
+            for side, anchors in y_axis_anchors_by_side.items():
+                if len(anchors) < 2:
+                    continue
+                try:
+                    y_axis_calibrations[side] = fit_linear_axis(
+                        "y", anchors, definition.get("y_unit")
+                    )
+                except (ValueError, TypeError) as exc:
+                    calibration_errors[f"y_{side.lower()}"] = f"{type(exc).__name__}: {exc}"
 
+            y_cal = None
+            if len(y_axis_anchors) >= 2:
+                try:
+                    y_cal = fit_linear_axis("y", y_axis_anchors, definition.get("y_unit"))
+                except (ValueError, TypeError) as exc:
+                    calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
+            elif requested_y_side in {"LEFT", "RIGHT"}:
+                y_cal = y_axis_calibrations.get(requested_y_side)
+                if y_cal is None:
+                    calibration_errors["y"] = f"REQUESTED_{requested_y_side}_Y_AXIS_NOT_CALIBRATED"
+            elif len(y_axis_calibrations) == 1:
+                selected_side, y_cal = next(iter(y_axis_calibrations.items()))
+                record.y_axis_side = selected_side
+            elif len(y_axis_calibrations) > 1:
+                calibration_errors["y"] = "AMBIGUOUS_DUAL_Y_AXIS_SERIES_ASSOCIATION"
+            else:
+                try:
+                    y_cal = fit_linear_axis("y", y_axis_anchors, definition.get("y_unit"))
+                except (ValueError, TypeError) as exc:
+                    calibration_errors["y"] = f"{type(exc).__name__}: {exc}"
+
+        series_axis_assignment = {
+            "status": (
+                "RELATIVE_SIGNAL" if relative_signal else
+                "ASSIGNED" if y_cal is not None and record.y_axis_side in {"LEFT", "RIGHT"} else
+                "AMBIGUOUS_DUAL_Y_AXIS" if len(y_axis_calibrations) > 1 else
+                "UNRESOLVED"
+            ),
+            "selected_side": record.y_axis_side if y_cal is not None else None,
+            "available_sides": list(y_axis_calibrations),
+            "reason": (
+                "SERIES_TO_Y_AXIS_MAPPING_REQUIRED"
+                if len(y_axis_calibrations) > 1 and y_cal is None else None
+            ),
+        }
         pixel_points = definition.get("pixel_points")
         color_rgb = definition.get("color_rgb")
         color_detection = None
+        if definition.get("_auto_color_candidate"):
+            candidate = definition["_auto_color_candidate"]
+            color_detection = {
+                "status": "UNIQUE_CHROMATIC_FAMILY",
+                "color_rgb": list(candidate["color_rgb"]),
+                "color_tolerance": int(candidate.get("color_tolerance", 24)),
+                "source": "AUTOMATIC_MULTI_COLOR_FAMILY_CANDIDATE",
+                "candidate_evidence": candidate,
+                "family_detection": definition.get("_auto_color_detection"),
+            }
         if (not color_rgb and image_path and plot_box_pixels
                 and family not in {"NON_MONOTONIC", "NON_MONOTONIC_CURVE", "CV", "EIS"}):
             try:
@@ -901,10 +1040,12 @@ def _extract_panel(
                 color_detection = {"status": "UNAVAILABLE", "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING"}
         plot_box_source = (
             "AUTO_PLOT_FRAME" if plot_detection and plot_detection.get("status") == "PROVISIONAL_PLOT_BOX"
+            else "UPSTREAM_PANEL_GEOMETRY" if panel.get("plot_box") is not None
             else "MANUAL_OVERRIDE" if definition.get("plot_box") is not None else "UNRESOLVED"
         )
         manual_monotonic_override = (
             bool(definition.get("color_rgb"))
+            and not definition.get("_auto_color_candidate")
             and isinstance(definition.get("x_axis_anchors"), list)
             and len(definition.get("x_axis_anchors", [])) >= 2
             and isinstance(definition.get("y_axis_anchors"), list)
@@ -915,6 +1056,9 @@ def _extract_panel(
             record.x_label or x_axis_label_text,
             allow_unlabelled_manual_override=manual_monotonic_override,
         ) if image_path else {"status": "NEEDS_REVIEW", "reason": "SOURCE_IMAGE_UNAVAILABLE"}
+        if definition.get("_auto_color_candidate"):
+            trace_specification["automatic_color_family_candidate"] = definition["_auto_color_candidate"]
+            trace_specification["automatic_color_family_detection"] = definition.get("_auto_color_detection")
         trace_specification["input_provenance"] = {
             "plot_box": plot_box_source,
             "x_axis_anchors": x_anchor_source or "UNRESOLVED",
@@ -977,6 +1121,11 @@ def _extract_panel(
                         "crop_mapping": crop_mapping,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                    "y_axis_calibrations": {
+                        side: calibration_to_dict(calibration)
+                        for side, calibration in y_axis_calibrations.items()
+                    },
+                    "series_axis_assignment": series_axis_assignment,
                         "calibration_errors": calibration_errors,
                     }
                 else:
@@ -988,6 +1137,11 @@ def _extract_panel(
                         "chart_family_classification": classification,
                         "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                         "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                    "y_axis_calibrations": {
+                        side: calibration_to_dict(calibration)
+                        for side, calibration in y_axis_calibrations.items()
+                    },
+                    "series_axis_assignment": series_axis_assignment,
                         "calibration_errors": calibration_errors,
                     }
             except (OSError, KeyError, TypeError, ValueError) as exc:
@@ -1047,6 +1201,11 @@ def _extract_panel(
                                "axis_text_evidence": axis_text_evidence,
                                "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                    "y_axis_calibrations": {
+                        side: calibration_to_dict(calibration)
+                        for side, calibration in y_axis_calibrations.items()
+                    },
+                    "series_axis_assignment": series_axis_assignment,
                                "calibration_errors": calibration_errors}
         elif image_path and trace_specification.get("status") == "READY":
             specification = trace_specification["specification"]
@@ -1062,6 +1221,11 @@ def _extract_panel(
             )
             record.metadata = {"x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                    "y_axis_calibrations": {
+                        side: calibration_to_dict(calibration)
+                        for side, calibration in y_axis_calibrations.items()
+                    },
+                    "series_axis_assignment": series_axis_assignment,
                                "calibration_errors": calibration_errors,
                                "raster_qc": qc, "axis_text_evidence": axis_text_evidence,
                                "vector_selection": vector_selection,
@@ -1093,6 +1257,11 @@ def _extract_panel(
                 "plot_box_pixels": list(plot_box_pixels) if plot_box_pixels else None,
                 "x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                 "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
+                    "y_axis_calibrations": {
+                        side: calibration_to_dict(calibration)
+                        for side, calibration in y_axis_calibrations.items()
+                    },
+                    "series_axis_assignment": series_axis_assignment,
                 "calibration_errors": calibration_errors,
             }
         if record.points:
