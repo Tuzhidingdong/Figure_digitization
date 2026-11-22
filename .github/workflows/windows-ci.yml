@@ -2,9 +2,13 @@ name: Windows CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/p1-automatic-monotonic-digitization
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - fix/p0-classification-qc-contract
   workflow_dispatch:
 
 jobs:
