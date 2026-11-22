@@ -947,7 +947,13 @@ def test_rapidocr_uses_cpu_single_thread_and_reuses_engine(monkeypatch, tmp_path
                 scores=(0.98,),
             )
 
+    from enum import Enum
+
+    class FakeEngineType(Enum):
+        ONNXRUNTIME = "onnxruntime"
+
     fake_module = types.ModuleType("rapidocr")
+    fake_module.EngineType = FakeEngineType
     fake_module.RapidOCR = FakeRapidOCR
     monkeypatch.setitem(sys.modules, "rapidocr", fake_module)
     ocr.reset_ocr_engine_for_tests()
@@ -965,6 +971,8 @@ def test_rapidocr_uses_cpu_single_thread_and_reuses_engine(monkeypatch, tmp_path
         assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.intra_op_num_threads"] == 1
         assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.inter_op_num_threads"] == 1
         assert FakeRapidOCR.parameters["EngineConfig.onnxruntime.use_cuda"] is False
+        for stage in ("Det", "Cls", "Rec"):
+            assert FakeRapidOCR.parameters[f"{stage}.engine_type"] is FakeEngineType.ONNXRUNTIME
     finally:
         ocr.reset_ocr_engine_for_tests()
 
