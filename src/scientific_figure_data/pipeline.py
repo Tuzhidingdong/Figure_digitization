@@ -1476,9 +1476,32 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                             rendered.close()
             _check_memory_budget(memory_limit_mb)
             ocr_evidence = []
-            if options.get("ocr") and saved_crop:
-                from .ocr import run_ocr
-                ocr_evidence = run_ocr(saved_crop)
+            ocr_status = {"status": "NOT_REQUESTED"}
+            if options.get("ocr"):
+                if saved_crop:
+                    try:
+                        from .ocr import run_ocr
+                        ocr_evidence = run_ocr(saved_crop)
+                        ocr_status = {
+                            "status": "SUCCEEDED" if ocr_evidence else "SUCCEEDED_EMPTY",
+                            "record_count": len(ocr_evidence),
+                        }
+                    except Exception as exc:
+                        error_message = str(exc).strip() or "No error message supplied."
+                        ocr_status = {
+                            "status": "FAILED",
+                            "error_type": type(exc).__name__,
+                            "message": error_message[:500],
+                        }
+                        snapshot.warnings.append(
+                            f"OCR_FAILED:{figure_id}/{panel_id}:{type(exc).__name__}"
+                        )
+                        review_needed = True
+                else:
+                    ocr_status = {
+                        "status": "NOT_RUN",
+                        "reason": "NO_SAVED_PANEL_IMAGE",
+                    }
             native_summary = (
                 native_evidence_by_page.get(int(figure["page"]))
                 if figure["page"] and is_main_pdf_figure else None
@@ -1493,6 +1516,8 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 native_summary, ocr_evidence, pdf_sha256, snapshot.input_fingerprint,
                 native_file_path, crop_mapping,
             )
+            for item in extracted:
+                item.metadata["ocr_status"] = ocr_status
             append_panel_series_csv(paper_output, figure_id, panel_id, extracted)
             has_points = any(item.points for item in extracted)
             needs_series_review = any(
@@ -1637,6 +1662,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "crop_mapping": crop_mapping,
                 "status": panel_status,
+                "ocr_status": ocr_status,
                 "segmentation_confidence": segmentation_confidence,
                 "segmentation_confidence_status": segmentation_confidence_status,
                 "chart_family": (
