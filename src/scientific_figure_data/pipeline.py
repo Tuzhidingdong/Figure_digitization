@@ -2016,6 +2016,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
                 "segmentation_status": segmentation_status,
+                "plot_box": panel.get("plot_box"),
+                "plot_box_coordinate_space": panel.get(
+                    "plot_box_coordinate_space",
+                    "PANEL_IMAGE_PIXELS" if auto_panel_bbox else "SOURCE_IMAGE_PIXELS",
+                ),
+                "plot_frame_bbox_pixels": panel.get("plot_frame_bbox_pixels"),
+                "plot_frame_score": panel.get("plot_frame_score"),
                 "evidence_image_path": (
                     saved_crop.relative_to(paper_output).as_posix() if saved_crop else None
                 ),
