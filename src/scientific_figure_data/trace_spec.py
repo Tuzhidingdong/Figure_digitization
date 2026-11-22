@@ -124,7 +124,8 @@ def generate_trace_specification(
             "generated_from": [
                 "AUTOMATIC_PLOT_REGION_CANDIDATE",
                 "AUTOMATIC_SINGLE_COLOR_DETECTION",
-                "AUTOMATIC_NUMERIC_AXIS_ANCHORS",
+                *(["AUTOMATIC_X_AXIS_NUMERIC_ANCHORS"] if x_is_calibrated else []),
+                *(["AUTOMATIC_Y_AXIS_NUMERIC_ANCHORS"] if y_is_calibrated else []),
                 *(
                     ["OCR_X_AXIS_SEMANTICS"] if ordered_label
                     else ["EXPLICIT_MONOTONIC_FAMILY_OR_MANUAL_OVERRIDE"]

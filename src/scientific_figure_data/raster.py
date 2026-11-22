@@ -37,6 +37,7 @@ def trace_monotonic_color(
     if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
         from .plot_region import _rgb_to_hsv_arrays
 
+        height, width = image.shape[:2]
         flat = image.reshape(-1, 3)
         hues, saturations, values = _rgb_to_hsv_arrays(flat)
         hue_center = float(color_match.get("hue_center_degrees", 0.0))
