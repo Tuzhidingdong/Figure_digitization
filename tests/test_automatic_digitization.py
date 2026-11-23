@@ -838,6 +838,40 @@ def test_hue_family_detector_groups_antialiased_shades_and_traces_pixel_geometry
     assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
 
 
+def test_branch_detector_recovers_secondary_persistent_band_when_single_band_is_modal(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    image_path = tmp_path / "persistent_secondary_branch.png"
+    image = Image.new("RGB", (360, 220), "white")
+    draw = ImageDraw.Draw(image)
+    color = (220, 35, 45)
+    draw.line((32, 72, 328, 72), fill=color, width=3)
+    # The second branch is present over only part of the X range, so a
+    # single-band mode is still the most frequent per-column observation.
+    draw.line((170, 132, 328, 132), fill=color, width=3)
+    image.save(image_path)
+
+    plot_box = (20, 20, 340, 180)
+    detected = detect_monotonic_color_branches(
+        str(image_path), color, 12, plot_box=plot_box,
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 2, detected
+    assert detected["modal_branch_count"] == 1, detected
+    assert detected["branch_presence_fraction"] >= 0.15, detected
+
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 12, None, None,
+        plot_box=plot_box, branch_index=1, branch_count=2,
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+    assert len(points) >= 100
+    assert all(point.pixel_x is not None and point.pixel_y is not None for point in points)
+
+
 def test_pipeline_expands_five_color_families_into_numeric_series(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.pipeline import _extract_panel
