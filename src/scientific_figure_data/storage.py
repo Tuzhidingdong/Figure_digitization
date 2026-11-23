@@ -569,7 +569,10 @@ def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
             reader = csv.DictReader(handle)
             previous_fields = list(reader.fieldnames or [])
             previous_rows = list(reader)
-        if not set(fieldnames).issubset(previous_fields):
+        if previous_fields != fieldnames:
+            # Preserve any forward-compatible columns already present while
+            # adding the current schema's dual-axis candidate fields.
+            fieldnames = list(dict.fromkeys(previous_fields + fieldnames))
             temporary = path.with_name(f".{path.name}.tmp")
             with temporary.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -591,11 +594,10 @@ def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
             right_calibration = calibrations.get("RIGHT")
             assignment = item.metadata.get("series_axis_assignment")
             if not isinstance(assignment, dict):
-                assignment = (
-                    item.metadata.get("trace_specification", {}).get(
-                        "series_axis_assignment", {}
-                    )
-                )
+                trace_specification = item.metadata.get("trace_specification")
+                if not isinstance(trace_specification, dict):
+                    trace_specification = {}
+                assignment = trace_specification.get("series_axis_assignment", {})
             mapping_status = (
                 assignment.get("status", "UNRESOLVED")
                 if isinstance(assignment, dict) else "UNRESOLVED"
