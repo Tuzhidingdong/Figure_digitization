@@ -2170,8 +2170,12 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         }
                     if rendering.get("status") in {"RENDERED", "GEOMETRY_ONLY_OVERLAY"}:
                         for path_key in ("reconstructed_path", "overlay_path"):
+                            path_value = rendering.get(path_key)
+                            if not path_value:
+                                rendering[path_key] = None
+                                continue
                             try:
-                                rendering[path_key] = Path(rendering[path_key]).resolve().relative_to(
+                                rendering[path_key] = Path(path_value).resolve().relative_to(
                                     paper_output.resolve()
                                 ).as_posix()
                             except (OSError, ValueError, TypeError):
