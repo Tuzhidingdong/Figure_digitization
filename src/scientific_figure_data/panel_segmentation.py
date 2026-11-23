@@ -264,7 +264,16 @@ def detect_panel_regions(
             "rejected_by_minimum_geometry": rejected,
         })
 
-    if len(panels) >= 2:
+    # Whitespace leaves can still be composite rows/columns: a full-width
+    # leaf may contain several plot frames, while a wide short leaf may be one
+    # of multiple vertically stacked plots. Do not stop at the first two
+    # leaves in those cases; send them through the independent plot-frame scan.
+    contains_composite_region = any(
+        (panel["bbox"][2] - panel["bbox"][0]) >= width * 0.55
+        or (panel["bbox"][3] - panel["bbox"][1]) >= height * 0.72
+        for panel in panels
+    )
+    if len(panels) >= 2 and not contains_composite_region:
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
             "reason": "BROAD_WHITESPACE_GUTTERS_AFTER_OCR_MASK" if ocr_masked_pixels else "BROAD_WHITESPACE_GUTTERS",
