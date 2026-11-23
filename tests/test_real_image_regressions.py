@@ -52,13 +52,6 @@ def test_p8_real_image_axis_ticks_keep_x_endpoints_out_of_y_axes() -> None:
     ], anchors
 
 
-@pytest.mark.parametrize(
-    ("filename", "minimum_panels"),
-    [
-        ("P8_06.png", 4),
-        ("P3_02.png", 5),
-    ],
-)
 def test_p8_real_figure_detects_two_red_branches_and_one_blue_band(
     tmp_path: Path,
 ) -> None:
@@ -106,6 +99,13 @@ def test_p8_real_figure_detects_two_red_branches_and_one_blue_band(
     assert blue_branches["branch_count"] == 1, blue_branches
 
 
+@pytest.mark.parametrize(
+    ("filename", "minimum_panels"),
+    [
+        ("P8_06.png", 4),
+        ("P3_02.png", 5),
+    ],
+)
 def test_real_scientific_figures_are_not_collapsed_to_one_panel(
     filename: str, minimum_panels: int,
 ) -> None:
