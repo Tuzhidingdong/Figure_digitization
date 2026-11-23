@@ -851,7 +851,7 @@ def test_branch_detector_recovers_secondary_persistent_band_when_single_band_is_
     draw.line((32, 72, 328, 72), fill=color, width=3)
     # The second branch is present over only part of the X range, so a
     # single-band mode is still the most frequent per-column observation.
-    draw.line((170, 132, 328, 132), fill=color, width=3)
+    draw.line((185, 132, 328, 132), fill=color, width=3)
     image.save(image_path)
 
     plot_box = (20, 20, 340, 180)
