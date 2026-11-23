@@ -13,6 +13,45 @@ from scientific_figure_data.plot_region import detect_plot_box_candidates
 FIXTURES = Path(__file__).parent / "fixtures" / "real_figures"
 
 
+def test_p8_real_image_axis_ticks_keep_x_endpoints_out_of_y_axes() -> None:
+    """Real P8_06 tick labels at plot corners must stay on their own axes."""
+    from scientific_figure_data.axis_text import extract_numeric_axis_anchors
+
+    cached = json.loads(
+        (FIXTURES / "P8_06_ocr.json").read_text(encoding="utf-8")
+    )["rows"]
+    panel_bbox = (955, 544, 1391, 895)
+    x0, y0, x1, y1 = panel_bbox
+    local_rows = []
+    for row in cached:
+        polygon = row.get("polygon")
+        if not isinstance(polygon, list) or not polygon:
+            continue
+        points = [(float(point[0]), float(point[1])) for point in polygon]
+        center_x = sum(point[0] for point in points) / len(points)
+        center_y = sum(point[1] for point in points) / len(points)
+        if not (x0 <= center_x < x1 and y0 <= center_y < y1):
+            continue
+        local = dict(row)
+        local["polygon"] = [
+            [point[0] - x0, point[1] - y0] for point in points
+        ]
+        local_rows.append(local)
+
+    anchors = extract_numeric_axis_anchors(
+        local_rows, (53, 50, 383, 301)
+    )
+    assert [item["value"] for item in anchors["x_anchors"]] == [
+        0.0, 50.0, 100.0, 150.0,
+    ], anchors
+    assert [item["value"] for item in anchors["y_left_anchors"]] == [
+        100.0, 80.0, 60.0, 40.0, 20.0, 0.0,
+    ], anchors
+    assert [item["value"] for item in anchors["y_right_anchors"]] == [
+        20.0, 15.0, 10.0,
+    ], anchors
+
+
 @pytest.mark.parametrize(
     ("filename", "minimum_panels"),
     [
