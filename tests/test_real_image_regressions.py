@@ -139,9 +139,8 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
     }
     assert len(panel_map) >= 4, segmentation
 
-    # Focused diagnostic: P8_06 panel d contains vertically stacked plot
-    # content. Inspect its local frame candidates before changing production
-    # segmentation/trace thresholds.
+    # Focused diagnostic: P8_06 panel d is a single dual-Y plot. Inspect its
+    # local frame candidates without changing production thresholds.
     p8_d_panel = next(
         (
             panel for panel in panel_map.values()
