@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -379,6 +380,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         ],
         "series": [
             {
+                "series_id": row.get("series_id"),
                 "panel_id": row.get("panel_id"),
                 "points_count": row.get("points_count", row.get("metadata", {}).get("points_count", 0)),
                 "status": row.get("extraction_status"),
@@ -438,6 +440,24 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
             assert row.get("metadata", {}).get("trace_specification", {}).get(
                 "series_axis_assignment", {}
             ).get("status") == "AMBIGUOUS_DUAL_Y_AXIS", json.dumps(summary, sort_keys=True)
+
+    panel_csv = paper_output / "series" / f"P3_02__{panel_c['panel_id']}" / "panel_series.csv"
+    assert panel_csv.is_file(), str(panel_csv)
+    with panel_csv.open("r", newline="", encoding="utf-8") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    geometry_series_ids = {row["series_id"] for row in geometry_series}
+    candidate_rows = [
+        row for row in csv_rows
+        if row.get("series_id") in geometry_series_ids
+    ]
+    assert candidate_rows, json.dumps(summary, sort_keys=True)
+    for row in candidate_rows:
+        assert row.get("y_mapping_status") == "AMBIGUOUS_DUAL_Y_AXIS", row
+        assert row.get("y_axis_side") == "UNASSIGNED", row
+        left_candidate = float(row["y_left_candidate"])
+        right_candidate = float(row["y_right_candidate"])
+        assert left_candidate != right_candidate, row
+        assert row.get("y_value", "") == "", row
 
 
 def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
