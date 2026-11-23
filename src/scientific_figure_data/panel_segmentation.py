@@ -102,6 +102,7 @@ def _best_split(mask, rect: tuple[int, int, int, int], min_gap: int,
 def detect_panel_regions(
     image_path: Path,
     *,
+    ocr_rows: list[dict] | None = None,
     max_panels: int = 12,
     projection_threshold: float = 0.006,
     minimum_gap_fraction: float = 0.008,
@@ -132,6 +133,36 @@ def detect_panel_regions(
                 "panels": [],
             }
         mask = _ink_mask(source)
+        ocr_masked_pixels = 0
+        if isinstance(ocr_rows, list) and ocr_rows:
+            # Text boxes can bridge otherwise clear inter-panel gutters in
+            # projection-based segmentation. Remove only their local ink from
+            # the geometry mask; the source pixels and OCR evidence remain
+            # untouched for later panel extraction.
+            for row in ocr_rows:
+                if not isinstance(row, dict):
+                    continue
+                polygon = row.get("polygon")
+                if not isinstance(polygon, list) or len(polygon) < 4:
+                    continue
+                try:
+                    points = [
+                        (float(point[0]), float(point[1]))
+                        for point in polygon
+                        if isinstance(point, (list, tuple)) and len(point) >= 2
+                    ]
+                    if len(points) < 4:
+                        continue
+                    x0 = max(0, int(np.floor(min(point[0] for point in points))) - 1)
+                    y0 = max(0, int(np.floor(min(point[1] for point in points))) - 1)
+                    x1 = min(width, int(np.ceil(max(point[0] for point in points))) + 2)
+                    y1 = min(height, int(np.ceil(max(point[1] for point in points))) + 2)
+                except (TypeError, ValueError, OverflowError, IndexError):
+                    continue
+                if x1 > x0 and y1 > y0:
+                    before = int(mask[y0:y1, x0:x1].sum())
+                    mask[y0:y1, x0:x1] = False
+                    ocr_masked_pixels += before
 
     if not bool(np.any(mask)):
         return {
@@ -199,8 +230,13 @@ def detect_panel_regions(
     if len(panels) >= 2:
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
-            "reason": "BROAD_WHITESPACE_GUTTERS",
+            "reason": "BROAD_WHITESPACE_GUTTERS_AFTER_OCR_MASK" if ocr_masked_pixels else "BROAD_WHITESPACE_GUTTERS",
             "image_size": [width, height],
+            "ocr_layout_evidence": {
+                "status": "APPLIED" if ocr_masked_pixels else "NOT_AVAILABLE",
+                "masked_ink_pixel_count": ocr_masked_pixels,
+                "ocr_row_count": len(ocr_rows) if isinstance(ocr_rows, list) else 0,
+            },
             "panel_count": len(panels),
             "panels": panels,
             "provisional": True,
