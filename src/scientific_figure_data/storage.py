@@ -592,6 +592,10 @@ def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
             calibrations = calibrations if isinstance(calibrations, dict) else {}
             left_calibration = calibrations.get("LEFT")
             right_calibration = calibrations.get("RIGHT")
+            if item.y_axis_side == "LEFT":
+                right_calibration = None
+            elif item.y_axis_side == "RIGHT":
+                left_calibration = None
             assignment = item.metadata.get("series_axis_assignment")
             if not isinstance(assignment, dict):
                 trace_specification = item.metadata.get("trace_specification")
