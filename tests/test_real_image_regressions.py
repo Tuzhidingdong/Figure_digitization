@@ -113,7 +113,14 @@ def test_real_scientific_figures_are_not_collapsed_to_one_panel(
     image_path = FIXTURES / filename
     assert image_path.is_file(), f"Missing real-image fixture: {image_path}"
 
-    result = detect_panel_regions(image_path)
+    cached_ocr_path = FIXTURES / f"{Path(filename).stem}_ocr.json"
+    cached_ocr_rows = (
+        json.loads(cached_ocr_path.read_text(encoding="utf-8")).get("rows", [])
+        if cached_ocr_path.is_file() else []
+    )
+    result = detect_panel_regions(
+        image_path, ocr_rows=cached_ocr_rows or None
+    )
     print(f"REAL_IMAGE_PANEL_DIAGNOSTIC {filename}: {json.dumps(result, sort_keys=True)}")
 
     panels = result.get("panels", [])
@@ -476,6 +483,8 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
     )
 
     def cached_panel_ocr(panel_image_path: Path) -> list[dict]:
+        if Path(panel_image_path).name == "P8_06.png":
+            return [dict(row) for row in cached_ocr]
         stem = Path(panel_image_path).stem
         matched_panel = next(
             (
