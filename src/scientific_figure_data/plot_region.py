@@ -768,6 +768,17 @@ def detect_chromatic_color_families(
             "saturated_pixel_count": total,
             "families": [],
         }
+    residual_pixels = int(remaining.sum())
+    # Residual saturated pixels do not by themselves mean that candidate
+    # enumeration was truncated. The loop also stops normally when the
+    # strongest residual hue cluster falls below minimum_family_fraction.
+    # Mark truncation only when the configured family-count cap was reached;
+    # every retained family is still only a candidate and must pass the
+    # independent branch-continuity and trace-QC stages.
+    family_limit_reached = (
+        len(families) >= max_families
+        and residual_pixels >= minimum_family_pixels
+    )
     return {
         "status": (
             "UNIQUE_CHROMATIC_FAMILY" if len(families) == 1
@@ -777,7 +788,10 @@ def detect_chromatic_color_families(
         "saturated_pixel_count": total,
         "family_count": len(families),
         "families": families,
-        "truncated": bool(remaining.sum() >= minimum_family_pixels),
+        "truncated": family_limit_reached,
+        "residual_pixel_count": residual_pixels,
+        "residual_pixel_fraction": residual_pixels / max(1, total),
+        "family_limit_reached": family_limit_reached,
         "color_space": "HSV_HUE_FAMILY",
         "hue_tolerance_degrees": float(hue_tolerance_degrees),
         "axis_spine_exclusion": axis_spine_evidence,
