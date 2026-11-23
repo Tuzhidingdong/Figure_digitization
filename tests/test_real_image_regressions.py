@@ -131,9 +131,11 @@ def test_real_scientific_figures_are_not_collapsed_to_one_panel(
     if filename == "P8_06.png":
         width, height = result["image_size"]
         frames = [
-            panel.get("plot_frame_bbox_pixels")
+            panel.get("plot_frame_bbox_pixels") or panel.get("bbox")
             for panel in panels
-            if isinstance(panel.get("plot_frame_bbox_pixels"), list)
+            if isinstance(
+                panel.get("plot_frame_bbox_pixels") or panel.get("bbox"), list
+            )
         ]
         top_frames = [
             box for box in frames
