@@ -385,6 +385,8 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
                 "x_calibration": row.get("metadata", {}).get("x_calibration"),
                 "y_calibration": row.get("metadata", {}).get("y_calibration"),
                 "y_axis_side": row.get("y_axis_side"),
+                "raster_qc": row.get("metadata", {}).get("raster_qc"),
+                "trace_axis_assignment": row.get("metadata", {}).get("trace_specification", {}).get("series_axis_assignment"),
                 "color": row.get("metadata", {}).get("color_detection"),
             }
             for row in series_rows
