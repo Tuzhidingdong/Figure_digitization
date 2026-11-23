@@ -185,13 +185,31 @@ def detect_plot_box_candidates(
             analysis_width / float(original_width),
             analysis_height / float(original_height),
         )
-        converted = source.convert("RGB")
+        # Resize the source image before RGB conversion. Converting a very
+        # large CMYK/RGBA/grayscale raster first would allocate a full-resolution
+        # RGB buffer and defeat the bounded five-megapixel analysis path.
+        resized = None
+        analysis_image = source
         if (analysis_width, analysis_height) != (original_width, original_height):
             resampling = getattr(Image, "Resampling", Image).BOX
-            converted = converted.resize((analysis_width, analysis_height), resample=resampling)
-        rgb = np.asarray(converted, dtype=np.uint8)
-        if converted is not source:
-            converted.close()
+            resized = source.resize(
+                (analysis_width, analysis_height),
+                resample=resampling,
+            )
+            analysis_image = resized
+        converted = None
+        try:
+            converted = (
+                analysis_image
+                if analysis_image.mode == "RGB"
+                else analysis_image.convert("RGB")
+            )
+            rgb = np.asarray(converted, dtype=np.uint8)
+        finally:
+            if converted is not None and converted is not analysis_image:
+                converted.close()
+            if resized is not None:
+                resized.close()
     height, width = rgb.shape[:2]
 
     luminance = (

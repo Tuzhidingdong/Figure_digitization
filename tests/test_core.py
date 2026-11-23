@@ -1483,6 +1483,37 @@ def test_plot_region_detector_finds_unique_rectangular_frame_and_rejects_borderl
     assert blank["status"] == "NEEDS_REVIEW"
 
 
+def test_plot_frame_scan_downsamples_before_rgb_conversion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    # 5.72 MP grayscale source: conversion must occur only after the bounded
+    # analysis resize, rather than allocating a full-size RGB copy first.
+    image = Image.new("L", (2600, 2200), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((180, 160, 2420, 2040), outline=0, width=8)
+    image_path = tmp_path / "large-grayscale-plot.png"
+    image.save(image_path)
+
+    original_convert = Image.Image.convert
+    converted_sizes: list[tuple[int, int]] = []
+
+    def record_conversion(self, *args, **kwargs):
+        converted_sizes.append(self.size)
+        return original_convert(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", record_conversion)
+    result = detect_plot_box_candidates(image_path)
+
+    assert result["analysis_scale"] < 1.0
+    analysis_width, analysis_height = result["analysis_image_size"]
+    assert analysis_width * analysis_height <= 5_000_000
+    assert converted_sizes
+    assert all(width * height <= 5_000_000 for width, height in converted_sizes)
+
+
 def test_single_trace_color_detection_rejects_multicolor_plot(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.plot_region import detect_single_trace_color
