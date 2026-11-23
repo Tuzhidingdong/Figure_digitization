@@ -134,8 +134,17 @@ def trace_monotonic_color(
                 "band_centers": [float(np.mean(cluster)) for cluster in substantial],
             }
         if len(ys) > 12 and (int(ys.max()) - int(ys.min())) > 10:
-            return [], {"status": "NEEDS_REVIEW", "reason": "THICK_OR_AMBIGUOUS_TRACE",
-                        "ambiguous_column": x}
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "THICK_OR_AMBIGUOUS_TRACE",
+                "ambiguous_column": x,
+                "matched_pixel_count": int(len(ys)),
+                "vertical_span_pixels": int(ys.max() - ys.min()),
+                "cluster_count": len(clusters),
+                "band_centers": [
+                    float(np.mean(cluster)) for cluster in substantial
+                ],
+            }
     points = []
     for index, (x, py, _) in enumerate(columns):
         points.append(SeriesPoint(
