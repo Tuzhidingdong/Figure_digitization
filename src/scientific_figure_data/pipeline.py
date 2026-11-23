@@ -867,11 +867,23 @@ def _extract_panel(
         native_payload = None
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+        explicit_y_side = definition.get("y_axis_side") or panel.get("y_axis_side")
+        automatic_color_candidate = isinstance(
+            definition.get("_auto_color_candidate"), dict
+        )
         requested_y_side = str(
-            definition.get("y_axis_side") or panel.get("y_axis_side") or record.y_axis_side or "UNASSIGNED"
+            explicit_y_side
+            or (record.y_axis_side if not automatic_color_candidate else "UNASSIGNED")
+            or "UNASSIGNED"
         ).upper()
         if requested_y_side not in {"LEFT", "RIGHT"}:
             requested_y_side = "UNASSIGNED"
+        # An OCR axis title identifies a panel axis, not necessarily the Y axis
+        # used by every automatically discovered color family. For dual-axis
+        # plots, leave each automatic family unassigned until color evidence is
+        # evaluated against both calibrated sides.
+        if automatic_color_candidate and explicit_y_side is None:
+            record.y_axis_side = "UNASSIGNED"
         y_axis_anchors_by_side = {"LEFT": [], "RIGHT": []}
         if len(y_axis_anchors) >= 2 and requested_y_side in y_axis_anchors_by_side:
             y_axis_anchors_by_side[requested_y_side] = list(y_axis_anchors)
@@ -1206,7 +1218,85 @@ def _extract_panel(
                 y_cal = y_axis_calibrations[selected_side]
                 y_axis_anchors = y_axis_anchors_by_side[selected_side]
                 record.y_axis_side = selected_side
+                y_axis_text_color_association["status"] = "MATCHED"
+                y_axis_text_color_association["selected_side"] = selected_side
                 calibration_errors.pop("y", None)
+            elif not side_matches and automatic_color_candidate and len(y_axis_calibrations) == 2:
+                # Some dual-axis figures color only one Y axis. If exactly two
+                # independently detected hue families exist and exactly one
+                # family is uniquely tied to one chromatic axis, the other hue
+                # family may be assigned to the sole remaining axis by
+                # exclusion. This is recorded as provisional evidence, never
+                # treated as an explicit user-side assignment.
+                family_detection = (
+                    definition.get("_auto_color_detection")
+                    or (color_detection.get("family_detection")
+                        if isinstance(color_detection, dict) else None)
+                )
+                family_candidates = (
+                    family_detection.get("families", [])
+                    if isinstance(family_detection, dict) else []
+                )
+                if len(family_candidates) == 2 and curve_hue is not None:
+                    sibling_hues = [
+                        float(item["color_match"]["hue_center_degrees"])
+                        for item in family_candidates
+                        if isinstance(item.get("color_match"), dict)
+                        and item["color_match"].get("hue_center_degrees") is not None
+                        and abs(
+                            (float(item["color_match"]["hue_center_degrees"])
+                             - curve_hue + 180.0) % 360.0 - 180.0
+                        ) > 2.0
+                    ]
+                    if len(sibling_hues) == 1:
+                        sibling_matches = []
+                        for side, evidence in side_color_evidence.items():
+                            for ink in evidence.get("candidate_inks", []):
+                                ink_hue = ink.get("hue_degrees")
+                                if ink_hue is None:
+                                    continue
+                                distance = abs(
+                                    (float(ink_hue) - sibling_hues[0] + 180.0) % 360.0 - 180.0
+                                )
+                                if distance <= 14.0:
+                                    sibling_matches.append(side)
+                                    break
+                        sibling_sides = sorted(set(sibling_matches))
+                        if len(sibling_sides) == 1:
+                            sibling_side = sibling_sides[0]
+                            residual_side = next(
+                                side for side in ("LEFT", "RIGHT")
+                                if side != sibling_side
+                            )
+                            sibling_evidence = side_color_evidence.get(sibling_side, {})
+                            residual_evidence = side_color_evidence.get(residual_side, {})
+                            sibling_has_spine = (
+                                sibling_evidence.get("axis_spine", {}).get("status")
+                                == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                            )
+                            residual_has_color = bool(
+                                residual_evidence.get("candidate_inks")
+                            )
+                            if (
+                                sibling_has_spine
+                                and not residual_has_color
+                                and not sibling_evidence.get("conflicting_color_sources")
+                                and not residual_evidence.get("conflicting_color_sources")
+                            ):
+                                y_cal = y_axis_calibrations[residual_side]
+                                y_axis_anchors = y_axis_anchors_by_side[residual_side]
+                                record.y_axis_side = residual_side
+                                y_axis_text_color_association = {
+                                    **y_axis_text_color_association,
+                                    "status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+                                    "selected_side": residual_side,
+                                    "sibling_color_hue_degrees": sibling_hues[0],
+                                    "sibling_selected_side": sibling_side,
+                                    "assignment_basis": (
+                                        "TWO_HUE_FAMILIES_ONE_CHROMATIC_Y_AXIS_SPINE"
+                                    ),
+                                }
+                                calibration_errors.pop("y", None)
                 series_axis_assignment = {
                     "status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
                     "selected_side": selected_side,
