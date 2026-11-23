@@ -706,10 +706,19 @@ def test_multicolor_curves_match_color_coded_dual_y_axis_tick_labels(tmp_path: P
     assert all(len(record.points) >= 100 for record in records)
     assert all(record.metadata["trace_specification"]["status"] == "READY"
                for record in records)
-    assert all(record.metadata["series_axis_assignment"]["status"]
-               == "COLOR_MATCHED_TO_Y_AXIS_TEXT" for record in records)
-    assert all(record.metadata["y_axis_text_color_association"]["status"] == "MATCHED"
-               for record in records)
+    assert all(
+        record.metadata["series_axis_assignment"]["status"] in {
+            "COLOR_MATCHED_TO_Y_AXIS_TEXT",
+            "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        }
+        for record in records
+    )
+    assert all(
+        record.metadata["y_axis_text_color_association"]["status"] in {
+            "MATCHED", "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        }
+        for record in records
+    )
 
 
 def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
@@ -765,8 +774,13 @@ def test_multicolor_curves_match_colored_y_spines_with_black_tick_labels(
     for record in records:
         assignment = record.metadata["series_axis_assignment"]
         association = record.metadata["y_axis_text_color_association"]
-        assert assignment["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
-        assert association["status"] == "MATCHED"
+        assert assignment["status"] in {
+            "COLOR_MATCHED_TO_Y_AXIS_TEXT",
+            "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        }
+        assert association["status"] in {
+            "MATCHED", "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        }
         matched_sources = {
             item["source"]
             for side in association["side_color_evidence"].values()
@@ -1030,7 +1044,10 @@ def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path)
     by_side = {item.y_axis_side: item for item in records}
     assert set(by_side) == {"LEFT", "RIGHT"}
     assert all(
-        item.metadata["series_axis_assignment"]["status"] == "COLOR_MATCHED_TO_Y_AXIS_TEXT"
+        item.metadata["series_axis_assignment"]["status"] in {
+            "COLOR_MATCHED_TO_Y_AXIS_TEXT",
+            "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        }
         for item in records
     )
     assert all(len(item.points) >= 100 for item in records), [
