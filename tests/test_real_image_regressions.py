@@ -188,6 +188,54 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     }
     assert len(panel_map) >= 5, segmentation
 
+    # Diagnose the X-monotonic upper-right panel independently. It contains
+    # several colored capacity traces and is expected to be eligible for
+    # automatic hue-family extraction; keep this evidence compact and derived
+    # from the detected panel geometry rather than hard-coded source pixels.
+    panel_c = next(
+        (
+            panel for panel in panel_map.values()
+            if panel.get("bbox")
+            and panel["bbox"][0] >= segmentation["image_size"][0] * 0.60
+            and panel["bbox"][1] < segmentation["image_size"][1] * 0.25
+        ),
+        None,
+    )
+    panel_c_diagnostic = {"status": "PANEL_C_NOT_FOUND"}
+    if panel_c is not None:
+        from scientific_figure_data.plot_region import (
+            detect_chromatic_color_families, detect_plot_box,
+        )
+        panel_c_crop = tmp_path / "p3_panel_c_diagnostic.png"
+        with Image.open(source_image) as source:
+            source.crop(tuple(panel_c["bbox"])).save(panel_c_crop)
+        panel_c_plot = detect_plot_box(panel_c_crop)
+        panel_c_families = (
+            detect_chromatic_color_families(
+                panel_c_crop, tuple(panel_c_plot["pixel_bbox"])
+            )
+            if panel_c_plot.get("status") == "PROVISIONAL_PLOT_BOX"
+            else {"status": "PLOT_BOX_UNRESOLVED", "families": []}
+        )
+        panel_c_diagnostic = {
+            "panel_bbox": panel_c["bbox"],
+            "plot_detection": panel_c_plot,
+            "family_detection": {
+                key: panel_c_families.get(key)
+                for key in ("status", "family_count", "truncated", "saturated_pixel_count")
+            },
+            "families": [
+                {
+                    "color_rgb": family.get("color_rgb"),
+                    "hue": family.get("color_match", {}).get("hue_center_degrees"),
+                    "pixels": family.get("pixel_count"),
+                    "fraction": family.get("pixel_fraction"),
+                }
+                for family in panel_c_families.get("families", [])
+            ],
+        }
+    print("P3_PANEL_C_COLOR_DIAGNOSTIC " + json.dumps(panel_c_diagnostic, sort_keys=True))
+
     input_root = tmp_path / "input"
     paper_dir = input_root / "paper-p3-real"
     paper_dir.mkdir(parents=True)
