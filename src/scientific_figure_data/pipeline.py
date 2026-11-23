@@ -1556,13 +1556,41 @@ def _extract_panel(
             specification = trace_specification["specification"]
             branch_index = definition.get("_auto_trace_branch_index")
             branch_count = definition.get("_auto_trace_branch_count")
+            # Preserve observed sparse marker/line columns without
+            # synthesizing interpolated points. The accepted gap is bounded
+            # by half the median OCR X-tick spacing (capped at 24 px), while
+            # charts with no usable numeric tick geometry retain the strict
+            # default limit.
+            trace_max_gap_columns = 3
+            if x_cal is not None and len(x_cal.anchors) >= 2:
+                x_tick_pixels = sorted({
+                    float(anchor.pixel)
+                    for anchor in x_cal.anchors
+                    if anchor.pixel is not None
+                })
+                x_tick_gaps = [
+                    right - left
+                    for left, right in zip(x_tick_pixels, x_tick_pixels[1:])
+                    if right > left
+                ]
+                if x_tick_gaps:
+                    median_tick_gap = x_tick_gaps[len(x_tick_gaps) // 2]
+                    trace_max_gap_columns = max(
+                        3, min(24, int(round(median_tick_gap * 0.5)))
+                    )
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in specification["color_rgb"]),
                 int(specification["color_tolerance"]),
-                x_cal, y_cal, plot_box=tuple(specification["plot_box_pixels"]),
+                x_cal, y_cal, max_gap_columns=trace_max_gap_columns,
+                plot_box=tuple(specification["plot_box_pixels"]),
                 color_match=specification.get("color_match"),
                 branch_index=int(branch_index) if branch_index is not None else None,
                 branch_count=int(branch_count) if branch_count is not None else None,
+            )
+            qc["max_gap_limit_columns"] = trace_max_gap_columns
+            qc["max_gap_policy"] = (
+                "HALF_MEDIAN_X_TICK_INTERVAL_CAPPED_24PX"
+                if trace_max_gap_columns > 3 else "STRICT_3PX_DEFAULT"
             )
             if definition.get("_auto_trace_branch_detection"):
                 qc["branch_detection"] = definition["_auto_trace_branch_detection"]
