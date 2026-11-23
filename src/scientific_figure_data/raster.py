@@ -15,6 +15,7 @@ def detect_monotonic_color_branches(
     plot_box: tuple[float, float, float, float],
     color_match: dict | None = None,
     min_column_support: float = 0.65,
+    min_branch_presence_fraction: float = 0.15,
     max_branches: int = 4,
 ) -> dict:
     """Detect persistent vertically separated same-color X-monotonic branches.
@@ -106,26 +107,46 @@ def detect_monotonic_color_branches(
     }
     dominant_count = max(histogram, key=lambda count: (histogram[count], -count))
     support = histogram[dominant_count] / len(branch_counts)
-    centers = centers_by_count.get(dominant_count, [])
-    median_centers = []
-    if centers:
-        max_rank = min(dominant_count, max_branches)
-        for branch_index in range(max_rank):
-            values = [
-                column[branch_index]
-                for column in centers if len(column) > branch_index
-            ]
+    branch_presence = {
+        count: sum(observed >= count for observed in branch_counts)
+        for count in range(1, max_branches + 1)
+    }
+
+    # The modal band count can be one even when a second trace is visibly
+    # present over a substantial part of the X range. Prefer the highest
+    # branch count that recurs across enough columns; each emitted branch is
+    # still subject to its own gap and raster-QC checks.
+    persistent_counts = [
+        count for count in range(2, max_branches + 1)
+        if branch_presence[count] / len(branch_counts) >= min_branch_presence_fraction
+    ]
+    selected_count = max(persistent_counts) if persistent_counts else None
+    if selected_count is not None:
+        centers = [
+            column[:selected_count]
+            for count, grouped in centers_by_count.items()
+            if count >= selected_count
+            for column in grouped
+            if len(column) >= selected_count
+        ]
+        median_centers = []
+        for branch_index in range(selected_count):
+            values = [column[branch_index] for column in centers]
             if values:
                 median_centers.append(float(np.median(values)))
-    if dominant_count >= 2 and dominant_count <= max_branches and support >= min_column_support:
+        branch_support = branch_presence[selected_count] / len(branch_counts)
         return {
             "status": "MULTIPLE_MONOTONIC_COLOR_BRANCHES",
-            "branch_count": dominant_count,
+            "branch_count": selected_count,
             "branch_centers_y": median_centers,
             "supported_columns": len(branch_counts),
-            "dominant_count_columns": histogram[dominant_count],
-            "support_fraction": round(support, 4),
+            "branch_presence_columns": branch_presence[selected_count],
+            "support_fraction": round(branch_support, 4),
+            "branch_presence_fraction": round(branch_support, 4),
             "branch_count_histogram": histogram,
+            "branch_count_presence": branch_presence,
+            "modal_branch_count": dominant_count,
+            "modal_support_fraction": round(support, 4),
             "plot_box": [x0, y0, x1, y1],
             "provisional": True,
         }
@@ -136,6 +157,20 @@ def detect_monotonic_color_branches(
             "supported_columns": len(branch_counts),
             "support_fraction": round(support, 4),
             "branch_count_histogram": histogram,
+            "branch_count_presence": branch_presence,
+            "plot_box": [x0, y0, x1, y1],
+            "provisional": True,
+        }
+    if dominant_count >= 2 and support >= min_column_support:
+        return {
+            "status": "MULTIPLE_MONOTONIC_COLOR_BRANCHES",
+            "branch_count": min(dominant_count, max_branches),
+            "branch_centers_y": [],
+            "supported_columns": len(branch_counts),
+            "dominant_count_columns": histogram[dominant_count],
+            "support_fraction": round(support, 4),
+            "branch_count_histogram": histogram,
+            "branch_count_presence": branch_presence,
             "plot_box": [x0, y0, x1, y1],
             "provisional": True,
         }
@@ -145,6 +180,7 @@ def detect_monotonic_color_branches(
         "supported_columns": len(branch_counts),
         "support_fraction": round(support, 4),
         "branch_count_histogram": histogram,
+        "branch_count_presence": branch_presence,
         "plot_box": [x0, y0, x1, y1],
         "provisional": True,
     }
