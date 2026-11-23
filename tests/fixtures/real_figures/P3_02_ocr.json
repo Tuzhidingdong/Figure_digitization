@@ -1,9 +1,7 @@
 {
-  "schema_version": "cached_ocr_evidence_v1",
-  "source_case": "P3_02",
-  "source_sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e",
-  "source_run": "adma.202001469",
-  "provenance": "Existing OCR output from the archived local run; no new OCR or source-document access.",
+  "schema_version": "1.0",
+  "source": "archived P3_02 run2 output; replay-only OCR evidence",
+  "source_image_sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e",
   "row_count": 149,
   "rows": [
     {
