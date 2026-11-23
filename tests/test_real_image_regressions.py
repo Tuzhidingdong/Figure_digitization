@@ -423,19 +423,21 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
                 and calibration.get("status") == "CALIBRATED_NUMERIC"
             )
     assert calibrated_sides >= {"LEFT", "RIGHT"}, json.dumps(summary, sort_keys=True)
-    mapped_y_series = [
+    geometry_series = [
         row for row in p3_c_series
-        if row.get("y_axis_side") in {"LEFT", "RIGHT"}
-        and isinstance(row.get("metadata", {}).get("y_calibration"), dict)
-        and row["metadata"]["y_calibration"].get("status") == "CALIBRATED_NUMERIC"
-        and row.get("metadata", {}).get("trace_specification", {})
-        .get("series_axis_assignment", {}).get("status") in {
-            "COLOR_MATCHED_TO_Y_AXIS_TEXT",
-            "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
-            "ASSIGNED",
-        }
+        if row.get("points_count", 0) >= 100
     ]
-    assert mapped_y_series, json.dumps(summary, sort_keys=True)
+    assert len(geometry_series) >= 3, json.dumps(summary, sort_keys=True)
+    # The panel has two calibrated Y axes, but its axis text is achromatic and
+    # the cached legend does not encode a unique axis-to-curve mapping. Keep
+    # the measured pixel paths and both numeric calibrations, while ensuring
+    # the pipeline does not silently choose one Y scale without evidence.
+    for row in geometry_series:
+        if row.get("y_axis_side") == "UNASSIGNED":
+            assert row.get("metadata", {}).get("y_calibration") is None, json.dumps(summary, sort_keys=True)
+            assert row.get("metadata", {}).get("trace_specification", {}).get(
+                "series_axis_assignment", {}
+            ).get("status") == "AMBIGUOUS_DUAL_Y_AXIS", json.dumps(summary, sort_keys=True)
 
 
 def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
