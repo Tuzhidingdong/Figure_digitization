@@ -31,7 +31,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.5.0"
+ALGORITHM_VERSION = "0.6.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -811,7 +811,11 @@ def _extract_panel(
         family = explicit_family or str(classification.get("chart_family", "UNCLASSIFIED")).upper()
         record.metadata["chart_family_classification"] = classification
 
-        plot_box = definition.get("plot_box") or definition.get("_auto_plot_box_pixels")
+        plot_box = (
+            definition.get("plot_box")
+            or definition.get("_auto_plot_box_pixels")
+            or panel.get("plot_box")
+        )
         plot_detection = definition.get("_auto_plot_detection")
         if not plot_box and image_path:
             try:
