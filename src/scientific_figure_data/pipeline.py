@@ -2095,7 +2095,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                             f"OCR_FAILED:{figure_id}/{panel_id}:{type(exc).__name__}"
                         )
                         review_needed = True
-                else:
+                elif not saved_crop:
                     ocr_status = {
                         "status": "NOT_RUN",
                         "reason": "NO_SAVED_PANEL_IMAGE",
