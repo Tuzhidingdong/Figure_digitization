@@ -59,6 +59,53 @@ def test_p8_real_image_axis_ticks_keep_x_endpoints_out_of_y_axes() -> None:
         ("P3_02.png", 5),
     ],
 )
+def test_p8_real_figure_detects_two_red_branches_and_one_blue_band(
+    tmp_path: Path,
+) -> None:
+    """The published P8_06 panel d contains two red traces and one blue trace."""
+    from PIL import Image
+    from scientific_figure_data.plot_region import detect_chromatic_color_families
+    from scientific_figure_data.raster import detect_monotonic_color_branches
+
+    fixture_root = Path(__file__).parent / "fixtures" / "real_figures"
+    source_image = fixture_root / "P8_06.png"
+    crop_path = tmp_path / "P8_06_panel_d.png"
+    with Image.open(source_image) as source:
+        source.crop((955, 544, 1391, 895)).save(crop_path)
+
+    families = detect_chromatic_color_families(
+        crop_path, (53, 50, 383, 301)
+    )
+    assert families["status"] == "MULTIPLE_CHROMATIC_FAMILIES", families
+    red = min(
+        families["families"],
+        key=lambda item: abs(
+            (item["color_match"]["hue_center_degrees"] - 356.0 + 180.0)
+            % 360.0 - 180.0
+        ),
+    )
+    blue = min(
+        families["families"],
+        key=lambda item: abs(
+            (item["color_match"]["hue_center_degrees"] - 209.0 + 180.0)
+            % 360.0 - 180.0
+        ),
+    )
+    red_branches = detect_monotonic_color_branches(
+        str(crop_path), tuple(red["color_rgb"]), int(red["color_tolerance"]),
+        plot_box=(53, 50, 383, 301), color_match=red["color_match"],
+    )
+    blue_branches = detect_monotonic_color_branches(
+        str(crop_path), tuple(blue["color_rgb"]), int(blue["color_tolerance"]),
+        plot_box=(53, 50, 383, 301), color_match=blue["color_match"],
+    )
+    assert red_branches["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", red_branches
+    assert red_branches["branch_count"] == 2, red_branches
+    assert len(red_branches["branch_centers_y"]) == 2, red_branches
+    assert blue_branches["status"] == "SINGLE_MONOTONIC_COLOR_BAND", blue_branches
+    assert blue_branches["branch_count"] == 1, blue_branches
+
+
 def test_real_scientific_figures_are_not_collapsed_to_one_panel(
     filename: str, minimum_panels: int,
 ) -> None:
@@ -385,6 +432,12 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
                 "plot_box_pixels": row.get("metadata", {}).get("plot_box_pixels"),
                 "axis_assignment": row.get("metadata", {})
                     .get("series_axis_assignment"),
+                "auto_color_candidate": row.get("metadata", {})
+                    .get("trace_specification", {}).get("automatic_color_family_candidate"),
+                "branch_detection": row.get("metadata", {}).get("raster_qc", {})
+                    .get("branch_detection"),
+                "branch_index": row.get("metadata", {}).get("raster_qc", {})
+                    .get("branch_index"),
                 "x_label": row.get("x_label"),
                 "y_label": row.get("y_label"),
                 "chart_family": row.get("metadata", {})
@@ -416,4 +469,8 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
     assert {row.get("y_axis_side") for row in p8_dual_axis_series} >= {
         "LEFT", "RIGHT",
     }, json.dumps(summary, sort_keys=True)
-    assert any(row.get("points") for row in p8_dual_axis_series), json.dumps(summary, sort_keys=True)
+    assert len(p8_dual_axis_series) >= 3, json.dumps(summary, sort_keys=True)
+    assert sum(bool(row.get("points")) for row in p8_dual_axis_series) >= 3, json.dumps(summary, sort_keys=True)
+    assert {
+        row.get("y_axis_side") for row in p8_dual_axis_series if row.get("points")
+    } >= {"LEFT", "RIGHT"}, json.dumps(summary, sort_keys=True)
