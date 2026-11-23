@@ -170,7 +170,9 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     cached_ocr = json.loads(
         (FIXTURES / "P3_02_ocr.json").read_text(encoding="utf-8")
     )["rows"]
-    segmentation = detect_panel_regions(source_image)
+    segmentation = detect_panel_regions(
+        source_image, ocr_rows=cached_ocr
+    )
     panel_map = {
         panel["panel_id"]: panel
         for panel in segmentation.get("panels", [])
@@ -193,6 +195,8 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     )
 
     def cached_panel_ocr(panel_image_path: Path) -> list[dict]:
+        if Path(panel_image_path).name == "P3_02.png":
+            return [dict(row) for row in cached_ocr]
         stem = Path(panel_image_path).stem
         matched_panel = next(
             (
@@ -322,11 +326,13 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
             for row in series_rows
         ],
         "cached_ocr_rows": len(cached_ocr),
+        "ocr_layout_evidence": segmentation.get("ocr_layout_evidence"),
         "source_image_size": [width, height],
     }
     print("P3_REAL_PIPELINE_SUMMARY " + json.dumps(summary, sort_keys=True))
 
     assert len(panel_rows) >= 5, json.dumps(summary, sort_keys=True)
+    assert segmentation.get("ocr_layout_evidence", {}).get("status") == "APPLIED", json.dumps(summary, sort_keys=True)
     assert any(row.get("points_count", 0) > 0 for row in series_rows), json.dumps(summary, sort_keys=True)
 
 
