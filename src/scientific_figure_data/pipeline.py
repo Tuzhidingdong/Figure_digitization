@@ -19,7 +19,8 @@ from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
 from .pdf_backend import PdfiumBackend
-from .raster import map_explicit_polyline, trace_monotonic_color
+from .raster import (map_explicit_polyline, trace_monotonic_color,
+                     detect_monotonic_color_branches)
 from .profiles import profile_registry_fingerprint
 from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, detect_colored_y_axis_spines, estimate_ocr_text_ink_color)
 from .panel_segmentation import detect_panel_regions
@@ -670,15 +671,39 @@ def _extract_panel(
                     and len(candidates) >= 2
                 )
                 for color_index, candidate in enumerate(candidates, 1):
-                    definition = dict(base_definition)
-                    if multiple_families:
-                        definition["series_id"] = f"{base_id}_auto_color_{color_index:02d}"
-                    definition["color_rgb"] = list(candidate["color_rgb"])
-                    definition["_auto_color_candidate"] = dict(candidate)
-                    definition["_auto_color_detection"] = family_detection
-                    definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
-                    definition["_auto_plot_detection"] = pre_plot_detection
-                    expanded.append(definition)
+                    branch_detection = detect_monotonic_color_branches(
+                        str(image_path),
+                        tuple(int(value) for value in candidate["color_rgb"]),
+                        int(candidate.get("color_tolerance", 24)),
+                        plot_box=tuple(pre_plot_box_pixels),
+                        color_match=candidate.get("color_match"),
+                    )
+                    branch_count = (
+                        int(branch_detection.get("branch_count", 1))
+                        if branch_detection.get("status") == "MULTIPLE_MONOTONIC_COLOR_BRANCHES"
+                        else 1
+                    )
+                    for branch_index in range(branch_count):
+                        definition = dict(base_definition)
+                        color_id = (
+                            f"{base_id}_auto_color_{color_index:02d}"
+                            if multiple_families else base_id
+                        )
+                        if multiple_families or branch_count > 1:
+                            definition["series_id"] = (
+                                f"{color_id}_branch_{branch_index + 1:02d}"
+                                if branch_count > 1 else color_id
+                            )
+                        definition["color_rgb"] = list(candidate["color_rgb"])
+                        definition["_auto_color_candidate"] = dict(candidate)
+                        definition["_auto_color_detection"] = family_detection
+                        definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
+                        definition["_auto_plot_detection"] = pre_plot_detection
+                        definition["_auto_trace_branch_detection"] = branch_detection
+                        if branch_count > 1:
+                            definition["_auto_trace_branch_index"] = branch_index
+                            definition["_auto_trace_branch_count"] = branch_count
+                        expanded.append(definition)
                 if expanded:
                     definitions = expanded
 
@@ -1525,12 +1550,18 @@ def _extract_panel(
                                "calibration_errors": calibration_errors}
         elif image_path and trace_specification.get("status") == "READY":
             specification = trace_specification["specification"]
+            branch_index = definition.get("_auto_trace_branch_index")
+            branch_count = definition.get("_auto_trace_branch_count")
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in specification["color_rgb"]),
                 int(specification["color_tolerance"]),
                 x_cal, y_cal, plot_box=tuple(specification["plot_box_pixels"]),
                 color_match=specification.get("color_match"),
+                branch_index=int(branch_index) if branch_index is not None else None,
+                branch_count=int(branch_count) if branch_count is not None else None,
             )
+            if definition.get("_auto_trace_branch_detection"):
+                qc["branch_detection"] = definition["_auto_trace_branch_detection"]
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = (
                 "EXTRACTED_PROVISIONAL" if record.points and x_cal and y_cal
