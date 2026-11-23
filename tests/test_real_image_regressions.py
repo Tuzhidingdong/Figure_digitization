@@ -156,6 +156,145 @@ def test_real_scientific_figures_are_not_collapsed_to_one_panel(
         assert 0 <= y0 < y1 <= result["image_size"][1], panel
 
 
+def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Run P3_02 through the production pipeline using archived OCR rows."""
+    import shutil
+    from PIL import Image
+
+    from scientific_figure_data import ocr
+    from scientific_figure_data.pipeline import process_paper
+
+    source_image = FIXTURES / "P3_02.png"
+    cached_ocr = json.loads(
+        (FIXTURES / "P3_02_ocr.json").read_text(encoding="utf-8")
+    )["rows"]
+    segmentation = detect_panel_regions(source_image)
+    panel_map = {
+        panel["panel_id"]: panel
+        for panel in segmentation.get("panels", [])
+    }
+    assert len(panel_map) >= 5, segmentation
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-p3-real"
+    paper_dir.mkdir(parents=True)
+    shutil.copy2(source_image, paper_dir / "P3_02.png")
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({
+            "figures": [{
+                "figure_id": "P3_02",
+                "image_path": "P3_02.png",
+                "panels": [],
+            }]
+        }),
+        encoding="utf-8",
+    )
+
+    def cached_panel_ocr(panel_image_path: Path) -> list[dict]:
+        stem = Path(panel_image_path).stem
+        matched_panel = next(
+            (
+                panel for panel_id, panel in panel_map.items()
+                if stem.endswith("_" + panel_id)
+            ),
+            None,
+        )
+        if matched_panel is None:
+            return []
+        x0, y0, x1, y1 = matched_panel["bbox"]
+        local_rows = []
+        for row in cached_ocr:
+            polygon = row.get("polygon")
+            if not isinstance(polygon, list) or not polygon:
+                continue
+            try:
+                points = [
+                    (float(point[0]), float(point[1]))
+                    for point in polygon
+                ]
+            except (TypeError, ValueError, IndexError):
+                continue
+            center_x = sum(point[0] for point in points) / len(points)
+            center_y = sum(point[1] for point in points) / len(points)
+            if not (x0 <= center_x < x1 and y0 <= center_y < y1):
+                continue
+            local_row = dict(row)
+            local_row["polygon"] = [
+                [point[0] - x0, point[1] - y0]
+                for point in points
+            ]
+            local_rows.append(local_row)
+        return local_rows
+
+    monkeypatch.setattr(ocr, "run_ocr", cached_panel_ocr)
+    output_root = tmp_path / "output"
+    result = process_paper(
+        input_root,
+        Path("paper-p3-real"),
+        output_root,
+        options={
+            "ocr": True,
+            "memory_limit_mb": 1024,
+            "temp_disk_limit_mb": 512,
+        },
+    )
+    paper_output = output_root / "papers" / result["snapshot"]["paper_id"]
+    layout = json.loads(
+        (paper_output / "panel_layout.json").read_text(encoding="utf-8")
+    )
+    digitization = json.loads(
+        (paper_output / "digitization.json").read_text(encoding="utf-8")
+    )
+    panel_rows = layout.get("panels", [])
+    series_rows = digitization.get("series", [])
+    width, height = segmentation["image_size"]
+    summary = {
+        "pipeline_result": {
+            key: result.get(key)
+            for key in ("status", "figure_count", "panel_count", "series_count")
+        },
+        "detected_panels": [
+            {
+                "panel_id": panel_id,
+                "bbox": panel.get("bbox"),
+                "plot_frame": panel.get("plot_frame_bbox_pixels"),
+            }
+            for panel_id, panel in panel_map.items()
+        ],
+        "pipeline_panels": [
+            {
+                "panel_id": panel.get("panel_id"),
+                "bbox": panel.get("bbox"),
+                "plot_box": panel.get("plot_box"),
+                "ocr_status": panel.get("ocr_status"),
+            }
+            for panel in panel_rows
+        ],
+        "series": [
+            {
+                "panel_id": row.get("panel_id"),
+                "point_count": len(row.get("points", [])),
+                "status": row.get("extraction_status"),
+                "trace": row.get("metadata", {}).get("trace_specification"),
+                "plot_box": row.get("metadata", {}).get("plot_box_pixels"),
+                "x_calibration": row.get("metadata", {}).get("x_calibration"),
+                "y_calibration": row.get("metadata", {}).get("y_calibration"),
+                "y_axis_side": row.get("y_axis_side"),
+                "color": row.get("metadata", {}).get("color_detection"),
+            }
+            for row in series_rows
+        ],
+        "cached_ocr_rows": len(cached_ocr),
+        "source_image_size": [width, height],
+    }
+    print("P3_REAL_PIPELINE_SUMMARY " + json.dumps(summary, sort_keys=True))
+
+    assert len(panel_rows) >= 5, json.dumps(summary, sort_keys=True)
+    assert any(row.get("points") for row in series_rows), json.dumps(summary, sort_keys=True)
+
+
 def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
