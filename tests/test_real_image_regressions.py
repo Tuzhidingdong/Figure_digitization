@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from scientific_figure_data.panel_segmentation import detect_panel_regions
+from scientific_figure_data.plot_region import detect_plot_box_candidates
 
 
 # These are byte-identical copies of the two published CLI input figures.
@@ -80,6 +81,7 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
     rerunning an OCR engine.
     """
     import shutil
+    from PIL import Image
 
     from scientific_figure_data import ocr
     from scientific_figure_data.panel_segmentation import detect_panel_regions
@@ -97,6 +99,39 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
         for panel in segmentation.get("panels", [])
     }
     assert len(panel_map) >= 4, segmentation
+
+    # Focused diagnostic: P8_06 panel d contains vertically stacked plot
+    # content. Inspect its local frame candidates before changing production
+    # segmentation/trace thresholds.
+    p8_d_panel = next(
+        (
+            panel for panel in panel_map.values()
+            if panel.get("bbox")
+            and panel["bbox"][0] > segmentation["image_size"][0] * 0.55
+            and panel["bbox"][1] > segmentation["image_size"][1] * 0.50
+        ),
+        None,
+    )
+    nested_plot_diagnostic = {"status": "P8_D_PANEL_NOT_FOUND", "candidates": []}
+    if p8_d_panel is not None:
+        p8_d_crop = tmp_path / "p8_d_panel_crop.png"
+        with Image.open(source_image) as source:
+            source.crop(tuple(p8_d_panel["bbox"])).save(p8_d_crop)
+        nested_plot_diagnostic = {
+            "panel_bbox": p8_d_panel["bbox"],
+            "default": detect_plot_box_candidates(p8_d_crop),
+            "relaxed": detect_plot_box_candidates(
+                p8_d_crop,
+                max_candidates=24,
+                minimum_line_fraction=0.06,
+                minimum_adjacent_coverage=0.34,
+                max_axis_lines=48,
+            ),
+        }
+    print(
+        "REAL_IMAGE_NESTED_PLOT_DIAGNOSTIC "
+        + json.dumps(nested_plot_diagnostic, sort_keys=True)
+    )
 
     input_root = tmp_path / "input"
     paper_dir = input_root / "paper-p8-real"
@@ -201,8 +236,20 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
                 "y_axis_side": row.get("y_axis_side"),
                 "point_count": len(row.get("points", [])),
                 "extraction_status": row.get("extraction_status"),
+                "trace_status": row.get("metadata", {})
+                    .get("trace_specification", {}).get("status"),
                 "trace_reason": row.get("metadata", {})
                     .get("trace_specification", {}).get("reason"),
+                "trace_specification": row.get("metadata", {})
+                    .get("trace_specification"),
+                "raster_qc": row.get("metadata", {}).get("raster_qc"),
+                "axis_text_evidence": row.get("metadata", {})
+                    .get("axis_text_evidence"),
+                "calibration_errors": row.get("metadata", {})
+                    .get("calibration_errors"),
+                "x_calibration": row.get("metadata", {}).get("x_calibration"),
+                "y_calibration": row.get("metadata", {}).get("y_calibration"),
+                "plot_box_pixels": row.get("metadata", {}).get("plot_box_pixels"),
                 "axis_assignment": row.get("metadata", {})
                     .get("series_axis_assignment"),
                 "x_label": row.get("x_label"),
