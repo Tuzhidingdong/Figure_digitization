@@ -275,7 +275,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         "series": [
             {
                 "panel_id": row.get("panel_id"),
-                "point_count": row.get("metadata", {}).get("points_count", len(row.get("points", []))),
+                "point_count": row.get("points_count", len(row.get("points", []))),
                 "status": row.get("extraction_status"),
                 "trace": row.get("metadata", {}).get("trace_specification"),
                 "plot_box": row.get("metadata", {}).get("plot_box_pixels"),
@@ -292,7 +292,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     print("P3_REAL_PIPELINE_SUMMARY " + json.dumps(summary, sort_keys=True))
 
     assert len(panel_rows) >= 5, json.dumps(summary, sort_keys=True)
-    assert any(row.get("metadata", {}).get("points_count", 0) > 0 for row in series_rows), json.dumps(summary, sort_keys=True)
+    assert any(row.get("points_count", 0) > 0 for row in series_rows), json.dumps(summary, sort_keys=True)
 
 
 def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
@@ -553,7 +553,7 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
             {
                 "panel_id": row.get("panel_id"),
                 "y_axis_side": row.get("y_axis_side"),
-                "point_count": row.get("metadata", {}).get("points_count", len(row.get("points", []))),
+                "point_count": row.get("points_count", len(row.get("points", []))),
                 "extraction_status": row.get("extraction_status"),
                 "trace_status": row.get("metadata", {})
                     .get("trace_specification", {}).get("status"),
