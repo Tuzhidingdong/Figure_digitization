@@ -156,6 +156,68 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
         p8_d_crop = tmp_path / "p8_d_panel_crop.png"
         with Image.open(source_image) as source:
             source.crop(tuple(p8_d_panel["bbox"])).save(p8_d_crop)
+
+        # Inspect whether the red hue family contains multiple distinguishable
+        # shades and whether blue marker columns are genuinely thick or merely
+        # a connected sequence of small scatter markers.
+        import numpy as np
+        from scientific_figure_data.plot_region import _rgb_to_hsv_arrays
+        with Image.open(p8_d_crop) as crop_image:
+            crop_rgb = np.asarray(crop_image.convert("RGB"), dtype=np.uint8)
+        plot_rgb = crop_rgb[50:301, 53:383]
+        flat_rgb = plot_rgb.reshape(-1, 3)
+        plot_hue, plot_sat, plot_val = _rgb_to_hsv_arrays(flat_rgb)
+        color_probe = {}
+        for family_name, hue_center in (("red", 356.085), ("blue", 209.087)):
+            distance = np.abs((plot_hue - hue_center + 180.0) % 360.0 - 180.0)
+            family_mask = (
+                (distance <= 12.0) & (plot_sat >= 0.14) & (plot_val >= 0.20)
+            ).reshape(plot_rgb.shape[:2])
+            selected = plot_rgb[family_mask]
+            bins = {}
+            for color in selected:
+                key = tuple(int(value // 16) for value in color)
+                bins[key] = bins.get(key, 0) + 1
+            top_bins = sorted(
+                bins.items(), key=lambda item: (-item[1], item[0])
+            )[:12]
+            columns = {}
+            for x in (54, 80, 120, 160, 200, 240, 280, 320, 350, 378):
+                ys = np.flatnonzero(family_mask[:, x - 53])
+                segments = []
+                for y_value in ys:
+                    y_int = int(y_value) + 50
+                    if not segments or y_int - segments[-1][-1] > 2:
+                        segments.append([y_int])
+                    else:
+                        segments[-1].append(y_int)
+                columns[str(x)] = {
+                    "count": int(len(ys)),
+                    "span": int(ys.max() - ys.min()) if len(ys) else 0,
+                    "segments": [
+                        [segment[0], segment[-1]] for segment in segments
+                    ],
+                }
+            color_probe[family_name] = {
+                "pixel_count": int(selected.shape[0]),
+                "rgb_bins_16": [
+                    {"bin": list(key), "count": count}
+                    for key, count in top_bins
+                ],
+                "saturation_quantiles": (
+                    np.quantile(plot_sat[family_mask.reshape(-1)], [0.1, 0.5, 0.9]).round(3).tolist()
+                    if len(selected) else []
+                ),
+                "value_quantiles": (
+                    np.quantile(plot_val[family_mask.reshape(-1)], [0.1, 0.5, 0.9]).round(3).tolist()
+                    if len(selected) else []
+                ),
+                "columns": columns,
+            }
+        print(
+            "REAL_IMAGE_P8_D_COLOR_PROBE "
+            + json.dumps(color_probe, sort_keys=True)
+        )
         nested_plot_diagnostic = {
             "panel_bbox": p8_d_panel["bbox"],
             "default": detect_plot_box_candidates(p8_d_crop),
