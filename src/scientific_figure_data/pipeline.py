@@ -1557,10 +1557,10 @@ def _extract_panel(
             branch_index = definition.get("_auto_trace_branch_index")
             branch_count = definition.get("_auto_trace_branch_count")
             # Preserve observed sparse marker/line columns without
-            # synthesizing interpolated points. The accepted gap is bounded
-            # by half the median OCR X-tick spacing (capped at 24 px), while
-            # charts with no usable numeric tick geometry retain the strict
-            # default limit.
+            # synthesizing interpolated points. A marker series may have one
+            # sample per major X-tick interval, so permit gaps up to 90% of
+            # the median OCR tick spacing (capped at 48 px). Charts without
+            # usable numeric tick geometry retain the strict default limit.
             trace_max_gap_columns = 3
             if x_cal is not None and len(x_cal.anchors) >= 2:
                 x_tick_pixels = sorted({
@@ -1576,7 +1576,7 @@ def _extract_panel(
                 if x_tick_gaps:
                     median_tick_gap = x_tick_gaps[len(x_tick_gaps) // 2]
                     trace_max_gap_columns = max(
-                        3, min(24, int(round(median_tick_gap * 0.5)))
+                        3, min(48, int(round(median_tick_gap * 0.9)))
                     )
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in specification["color_rgb"]),
@@ -1589,7 +1589,7 @@ def _extract_panel(
             )
             qc["max_gap_limit_columns"] = trace_max_gap_columns
             qc["max_gap_policy"] = (
-                "HALF_MEDIAN_X_TICK_INTERVAL_CAPPED_24PX"
+                "NINETY_PERCENT_MEDIAN_X_TICK_INTERVAL_CAPPED_48PX"
                 if trace_max_gap_columns > 3 else "STRICT_3PX_DEFAULT"
             )
             if definition.get("_auto_trace_branch_detection"):
