@@ -429,7 +429,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         row for row in p3_c_series
         if row.get("points_count", 0) >= 100
     ]
-    assert len(geometry_series) >= 3, json.dumps(summary, sort_keys=True)
+    assert len(geometry_series) >= 5, json.dumps(summary, sort_keys=True)
     # The panel has two calibrated Y axes, but its axis text is achromatic and
     # the cached legend does not encode a unique axis-to-curve mapping. Keep
     # the measured pixel paths and both numeric calibrations, while ensuring
