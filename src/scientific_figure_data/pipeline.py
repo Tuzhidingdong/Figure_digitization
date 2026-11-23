@@ -1326,52 +1326,52 @@ def _extract_panel(
                                     ),
                                 }
                                 calibration_errors.pop("y", None)
-                association_status = y_axis_text_color_association.get("status")
-                if association_status == "MATCHED":
-                    selected_side = y_axis_text_color_association["selected_side"]
-                    selected_match = next(
-                        item for item in side_matches if item[0] == selected_side
-                    )
-                    distance, selected_ink, distance_kind = selected_match[1:]
-                    series_axis_assignment = {
-                        "status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
-                        "selected_side": selected_side,
-                        "available_sides": list(y_axis_calibrations),
-                        "reason": None,
-                        "evidence": {
-                            "curve_color_rgb": [int(value) for value in trace_color_rgb],
-                            "axis_color_evidence_rgb": selected_ink["color_rgb"],
-                            "axis_color_evidence_source": selected_ink["source"],
-                            # Preserve prior text-specific keys without
-                            # mislabelling an axis spine as text.
-                            "axis_text_color_rgb": (
-                                selected_ink["color_rgb"]
-                                if selected_ink["source"] != "AXIS_SPINE" else None
-                            ),
-                            "axis_text_evidence_source": (
-                                selected_ink["source"]
-                                if selected_ink["source"] != "AXIS_SPINE" else None
-                            ),
-                            "distance_kind": distance_kind,
-                            "color_distance": round(distance, 3),
-                        },
-                    }
-                elif association_status == "ASSIGNED_BY_DUAL_AXIS_EXCLUSION":
-                    series_axis_assignment = {
-                        "status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
-                        "selected_side": y_axis_text_color_association["selected_side"],
-                        "available_sides": list(y_axis_calibrations),
-                        "reason": None,
-                        "evidence": y_axis_text_color_association,
-                    }
-                else:
-                    series_axis_assignment = {
-                        "status": "AMBIGUOUS_DUAL_Y_AXIS",
-                        "selected_side": None,
-                        "available_sides": list(y_axis_calibrations),
-                        "reason": "SERIES_TO_Y_AXIS_MAPPING_REQUIRED",
-                        "evidence": y_axis_text_color_association,
-                    }
+            association_status = y_axis_text_color_association.get("status")
+            if association_status == "MATCHED":
+                selected_side = y_axis_text_color_association["selected_side"]
+                selected_match = next(
+                    item for item in side_matches if item[0] == selected_side
+                )
+                distance, selected_ink, distance_kind = selected_match[1:]
+                series_axis_assignment = {
+                    "status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
+                    "selected_side": selected_side,
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": None,
+                    "evidence": {
+                        "curve_color_rgb": [int(value) for value in trace_color_rgb],
+                        "axis_color_evidence_rgb": selected_ink["color_rgb"],
+                        "axis_color_evidence_source": selected_ink["source"],
+                        # Preserve prior text-specific keys without
+                        # mislabelling an axis spine as text.
+                        "axis_text_color_rgb": (
+                            selected_ink["color_rgb"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
+                        "axis_text_evidence_source": (
+                            selected_ink["source"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
+                        "distance_kind": distance_kind,
+                        "color_distance": round(distance, 3),
+                    },
+                }
+            elif association_status == "ASSIGNED_BY_DUAL_AXIS_EXCLUSION":
+                series_axis_assignment = {
+                    "status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+                    "selected_side": y_axis_text_color_association["selected_side"],
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": None,
+                    "evidence": y_axis_text_color_association,
+                }
+            else:
+                series_axis_assignment = {
+                    "status": "AMBIGUOUS_DUAL_Y_AXIS",
+                    "selected_side": None,
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": "SERIES_TO_Y_AXIS_MAPPING_REQUIRED",
+                    "evidence": y_axis_text_color_association,
+                }
 
         plot_box_source = (
             "AUTO_PLOT_FRAME" if plot_detection and plot_detection.get("status") == "PROVISIONAL_PLOT_BOX"
