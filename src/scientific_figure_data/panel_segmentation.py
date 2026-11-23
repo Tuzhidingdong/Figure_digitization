@@ -218,6 +218,28 @@ def detect_panel_regions(
             "segmentation_confidence_status": "UN_CALIBRATED",
         })
 
+    # Expand whitespace leaves through the inter-row gutter to retain
+    # X-axis tick labels and titles that sit just below the plot frame. Keep
+    # adjacent panels non-overlapping by stopping at the next row's start.
+    for panel in panels:
+        box = panel.get("bbox")
+        if not isinstance(box, list) or len(box) != 4:
+            continue
+        x0, y0, x1, y1 = [int(value) for value in box]
+        following_rows = []
+        for other in panels:
+            if other is panel:
+                continue
+            ox0, oy0, ox1, oy1 = [int(value) for value in other["bbox"]]
+            if oy0 < y1:
+                continue
+            overlap_x = max(0, min(x1, ox1) - max(x0, ox0))
+            denominator = max(1, min(x1 - x0, ox1 - ox0))
+            if overlap_x / denominator >= 0.50:
+                following_rows.append(oy0)
+        if following_rows:
+            panel["bbox"] = [x0, y0, x1, min(height, min(following_rows))]
+
     # Run plot-frame fallback whenever whitespace splitting did not produce
     # at least two geometrically usable panels. The pre-filter leaf count is
     # not sufficient: recursive splits can yield several text-sized fragments
