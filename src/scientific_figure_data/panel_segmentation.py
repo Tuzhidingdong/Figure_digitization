@@ -273,7 +273,10 @@ def detect_panel_regions(
         or (panel["bbox"][3] - panel["bbox"][1]) >= height * 0.72
         for panel in panels
     )
-    if len(panels) >= 2 and not contains_composite_region:
+    if (
+        len(panels) >= 4
+        or (len(panels) >= 2 and not contains_composite_region)
+    ):
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
             "reason": "BROAD_WHITESPACE_GUTTERS_AFTER_OCR_MASK" if ocr_masked_pixels else "BROAD_WHITESPACE_GUTTERS",
