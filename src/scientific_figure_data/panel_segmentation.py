@@ -240,6 +240,83 @@ def detect_panel_regions(
         if following_rows:
             panel["bbox"] = [x0, y0, x1, min(height, min(following_rows))]
 
+    # Whitespace boundaries can cut off numeric Y tick labels that sit in
+    # the gutter immediately beside a plot. Reattach each nearby numeric OCR
+    # box to its nearest panel edge before panel crops are created. This keeps
+    # axis evidence with the panel without widening every crop blindly.
+    if isinstance(ocr_rows, list) and ocr_rows:
+        numeric_tick_boxes = []
+        for row in ocr_rows:
+            if not isinstance(row, dict):
+                continue
+            text_value = str(row.get("text") or "").strip()
+            numeric_value = (
+                text_value.replace("−", "-").replace("—", "-")
+                .replace(",", "").replace(" ", "")
+            )
+            try:
+                float(numeric_value)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            polygon = row.get("polygon")
+            if not isinstance(polygon, list) or len(polygon) < 4:
+                continue
+            try:
+                points = [
+                    (float(point[0]), float(point[1]))
+                    for point in polygon
+                    if isinstance(point, (list, tuple)) and len(point) >= 2
+                ]
+            except (TypeError, ValueError, OverflowError, IndexError):
+                continue
+            if len(points) < 4:
+                continue
+            rx0 = max(0, int(np.floor(min(point[0] for point in points))))
+            ry0 = max(0, int(np.floor(min(point[1] for point in points))))
+            rx1 = min(width, int(np.ceil(max(point[0] for point in points))))
+            ry1 = min(height, int(np.ceil(max(point[1] for point in points))))
+            if rx1 > rx0 and ry1 > ry0:
+                numeric_tick_boxes.append((
+                    rx0, ry0, rx1, ry1,
+                    (rx0 + rx1) / 2.0, (ry0 + ry1) / 2.0,
+                ))
+
+        horizontal_margin = max(8, int(round(width * 0.045)))
+        vertical_margin = max(4, int(round(height * 0.025)))
+        assigned_tick_boxes: dict[int, list[tuple[int, int, int, int]]] = {
+            index: [] for index in range(len(panels))
+        }
+        for tick_box in numeric_tick_boxes:
+            rx0, ry0, rx1, ry1, center_x, center_y = tick_box
+            candidates = []
+            for index, panel in enumerate(panels):
+                px0, py0, px1, py1 = [int(value) for value in panel["bbox"]]
+                if center_y < py0 - vertical_margin or center_y > py1 + vertical_margin:
+                    continue
+                if center_x < px0:
+                    distance = px0 - center_x
+                elif center_x > px1:
+                    distance = center_x - px1
+                else:
+                    continue
+                if distance <= horizontal_margin:
+                    candidates.append((distance, index))
+            if candidates:
+                _, selected_index = min(candidates, key=lambda item: (item[0], item[1]))
+                assigned_tick_boxes[selected_index].append((rx0, ry0, rx1, ry1))
+
+        for index, boxes in assigned_tick_boxes.items():
+            if not boxes:
+                continue
+            panel = panels[index]
+            px0, py0, px1, py1 = [int(value) for value in panel["bbox"]]
+            expanded_x0 = min(px0, *(box[0] for box in boxes))
+            expanded_x1 = max(px1, *(box[2] for box in boxes))
+            panel["bbox"] = [
+                max(0, expanded_x0), py0, min(width, expanded_x1), py1
+            ]
+            panel["ocr_tick_labels_included"] = len(boxes)
+
     # Run plot-frame fallback whenever whitespace splitting did not produce
     # at least two geometrically usable panels. The pre-filter leaf count is
     # not sufficient: recursive splits can yield several text-sized fragments
