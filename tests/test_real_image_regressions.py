@@ -222,7 +222,11 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
             "plot_detection": panel_c_plot,
             "family_detection": {
                 key: panel_c_families.get(key)
-                for key in ("status", "family_count", "truncated", "saturated_pixel_count")
+                for key in (
+                    "status", "family_count", "truncated", "saturated_pixel_count",
+                    "residual_pixel_count", "residual_pixel_fraction",
+                    "family_limit_reached",
+                )
             },
             "families": [
                 {
@@ -235,6 +239,9 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
             ],
         }
     print("P3_PANEL_C_COLOR_DIAGNOSTIC " + json.dumps(panel_c_diagnostic, sort_keys=True))
+    assert panel_c_diagnostic.get("family_detection", {}).get("status") == "MULTIPLE_CHROMATIC_FAMILIES", panel_c_diagnostic
+    assert panel_c_diagnostic.get("family_detection", {}).get("family_count", 0) >= 2, panel_c_diagnostic
+    assert panel_c_diagnostic.get("family_detection", {}).get("truncated") is False, panel_c_diagnostic
 
     input_root = tmp_path / "input"
     paper_dir = input_root / "paper-p3-real"
