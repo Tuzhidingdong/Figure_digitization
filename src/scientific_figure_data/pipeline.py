@@ -1876,6 +1876,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         "error": f"{type(exc).__name__}: {exc}",
                     }
         panel_sources = _figure_panels(source_figure)
+        figure_layout_ocr_evidence: list[dict] = []
         if (
             len(panel_sources) == 1
             and panel_sources[0].get("segmentation_provenance") == "SINGLE_PANEL_FALLBACK"
@@ -1884,9 +1885,24 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             figure_image = _safe_local_file(paper_dir, str(source_figure.get("image_path")))
             if figure_image is not None:
                 try:
+                    # OCR boxes are useful layout evidence: axis titles, ticks and
+                    # subfigure labels can otherwise bridge otherwise empty
+                    # inter-panel whitespace in geometric projections. Reuse
+                    # this one full-figure OCR pass for each resulting crop.
+                    if options.get("ocr"):
+                        try:
+                            from .ocr import run_ocr
+                            figure_layout_ocr_evidence = run_ocr(figure_image)
+                        except Exception as ocr_exc:
+                            snapshot.warnings.append(
+                                f"OCR_LAYOUT_PROBE_FAILED:{figure_id}:{type(ocr_exc).__name__}"
+                            )
                     # Always inspect the complete figure for multiple panel frames
                     # before accepting any one large rectangle as the only plot.
-                    segmentation = detect_panel_regions(figure_image)
+                    segmentation = detect_panel_regions(
+                        figure_image,
+                        ocr_rows=figure_layout_ocr_evidence or None,
+                    )
                     figure["panel_segmentation"] = segmentation
                     if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
                         panel_sources = segmentation["panels"]
@@ -2019,13 +2035,54 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             ocr_evidence = []
             ocr_status = {"status": "NOT_REQUESTED"}
             if options.get("ocr"):
-                if saved_crop:
+                if (
+                    saved_crop
+                    and figure_layout_ocr_evidence
+                    and auto_panel_bbox
+                    and isinstance(bbox, (list, tuple))
+                    and len(bbox) == 4
+                ):
+                    # Localize full-figure OCR polygons into the saved panel crop.
+                    # The crop is an unscaled pixel slice of the source image.
+                    x0, y0, x1, y1 = [float(value) for value in bbox]
+                    for row in figure_layout_ocr_evidence:
+                        if not isinstance(row, dict):
+                            continue
+                        polygon = row.get("polygon")
+                        if not isinstance(polygon, list) or len(polygon) < 4:
+                            continue
+                        try:
+                            points = [
+                                [float(point[0]), float(point[1])]
+                                for point in polygon
+                                if isinstance(point, (list, tuple)) and len(point) >= 2
+                            ]
+                            if len(points) < 4:
+                                continue
+                            center_x = sum(point[0] for point in points) / len(points)
+                            center_y = sum(point[1] for point in points) / len(points)
+                        except (TypeError, ValueError, OverflowError, IndexError):
+                            continue
+                        if x0 <= center_x < x1 and y0 <= center_y < y1:
+                            localized = dict(row)
+                            localized["polygon"] = [
+                                [point[0] - x0, point[1] - y0]
+                                for point in points
+                            ]
+                            ocr_evidence.append(localized)
+                    ocr_status = {
+                        "status": "FIGURE_OCR_REUSED" if ocr_evidence else "FIGURE_OCR_EMPTY_FOR_PANEL",
+                        "record_count": len(ocr_evidence),
+                        "source": "FULL_FIGURE_OCR",
+                    }
+                if saved_crop and not ocr_evidence:
                     try:
                         from .ocr import run_ocr
                         ocr_evidence = run_ocr(saved_crop)
                         ocr_status = {
                             "status": "SUCCEEDED" if ocr_evidence else "SUCCEEDED_EMPTY",
                             "record_count": len(ocr_evidence),
+                            "source": "PANEL_CROP_OCR",
                         }
                     except Exception as exc:
                         error_message = str(exc).strip() or "No error message supplied."
