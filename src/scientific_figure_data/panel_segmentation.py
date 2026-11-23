@@ -273,9 +273,21 @@ def detect_panel_regions(
         or (panel["bbox"][3] - panel["bbox"][1]) >= height * 0.72
         for panel in panels
     )
+    # A wide, short whitespace leaf often represents one plot nested
+    # inside a vertically stacked parent panel. Sending it directly to the
+    # generic plot-frame scan avoids returning a fragmented parent layout.
+    has_wide_short_region = any(
+        (panel["bbox"][2] - panel["bbox"][0]) >= width * 0.45
+        and (panel["bbox"][3] - panel["bbox"][1]) <= height * 0.22
+        for panel in panels
+    )
     if (
-        len(panels) >= 4
-        or (len(panels) >= 2 and not contains_composite_region)
+        (len(panels) >= 4 and not has_wide_short_region)
+        or (
+            len(panels) >= 2
+            and not contains_composite_region
+            and not has_wide_short_region
+        )
     ):
         return {
             "status": "PROVISIONAL_PANELS_DETECTED",
