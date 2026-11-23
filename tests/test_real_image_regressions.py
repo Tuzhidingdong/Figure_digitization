@@ -219,6 +219,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         )
         panel_c_diagnostic = {
             "panel_bbox": panel_c["bbox"],
+            "ocr_tick_labels_included": panel_c.get("ocr_tick_labels_included", 0),
             "plot_detection": panel_c_plot,
             "family_detection": {
                 key: panel_c_families.get(key)
@@ -242,6 +243,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     assert panel_c_diagnostic.get("family_detection", {}).get("status") == "MULTIPLE_CHROMATIC_FAMILIES", panel_c_diagnostic
     assert panel_c_diagnostic.get("family_detection", {}).get("family_count", 0) >= 2, panel_c_diagnostic
     assert panel_c_diagnostic.get("family_detection", {}).get("truncated") is False, panel_c_diagnostic
+    assert panel_c_diagnostic.get("ocr_tick_labels_included", 0) >= 4, panel_c_diagnostic
 
     input_root = tmp_path / "input"
     paper_dir = input_root / "paper-p3-real"
@@ -384,6 +386,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
                 "plot_box": row.get("metadata", {}).get("plot_box_pixels"),
                 "x_calibration": row.get("metadata", {}).get("x_calibration"),
                 "y_calibration": row.get("metadata", {}).get("y_calibration"),
+                "y_axis_calibrations": row.get("metadata", {}).get("y_axis_calibrations"),
                 "y_axis_side": row.get("y_axis_side"),
                 "raster_qc": row.get("metadata", {}).get("raster_qc"),
                 "trace_axis_assignment": row.get("metadata", {}).get("trace_specification", {}).get("series_axis_assignment"),
@@ -399,7 +402,27 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
 
     assert len(panel_rows) >= 5, json.dumps(summary, sort_keys=True)
     assert segmentation.get("ocr_layout_evidence", {}).get("status") == "APPLIED", json.dumps(summary, sort_keys=True)
-    assert any(row.get("points_count", 0) > 0 for row in series_rows), json.dumps(summary, sort_keys=True)
+    p3_c_series = [
+        row for row in series_rows
+        if row.get("panel_id") == next(
+            (
+                panel_id for panel_id, panel in panel_map.items()
+                if panel is panel_c
+            ),
+            None,
+        )
+    ]
+    assert any(row.get("points_count", 0) > 0 for row in p3_c_series), json.dumps(summary, sort_keys=True)
+    calibrated_sides = set()
+    for row in p3_c_series:
+        calibrations = row.get("metadata", {}).get("y_axis_calibrations", {})
+        if isinstance(calibrations, dict):
+            calibrated_sides.update(
+                side for side, calibration in calibrations.items()
+                if isinstance(calibration, dict)
+                and calibration.get("status") == "CALIBRATED_NUMERIC"
+            )
+    assert calibrated_sides >= {"LEFT", "RIGHT"}, json.dumps(summary, sort_keys=True)
 
 
 def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
