@@ -177,9 +177,16 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     from scientific_figure_data.pipeline import process_paper
 
     source_image = FIXTURES / "P3_02.png"
-    cached_ocr = json.loads(
+    import hashlib
+
+    ocr_payload = json.loads(
         (FIXTURES / "P3_02_ocr.json").read_text(encoding="utf-8")
-    )["rows"]
+    )
+    cached_ocr = ocr_payload["rows"]
+    source_image_sha256 = hashlib.sha256(source_image.read_bytes()).hexdigest()
+    assert ocr_payload.get("source_image_sha256") == source_image_sha256, (
+        "The archived OCR evidence must belong to the exact committed image bytes."
+    )
     segmentation = detect_panel_regions(
         source_image, ocr_rows=cached_ocr
     )
@@ -246,20 +253,113 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     assert panel_c_diagnostic.get("family_detection", {}).get("truncated") is False, panel_c_diagnostic
     assert panel_c_diagnostic.get("ocr_tick_labels_included", 0) >= 4, panel_c_diagnostic
 
-    input_root = tmp_path / "input"
-    paper_dir = input_root / "paper-p3-real"
-    paper_dir.mkdir(parents=True)
-    shutil.copy2(source_image, paper_dir / "P3_02.png")
-    (paper_dir / "figure_inventory.json").write_text(
-        json.dumps({
-            "figures": [{
-                "figure_id": "P3_02",
-                "image_path": "P3_02.png",
-                "panels": [],
-            }]
-        }),
+    # Exercise the actual Chem-Literature 1.1 package contract, not the
+    # simplified standalone figure_inventory.json test layout.
+    input_root = tmp_path / "runs" / "preprocessed"
+    paper_dir = input_root / "paper-p3-real" / "01_preprocessing"
+    image_relative = "extracted_figures/MAIN/P3_02.png"
+    image_path = paper_dir / image_relative
+    image_path.parent.mkdir(parents=True)
+    shutil.copy2(source_image, image_path)
+
+    # The adapter validates a referenced MAIN PDF by magic bytes and SHA256.
+    # Keep this minimal fixture outside the upstream package; no source paper is
+    # reopened or downloaded by this deterministic regression.
+    source_pdf = tmp_path / "papers_pdf" / "paper-p3-real.pdf"
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf_bytes = b"%PDF-1.7\\narchived test fixture only\\n"
+    source_pdf.write_bytes(source_pdf_bytes)
+    source_pdf_sha256 = hashlib.sha256(source_pdf_bytes).hexdigest()
+    image_sha256 = hashlib.sha256(image_path.read_bytes()).hexdigest()
+    with Image.open(image_path) as source:
+        image_width, image_height = source.size
+
+    (paper_dir / "main_analysis.md").write_text(
+        "# Main Analysis\\nP3_02 real-image regression fixture.\\n",
         encoding="utf-8",
     )
+    evidence_index = {
+        "package_version": "1.1.0",
+        "paper_id": "paper-p3-real",
+        "metadata": {
+            "doi": "10.0000/p3-real-regression",
+            "title": "P3_02 real-image regression fixture",
+            "has_si": False,
+        },
+        "inventory": {
+            "main_pdf": {
+                "path": str(source_pdf.resolve()),
+                "sha256": source_pdf_sha256,
+                "size_bytes": len(source_pdf_bytes),
+                "page_count": 1,
+            },
+            "si_pdf": None,
+            "supplementary_files": [],
+        },
+        "pages": [],
+        "tables": [],
+        "figures": [{
+            "figure_id": "MAIN_FIG_P3_02",
+            "doc_type": "MAIN",
+            "page_number": 1,
+            "bbox": [0.0, 0.0, 500.0, 350.0],
+            "caption": "P3_02 archived figure used for regression testing",
+        }],
+        "si_references": [],
+        "media_assets": [{
+            "asset_id": "ASSET_P3_02",
+            "doc_type": "MAIN",
+            "asset_type": "figure",
+            "source_file": source_pdf.name,
+            "source_sha256": source_pdf_sha256,
+            "relative_path": image_relative,
+            "sha256": image_sha256,
+            "extraction_method": "archived_real_image_fixture",
+            "page_number": 1,
+            "bbox": [0.0, 0.0, 500.0, 350.0],
+            "figure_id": "MAIN_FIG_P3_02",
+            "table_id": None,
+            "caption": "P3_02 archived figure used for regression testing",
+            "width": image_width,
+            "height": image_height,
+            "mime_type": "image/png",
+            "is_tiny_icon": False,
+        }],
+        "processing_summary": {
+            "total_main_pages": 1,
+            "total_si_pages": 0,
+            "total_tables_detected": 0,
+            "total_figures_detected": 1,
+            "total_si_references": 0,
+            "scanned_pages_detected": 0,
+            "images_extracted": 1,
+            "grobid_status": "DISABLED",
+            "warnings": [],
+            "status": "COMPLETE",
+        },
+    }
+    (paper_dir / "evidence_index.json").write_text(
+        json.dumps(evidence_index, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    from scientific_figure_data.adapter import snapshot_paper
+    snapshot = snapshot_paper(paper_dir, input_root)
+    assert snapshot.detected_upstream_version == "1.1.0"
+    assert "main_pdf" not in snapshot.missing_roles
+    assert "figure_inventory" not in snapshot.missing_roles
+    assert snapshot.external_sources[0]["status"] == "HASH_VERIFIED"
+
+    def source_tree_hashes() -> dict[str, str]:
+        return {
+            path.relative_to(input_root).as_posix(): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for path in input_root.rglob("*")
+            if path.is_file()
+        }
+
+    source_tree_before = source_tree_hashes()
+    external_pdf_before = hashlib.sha256(source_pdf.read_bytes()).hexdigest()
 
     def cached_panel_ocr(panel_image_path: Path) -> list[dict]:
         if Path(panel_image_path).name == "P3_02.png":
@@ -303,13 +403,27 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     output_root = tmp_path / "output"
     result = process_paper(
         input_root,
-        Path("paper-p3-real"),
+        Path("paper-p3-real/01_preprocessing"),
         output_root,
         options={
             "ocr": True,
             "memory_limit_mb": 1024,
             "temp_disk_limit_mb": 512,
         },
+        input_snapshot=snapshot,
+    )
+    source_tree_after = source_tree_hashes()
+    external_pdf_after = hashlib.sha256(source_pdf.read_bytes()).hexdigest()
+    assert source_tree_after == source_tree_before, (
+        "The upstream Chem-Literature package must remain byte-identical."
+    )
+    assert external_pdf_after == external_pdf_before == source_pdf_sha256, (
+        "The externally referenced MAIN PDF must remain byte-identical."
+    )
+    assert result["snapshot"]["detected_upstream_version"] == "1.1.0"
+    assert result["snapshot"]["external_sources"][0]["status"] == "HASH_VERIFIED"
+    assert str(source_pdf.resolve()) not in json.dumps(result["snapshot"]), (
+        "Absolute external PDF paths must not leak into the serialized snapshot."
     )
     paper_output = output_root / "papers" / result["snapshot"]["paper_id"]
     layout = json.loads(
@@ -321,6 +435,9 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     panel_rows = layout.get("panels", [])
     series_rows = digitization.get("series", [])
     width, height = segmentation["image_size"]
+    assert result["figures"][0]["source_asset_status"] == "VERIFIED"
+    assert result["figures"][0]["source_image_asset_sha256"] == image_sha256
+    assert result["figures"][0]["source_pdf_integrity_status"] == "HASH_VERIFIED"
     summary = {
         "pipeline_result": {
             key: result.get(key)
