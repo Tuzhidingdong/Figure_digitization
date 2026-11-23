@@ -7,6 +7,149 @@ from .calibration import map_pixel
 from .models import AxisCalibration, SeriesPoint
 
 
+def detect_monotonic_color_branches(
+    image_path: str,
+    rgb: tuple[int, int, int],
+    tolerance: int,
+    *,
+    plot_box: tuple[float, float, float, float],
+    color_match: dict | None = None,
+    min_column_support: float = 0.65,
+    max_branches: int = 4,
+) -> dict:
+    """Detect persistent vertically separated same-color X-monotonic branches.
+
+    The central plot width is used so a legend at the left edge cannot create
+    a false extra branch. This inventories candidate bands only; each branch
+    still goes through independent continuity and calibration checks.
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Raster branch detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        image = np.asarray(source.convert("RGB"), dtype=np.uint8)
+    height, width = image.shape[:2]
+    bx0, by0, bx1, by1 = [float(value) for value in plot_box]
+    if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
+        bx0, bx1 = bx0 * width, bx1 * width
+        by0, by1 = by0 * height, by1 * height
+    x0, y0 = max(0, int(bx0)), max(0, int(by0))
+    x1, y1 = min(width, int(bx1)), min(height, int(by1))
+    if x1 <= x0 or y1 <= y0:
+        return {"status": "INVALID_PLOT_BOX", "branches": [], "plot_box": [x0, y0, x1, y1]}
+
+    if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
+        from .plot_region import _rgb_to_hsv_arrays
+        hues, saturations, values = _rgb_to_hsv_arrays(image.reshape(-1, 3))
+        hue_center = float(color_match.get("hue_center_degrees", 0.0))
+        hue_tolerance = float(color_match.get("hue_tolerance_degrees", 12.0))
+        minimum_saturation = float(color_match.get("minimum_saturation", 0.14))
+        minimum_value = float(color_match.get("minimum_value", 0.20))
+        distance = np.abs((hues - hue_center + 180.0) % 360.0 - 180.0)
+        mask = (
+            (distance <= hue_tolerance)
+            & (saturations >= minimum_saturation)
+            & (values >= minimum_value)
+        ).reshape(height, width)
+    else:
+        target = np.asarray(rgb, dtype=np.int16)
+        mask = np.max(
+            np.abs(image.astype(np.int16) - target), axis=2
+        ) <= int(tolerance)
+
+    # Ignore legend samples and frame-edge artifacts when estimating the
+    # persistent number of data branches.
+    x_start = x0 + max(1, int(round((x1 - x0) * 0.12)))
+    x_stop = x1 - max(1, int(round((x1 - x0) * 0.12)))
+    branch_counts: list[int] = []
+    centers_by_count: dict[int, list[list[float]]] = {}
+    for x in range(x_start, x_stop):
+        ys = np.flatnonzero(mask[y0:y1, x]) + y0
+        if len(ys) < 2:
+            continue
+        clusters: list[list[int]] = []
+        current = [int(ys[0])]
+        for y_value in ys[1:]:
+            value = int(y_value)
+            if value - current[-1] <= 3:
+                current.append(value)
+            else:
+                clusters.append(current)
+                current = [value]
+        clusters.append(current)
+        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
+        if not substantial:
+            continue
+        count = min(len(substantial), max_branches + 1)
+        branch_counts.append(count)
+        if count <= max_branches:
+            centers_by_count.setdefault(count, []).append(
+                [float(np.mean(cluster)) for cluster in substantial]
+            )
+
+    if len(branch_counts) < 20:
+        return {
+            "status": "INSUFFICIENT_BRANCH_COLUMNS",
+            "branches": [],
+            "supported_columns": len(branch_counts),
+            "plot_box": [x0, y0, x1, y1],
+        }
+    histogram = {
+        count: branch_counts.count(count)
+        for count in sorted(set(branch_counts))
+    }
+    dominant_count = max(histogram, key=lambda count: (histogram[count], -count))
+    support = histogram[dominant_count] / len(branch_counts)
+    centers = centers_by_count.get(dominant_count, [])
+    median_centers = []
+    if centers:
+        max_rank = min(dominant_count, max_branches)
+        for branch_index in range(max_rank):
+            values = [
+                column[branch_index]
+                for column in centers if len(column) > branch_index
+            ]
+            if values:
+                median_centers.append(float(np.median(values)))
+    if dominant_count >= 2 and dominant_count <= max_branches and support >= min_column_support:
+        return {
+            "status": "MULTIPLE_MONOTONIC_COLOR_BRANCHES",
+            "branch_count": dominant_count,
+            "branch_centers_y": median_centers,
+            "supported_columns": len(branch_counts),
+            "dominant_count_columns": histogram[dominant_count],
+            "support_fraction": round(support, 4),
+            "branch_count_histogram": histogram,
+            "plot_box": [x0, y0, x1, y1],
+            "provisional": True,
+        }
+    if dominant_count == 1:
+        return {
+            "status": "SINGLE_MONOTONIC_COLOR_BAND",
+            "branch_count": 1,
+            "supported_columns": len(branch_counts),
+            "support_fraction": round(support, 4),
+            "branch_count_histogram": histogram,
+            "plot_box": [x0, y0, x1, y1],
+            "provisional": True,
+        }
+    return {
+        "status": "AMBIGUOUS_COLOR_BAND_COUNT",
+        "branch_count": dominant_count,
+        "supported_columns": len(branch_counts),
+        "support_fraction": round(support, 4),
+        "branch_count_histogram": histogram,
+        "plot_box": [x0, y0, x1, y1],
+        "provisional": True,
+    }
+
+
 def trace_monotonic_color(
     image_path: str,
     rgb: tuple[int, int, int],
@@ -18,6 +161,8 @@ def trace_monotonic_color(
     max_gap_columns: int = 3,
     plot_box: tuple[float, float, float, float] | None = None,
     color_match: dict | None = None,
+    branch_index: int | None = None,
+    branch_count: int | None = None,
 ) -> tuple[list[SeriesPoint], dict]:
     """Conservative monotonic raster tracer for one explicitly selected color.
 
@@ -98,8 +243,25 @@ def trace_monotonic_color(
     columns: list[tuple[int, float, int]] = []
     for x in range(x0, x1):
         ys = np.flatnonzero(mask[y0:y1, x]) + y0
-        if len(ys) >= min_pixels_per_column:
-            columns.append((x, float(np.median(ys)), len(ys)))
+        if branch_index is None:
+            if len(ys) >= min_pixels_per_column:
+                columns.append((x, float(np.median(ys)), len(ys)))
+            continue
+        clusters: list[list[int]] = []
+        if len(ys):
+            current = [int(ys[0])]
+            for y_value in ys[1:]:
+                value = int(y_value)
+                if value - current[-1] <= 3:
+                    current.append(value)
+                else:
+                    clusters.append(current)
+                    current = [value]
+            clusters.append(current)
+        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
+        if 0 <= branch_index < len(substantial):
+            selected = substantial[branch_index]
+            columns.append((x, float(np.median(selected)), len(selected)))
     if len(columns) < 8:
         return [], {"status": "NEEDS_REVIEW", "reason": "INSUFFICIENT_TRACE_PIXELS",
                     "matched_columns": len(columns),
@@ -112,6 +274,8 @@ def trace_monotonic_color(
     # Detect multiple vertically separated bands in a column. Same-color traces
     # must not be collapsed to a median when two branches/curves occupy one X column.
     for x in range(x0, x1):
+        if branch_index is not None:
+            continue
         ys = np.flatnonzero(mask[y0:y1, x]) + y0
         if len(ys) < 4:
             continue
@@ -160,6 +324,8 @@ def trace_monotonic_color(
         "matched_pixel_fraction": len(columns) / max(1, x1 - x0),
         "plot_box": [x0, y0, x1, y1],
         "edge_axis_columns_removed": edge_axis_columns_removed,
+        "branch_index": branch_index,
+        "branch_count": branch_count,
         "max_gap_columns": max_gap,
         "path_constraint": "X_MONOTONIC_ONLY",
         "qc_status": "PROVISIONAL_UNCALIBRATED",
