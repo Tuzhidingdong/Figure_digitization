@@ -194,7 +194,18 @@ def detect_panel_regions(
     panels = []
     for index, (box, score) in enumerate(leaves, 1):
         x0, y0, x1, y1 = box
-        if x1 - x0 < width * 0.18 or y1 - y0 < height * 0.18:
+        box_width = x1 - x0
+        box_height = y1 - y0
+        area_fraction = (box_width * box_height) / float(width * height)
+        # Panel rows can be intentionally short (e.g. a narrow upper plot
+        # stacked above another plot inside one labeled panel). Reject tiny
+        # fragments by area and minimum dimension, not by requiring every
+        # panel to occupy 18% of the full figure in both directions.
+        if (
+            box_width < width * 0.06
+            or box_height < height * 0.06
+            or area_fraction < 0.045
+        ):
             continue
         panels.append({
             "panel_id": f"auto-{index:02d}",
@@ -216,14 +227,18 @@ def detect_panel_regions(
         x0, y0, x1, y1 = box
         width_fraction = (x1 - x0) / float(width)
         height_fraction = (y1 - y0) / float(height)
+        area_fraction = width_fraction * height_fraction
         rejected = (
-            width_fraction < 0.18 or height_fraction < 0.18
+            width_fraction < 0.06
+            or height_fraction < 0.06
+            or area_fraction < 0.045
         )
         leaf_diagnostics.append({
             "bbox": [int(x0), int(y0), int(x1), int(y1)],
             "score": float(score),
             "width_fraction": width_fraction,
             "height_fraction": height_fraction,
+            "area_fraction": area_fraction,
             "rejected_by_minimum_geometry": rejected,
         })
 
