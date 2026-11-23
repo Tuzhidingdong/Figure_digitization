@@ -259,9 +259,44 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
             {
                 "panel_id": panel_id,
                 "bbox": panel.get("bbox"),
+                "plot_box": panel.get("plot_box"),
                 "plot_frame": panel.get("plot_frame_bbox_pixels"),
+                "score": panel.get("plot_frame_score"),
+                "provenance": panel.get("segmentation_provenance"),
             }
             for panel_id, panel in panel_map.items()
+        ],
+        "frame_candidates": [
+            {
+                "bbox": candidate.get("pixel_bbox"),
+                "score": candidate.get("score"),
+                "type": candidate.get("candidate_type"),
+                "source_region": candidate.get("source_region_bbox"),
+                "parent": candidate.get("parent_plot_frame_bbox"),
+                "local_gutter": candidate.get("local_gutter_axis"),
+                "side_coverage": candidate.get("side_coverage"),
+            }
+            for candidate in segmentation.get("plot_frame_detection", {}).get(
+                "candidates", []
+            )
+        ],
+        "whitespace_split": segmentation.get("whitespace_split_diagnostic"),
+        "region_detections": [
+            {
+                "region_bbox": item.get("region_bbox"),
+                "mode": item.get("detection_mode"),
+                "candidates": [
+                    {
+                        "bbox": candidate.get("pixel_bbox"),
+                        "score": candidate.get("score"),
+                        "side_coverage": candidate.get("side_coverage"),
+                    }
+                    for candidate in item.get("detection", {}).get("candidates", [])[:3]
+                ],
+            }
+            for item in segmentation.get("plot_frame_detection", {}).get(
+                "region_detections", []
+            )
         ],
         "pipeline_panels": [
             {
