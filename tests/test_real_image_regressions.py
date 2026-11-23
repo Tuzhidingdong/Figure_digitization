@@ -184,6 +184,39 @@ def test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping(
             local_rows.append(local_row)
         return local_rows
 
+    # Verify the translated OCR coordinates used by the pipeline for panel d.
+    # This isolates whether right-axis tick labels are lost in crop mapping or
+    # rejected by the numeric-anchor classifier.
+    if p8_d_panel is not None:
+        p8_local_rows = cached_panel_ocr(
+            Path("diagnostic_" + p8_d_panel["panel_id"])
+        )
+        from scientific_figure_data.axis_text import extract_numeric_axis_anchors
+        p8_anchor_probe = extract_numeric_axis_anchors(
+            p8_local_rows, (53, 50, 383, 301)
+        )
+        p8_right_numeric_rows = []
+        for row in p8_local_rows:
+            polygon = row.get("polygon") or []
+            if not polygon:
+                continue
+            cx = sum(float(point[0]) for point in polygon) / len(polygon)
+            cy = sum(float(point[1]) for point in polygon) / len(polygon)
+            if cx >= 380:
+                p8_right_numeric_rows.append({
+                    "text": row.get("text"),
+                    "confidence": row.get("confidence"),
+                    "center": [cx, cy],
+                })
+        print(
+            "REAL_IMAGE_P8_D_AXIS_OCR_PROBE "
+            + json.dumps({
+                "row_count": len(p8_local_rows),
+                "right_edge_rows": p8_right_numeric_rows,
+                "anchors": p8_anchor_probe,
+            }, sort_keys=True)
+        )
+
     monkeypatch.setattr(ocr, "run_ocr", cached_panel_ocr)
     output_root = tmp_path / "output"
     result = process_paper(
