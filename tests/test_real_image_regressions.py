@@ -267,7 +267,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
     # reopened or downloaded by this deterministic regression.
     source_pdf = tmp_path / "papers_pdf" / "paper-p3-real.pdf"
     source_pdf.parent.mkdir(parents=True)
-    source_pdf_bytes = b"%PDF-1.7\\narchived test fixture only\\n"
+    source_pdf_bytes = b"%PDF-1.7\narchived test fixture only\n"
     source_pdf.write_bytes(source_pdf_bytes)
     source_pdf_sha256 = hashlib.sha256(source_pdf_bytes).hexdigest()
     image_sha256 = hashlib.sha256(image_path.read_bytes()).hexdigest()
@@ -275,7 +275,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         image_width, image_height = source.size
 
     (paper_dir / "main_analysis.md").write_text(
-        "# Main Analysis\\nP3_02 real-image regression fixture.\\n",
+        "# Main Analysis\nP3_02 real-image regression fixture.\n",
         encoding="utf-8",
     )
     evidence_index = {
@@ -559,7 +559,7 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
                 "series_axis_assignment", {}
             ).get("status") == "AMBIGUOUS_DUAL_Y_AXIS", json.dumps(summary, sort_keys=True)
 
-    panel_csv = paper_output / "series" / f"P3_02__{panel_c['panel_id']}" / "panel_series.csv"
+    panel_csv = paper_output / "series" / f"MAIN_FIG_P3_02__{panel_c['panel_id']}" / "panel_series.csv"
     assert panel_csv.is_file(), str(panel_csv)
     with panel_csv.open("r", newline="", encoding="utf-8") as handle:
         csv_rows = list(csv.DictReader(handle))
