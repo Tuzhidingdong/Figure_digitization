@@ -1798,9 +1798,11 @@ def test_2d_path_tracer_rejects_ambiguous_same_color_crossing(tmp_path: Path):
     color = (205, 25, 35)
     image = Image.new("RGB", (120, 90), "white")
     draw = ImageDraw.Draw(image)
-    draw.line((8, 12, 110, 76), fill=color, width=3)
-    draw.line((8, 76, 110, 12), fill=color, width=3)
-    image_path = tmp_path / "crossing-same-color-paths.png"
+    center = (60, 45)
+    draw.line((center[0], center[1], 8, 13), fill=color, width=3)
+    draw.line((center[0], center[1], 110, 13), fill=color, width=3)
+    draw.line((center[0], center[1], 60, 88), fill=color, width=3)
+    image_path = tmp_path / "ambiguous-same-color-junction.png"
     image.save(image_path)
 
     points, qc = trace_monotonic_color(
@@ -1812,7 +1814,7 @@ def test_2d_path_tracer_rejects_ambiguous_same_color_crossing(tmp_path: Path):
     assert rejected
     assert any(
         item.get("rejection_reason") in {
-            "BRANCHED_PIXEL_GRAPH", "CLOSED_COMPONENT_OR_LOOP",
+            "AMBIGUOUS_JUNCTION_CONTINUATION", "CLOSED_COMPONENT_OR_LOOP", "NO_UNAMBIGUOUS_ENDPOINT_PATH",
         }
         for item in rejected
     )

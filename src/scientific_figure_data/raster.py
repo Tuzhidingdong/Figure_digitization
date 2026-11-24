@@ -202,15 +202,32 @@ def _find_color_components(
                 + np.asarray([y0, x0], dtype=np.int32)
             ),
         }
-        path, path_qc = _ordered_skeleton_path(candidate)
-        if not path:
+        paths, path_qc = _ordered_skeleton_paths(candidate)
+        if not paths:
             summary["rejection_reason"] = path_qc.get("reason", "PATH_VALIDATION_FAILED")
             summary["path_qc"] = path_qc
             rejected.append(summary)
             continue
-        candidate["path"] = path
-        candidate["path_qc"] = path_qc
-        components.append(candidate)
+        for path_index, path in enumerate(paths):
+            path_x = [point[1] for point in path]
+            path_y = [point[0] for point in path]
+            path_summary = {
+                "pixel_count": len(path),
+                "bbox": [
+                    min(path_x), min(path_y), max(path_x) + 1, max(path_y) + 1
+                ],
+                "x_span": max(path_x) - min(path_x) + 1,
+                "y_span": max(path_y) - min(path_y) + 1,
+            }
+            components.append({
+                **path_summary,
+                "path": path,
+                "path_qc": {
+                    **path_qc,
+                    "selected_path_index": path_index,
+                },
+                "source_component_pixel_count": len(pixels),
+            })
 
     components.sort(key=lambda item: (
         item["bbox"][0], item["bbox"][1], -item["pixel_count"]
@@ -275,8 +292,15 @@ def _thin_binary_component(mask, *, max_iterations: int = 64):
     }
 
 
-def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict]:
-    """Return a single unambiguous endpoint-to-endpoint path in source pixels."""
+def _ordered_skeleton_paths(component: dict) -> tuple[list[list[tuple[int, int]]], dict]:
+    """Decompose a skeleton into paths using tangent-continuity at junctions.
+
+    Degree-3/4 junctions are only traversed when the straight-through pairing is
+    geometrically unique. This lets marker rings and clear crossings coexist
+    with a curve, while symmetric/ambiguous branch points remain review items.
+    """
+    import itertools
+    import math
     import numpy as np
 
     coords = component["coords"]
@@ -284,8 +308,7 @@ def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict
     local = np.zeros((y1 - y0, x1 - x0), dtype=bool)
     local[coords[:, 0] - y0, coords[:, 1] - x0] = True
     skeleton, thinning = _thin_binary_component(local)
-    local_points = [tuple(map(int, pair)) for pair in np.argwhere(skeleton)]
-    points = {(y + y0, x + x0) for y, x in local_points}
+    points = {(y + y0, x + x0) for y, x in np.argwhere(skeleton)}
     if len(points) < 8:
         return [], {
             "status": "NEEDS_REVIEW",
@@ -304,8 +327,7 @@ def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict
                 candidate = (y + dy, x + dx)
                 if candidate not in points:
                     continue
-                # Suppress redundant diagonal edges where an orthogonal route
-                # already connects the same two pixels.
+                # Suppress redundant diagonals when an orthogonal route exists.
                 if dy and dx and (
                     (y, x + dx) in points or (y + dy, x) in points
                 ):
@@ -315,8 +337,144 @@ def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict
 
     endpoints = [point for point, neighbours in adjacency.items() if len(neighbours) == 1]
     junctions = [point for point, neighbours in adjacency.items() if len(neighbours) > 2]
-    if len(endpoints) != 2 or junctions:
-        reason = "CLOSED_COMPONENT_OR_LOOP" if not endpoints else "BRANCHED_PIXEL_GRAPH"
+    continuation: dict[tuple[int, int], dict[tuple[int, int], tuple[int, int]]] = {}
+    ambiguous = []
+
+    def straightness(first, second, center):
+        v1 = (first[1] - center[1], first[0] - center[0])
+        v2 = (second[1] - center[1], second[0] - center[0])
+        norm1 = math.hypot(*v1)
+        norm2 = math.hypot(*v2)
+        if not norm1 or not norm2:
+            return 2.0
+        cosine = (v1[0] * v2[0] + v1[1] * v2[1]) / (norm1 * norm2)
+        return 1.0 + cosine  # 0 is perfectly straight-through
+
+    for center in junctions:
+        neighbours = adjacency[center]
+        degree = len(neighbours)
+        if degree not in (3, 4):
+            ambiguous.append({
+                "pixel": [center[1], center[0]],
+                "degree": degree,
+                "reason": "UNSUPPORTED_JUNCTION_DEGREE",
+            })
+            continue
+        if degree == 3:
+            scored = sorted(
+                (straightness(a, b, center), a, b)
+                for a, b in itertools.combinations(neighbours, 2)
+            )
+            best, first, second = scored[0]
+            margin = scored[1][0] - best
+            if best > 0.65 or margin < 0.15:
+                ambiguous.append({
+                    "pixel": [center[1], center[0]],
+                    "degree": degree,
+                    "best_straightness_cost": round(best, 4),
+                    "pairing_margin": round(margin, 4),
+                })
+                continue
+            continuation[center] = {first: second, second: first}
+        else:
+            possible = []
+            a, b, c, d = neighbours
+            for pairs in (
+                ((a, b), (c, d)),
+                ((a, c), (b, d)),
+                ((a, d), (b, c)),
+            ):
+                costs = [straightness(left, right, center) for left, right in pairs]
+                possible.append((sum(costs), max(costs), pairs, costs))
+            possible.sort(key=lambda item: item[0])
+            best_total, worst_pair, pairs, costs = possible[0]
+            margin = possible[1][0] - best_total
+            if worst_pair > 0.75 or margin < 0.20:
+                ambiguous.append({
+                    "pixel": [center[1], center[0]],
+                    "degree": degree,
+                    "best_pairing_cost": round(best_total, 4),
+                    "pairing_margin": round(margin, 4),
+                })
+                continue
+            mapping = {}
+            for left, right in pairs:
+                mapping[left] = right
+                mapping[right] = left
+            continuation[center] = mapping
+
+    if ambiguous:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "AMBIGUOUS_JUNCTION_CONTINUATION",
+            "endpoint_count": len(endpoints),
+            "junction_count": len(junctions),
+            "ambiguous_junctions": ambiguous,
+            "skeleton_pixels": len(points),
+            **thinning,
+        }
+
+    used_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
+
+    def edge_key(left, right):
+        return (left, right) if left <= right else (right, left)
+
+    paths = []
+
+    def walk(start, initial_next):
+        path = [start]
+        previous = start
+        current = initial_next
+        first_edge = edge_key(previous, current)
+        if first_edge in used_edges:
+            return
+        used_edges.add(first_edge)
+        path.append(current)
+        guard = 0
+        while guard <= len(points):
+            guard += 1
+            neighbours = adjacency[current]
+            next_point = None
+            if len(neighbours) == 1:
+                next_point = neighbours[0] if neighbours[0] != previous else None
+            elif len(neighbours) == 2:
+                next_point = neighbours[0] if neighbours[1] == previous else neighbours[1]
+            elif current in continuation:
+                next_point = continuation[current].get(previous)
+            if next_point is None:
+                break
+            key = edge_key(current, next_point)
+            if key in used_edges:
+                break
+            used_edges.add(key)
+            previous, current = current, next_point
+            path.append(current)
+        if len(path) >= 8:
+            if (path[-1][1], path[-1][0]) < (path[0][1], path[0][0]):
+                path.reverse()
+            paths.append(path)
+
+    # Endpoint-origin paths include both the main trajectory and any unpaired
+    # spur. A short marker loop has no endpoint and is deliberately not traced.
+    for endpoint in sorted(endpoints, key=lambda point: (point[1], point[0])):
+        neighbour = adjacency[endpoint][0]
+        if edge_key(endpoint, neighbour) not in used_edges:
+            walk(endpoint, neighbour)
+
+    # Isolated graph fragments inside the same original component are reported
+    # but not connected by invented straight lines.
+    unique_paths = []
+    seen = set()
+    for path in paths:
+        signature = tuple(path)
+        reverse_signature = tuple(reversed(path))
+        if signature in seen or reverse_signature in seen:
+            continue
+        seen.add(signature)
+        unique_paths.append(path)
+
+    if not unique_paths:
+        reason = "CLOSED_COMPONENT_OR_LOOP" if not endpoints else "NO_UNAMBIGUOUS_ENDPOINT_PATH"
         return [], {
             "status": "NEEDS_REVIEW",
             "reason": reason,
@@ -326,70 +484,50 @@ def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict
             **thinning,
         }
 
-    start = min(endpoints, key=lambda point: (point[1], point[0]))
-    path = [start]
-    previous = None
-    current = start
-    while True:
-        next_points = [
-            point for point in adjacency[current]
-            if point != previous
-        ]
-        if not next_points:
-            break
-        if len(next_points) != 1:
-            return [], {
-                "status": "NEEDS_REVIEW",
-                "reason": "BRANCH_DURING_PATH_WALK",
-                "endpoint_count": len(endpoints),
-                "junction_count": len(junctions),
-                "skeleton_pixels": len(points),
-                **thinning,
-            }
-        previous, current = current, next_points[0]
-        if current in path:
-            return [], {
-                "status": "NEEDS_REVIEW",
-                "reason": "PIXEL_PATH_CYCLE",
-                "endpoint_count": len(endpoints),
-                "junction_count": len(junctions),
-                "skeleton_pixels": len(points),
-                **thinning,
-            }
-        path.append(current)
+    summaries = []
+    accepted = []
+    min_x_span = max(6, int(round((x1 - x0) * 0.08)))
+    for path_index, path in enumerate(unique_paths):
+        xs = [point[1] for point in path]
+        ys = [point[0] for point in path]
+        x_span = max(xs) - min(xs) + 1
+        backwards = sum(
+            1 for left, right in zip(xs, xs[1:]) if right < left - 1
+        )
+        summary = {
+            "path_index": path_index,
+            "path_points": len(path),
+            "bbox": [min(xs), min(ys), max(xs) + 1, max(ys) + 1],
+            "x_span": x_span,
+            "y_span": max(ys) - min(ys) + 1,
+            "backward_x_steps": backwards,
+        }
+        if x_span < min_x_span:
+            summary["rejection_reason"] = "PATH_X_SPAN_TOO_SHORT"
+            summaries.append(summary)
+            continue
+        if backwards > max(2, int(round(len(path) * 0.05))):
+            summary["rejection_reason"] = "PATH_BACKTRACKS_IN_X"
+            summaries.append(summary)
+            continue
+        summaries.append(summary)
+        accepted.append(path)
 
-    if len(path) != len(points):
-        return [], {
-            "status": "NEEDS_REVIEW",
-            "reason": "DISCONNECTED_SKELETON_SUBPATHS",
-            "traced_pixels": len(path),
-            "skeleton_pixels": len(points),
-            **thinning,
-        }
-    if path[-1][1] < path[0][1]:
-        path.reverse()
-    x_values = np.asarray([point[1] for point in path], dtype=np.int32)
-    backward_steps = int(np.count_nonzero(np.diff(x_values) < -1))
-    if backward_steps:
-        return [], {
-            "status": "NEEDS_REVIEW",
-            "reason": "PATH_BACKTRACKS_IN_X",
-            "backward_x_steps": backward_steps,
-            "endpoint_count": len(endpoints),
-            "junction_count": len(junctions),
-            "skeleton_pixels": len(points),
-            **thinning,
-        }
-    return path, {
-        "status": "PATH_EXTRACTED",
+    accepted.sort(key=lambda path: (
+        min(point[1] for point in path),
+        sum(point[0] for point in path) / len(path),
+    ))
+    return accepted, {
+        "status": "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW",
+        "reason": None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE",
         "endpoint_count": len(endpoints),
         "junction_count": len(junctions),
+        "path_count": len(accepted),
+        "path_summaries": summaries,
         "skeleton_pixels": len(points),
-        "path_points": len(path),
-        "backward_x_steps": backward_steps,
+        "used_edges": len(used_edges),
         **thinning,
     }
-
 
 def detect_monotonic_color_branches(
     image_path: str,
