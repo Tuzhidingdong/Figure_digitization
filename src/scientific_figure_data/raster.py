@@ -953,7 +953,11 @@ def trace_monotonic_color(
     ]
     component = components[selected_index]
     return points, {
-        "status": "EXTRACTED_PROVISIONAL",
+        "status": (
+            "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+            if path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+            else "EXTRACTED_PROVISIONAL"
+        ),
         "method": "raster_color_connected_path",
         "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
         "path_order": "CONNECTED_PIXEL_GRAPH_LEFT_TO_RIGHT",
@@ -965,7 +969,11 @@ def trace_monotonic_color(
         "component_y_span": component["y_span"],
         "path_points": len(points),
         "plot_box": result.get("plot_box"),
-        "qc_status": "PROVISIONAL_UNCALIBRATED",
+        "qc_status": (
+            "NEEDS_REVIEW_PARTIAL_PATH"
+            if path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+            else "PROVISIONAL_UNCALIBRATED"
+        ),
         "geometry_only": x_calibration is None or y_calibration is None,
         "numeric_mapping_status": (
             "CALIBRATED_NUMERIC" if x_calibration is not None and y_calibration is not None
