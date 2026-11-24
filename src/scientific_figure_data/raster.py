@@ -191,12 +191,30 @@ def _find_color_components(
             summary["rejection_reason"] = "COMPONENT_TOO_SMALL"
             rejected.append(summary)
             continue
-        if summary["x_span"] < min_x_span:
+        local_vertical_candidate = (
+            summary["x_span"] <= max(6, int(round(min_x_span * 0.10)))
+            and summary["y_span"] >= max(40, int(round(min_x_span * 0.40)))
+            and summary["pixel_count"] >= max(24, int(round(min_x_span * 0.40)))
+        )
+        local_2d_candidate = (
+            summary["x_span"] >= max(6, int(round(min_x_span * 0.25)))
+            and summary["y_span"] >= max(2, int(round(min_x_span * 0.08)))
+            and summary["y_span"] <= max(24, int(round(min_x_span * 0.25)))
+            and summary["pixel_count"] >= max(20, int(round(min_x_span * 0.80)))
+        )
+        source_component_index = int(sy * width_local + sx)
+        if summary["x_span"] < min_x_span and not (
+            local_vertical_candidate or local_2d_candidate
+        ):
             summary["rejection_reason"] = "COMPONENT_X_SPAN_TOO_SHORT"
             rejected.append(summary)
             continue
         candidate = {
             **summary,
+            "source_component_index": source_component_index,
+            "local_fragment_candidate": bool(
+                local_vertical_candidate or local_2d_candidate
+            ),
             "coords": (
                 np.asarray(pixels, dtype=np.int32)
                 + np.asarray([y0, x0], dtype=np.int32)
@@ -222,6 +240,14 @@ def _find_color_components(
                 "x_span": int(max(path_x) - min(path_x) + 1),
                 "y_span": int(max(path_y) - min(path_y) + 1),
             }
+            path_record = path_qc.get("path_summaries", [])
+            path_record = next(
+                (
+                    item for item in path_record
+                    if item.get("path_index") == path_index
+                ),
+                {},
+            )
             components.append({
                 **path_summary,
                 "path": path,
@@ -229,7 +255,10 @@ def _find_color_components(
                     **path_qc,
                     "selected_path_index": path_index,
                 },
+                "source_component_index": source_component_index,
+                "source_component_bbox": [int(value) for value in bbox],
                 "source_component_pixel_count": len(pixels),
+                "path_kind": path_record.get("retained_as", "FULL_X_SPAN_PATH"),
             })
 
     components.sort(key=lambda item: (
@@ -753,7 +782,25 @@ def _ordered_skeleton_paths(
             "y_span": int(max(ys) - min(ys) + 1),
             "backward_x_steps": int(backwards),
         }
-        if x_span < min_x_span:
+        y_span = int(max(ys) - min(ys) + 1)
+        vertical_fragment = (
+            y_span >= max(20, int(round(min_x_span * 0.20)))
+            and x_span <= max(6, int(round(min_x_span * 0.10)))
+            and len(path) >= max(16, int(round(min_x_span * 0.15)))
+        )
+        short_2d_fragment = (
+            x_span >= max(6, int(round(min_x_span * 0.25)))
+            and y_span >= max(2, int(round(min_x_span * 0.08)))
+            and y_span <= max(24, int(round(min_x_span * 0.25)))
+            and len(path) >= max(8, int(round(min_x_span * 0.25)))
+        )
+        retained_as = (
+            "FULL_X_SPAN_PATH" if x_span >= min_x_span
+            else "LOCAL_VERTICAL_FRAGMENT_NEEDS_REVIEW" if vertical_fragment
+            else "LOCAL_SHORT_2D_FRAGMENT_NEEDS_REVIEW" if short_2d_fragment
+            else None
+        )
+        if retained_as is None:
             summary["rejection_reason"] = "PATH_X_SPAN_TOO_SHORT"
             summaries.append(summary)
             continue
@@ -761,6 +808,7 @@ def _ordered_skeleton_paths(
             summary["rejection_reason"] = "PATH_BACKTRACKS_IN_X"
             summaries.append(summary)
             continue
+        summary["retained_as"] = retained_as
         summaries.append(summary)
         accepted.append(path)
 
@@ -768,18 +816,28 @@ def _ordered_skeleton_paths(
         min(point[1] for point in path),
         sum(point[0] for point in path) / len(path),
     ))
+    local_fragment_count = sum(
+        1 for item in summaries
+        if str(item.get("retained_as", "")).startswith("LOCAL_")
+    )
+    partial_review_required = bool(
+        ambiguous_clusters or unpaired_ports or local_fragment_count
+    )
     return accepted, {
         "status": (
             "PARTIAL_PATHS_NEEDS_REVIEW"
-            if accepted and (ambiguous_clusters or unpaired_ports)
+            if accepted and partial_review_required
             else "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW"
         ),
         "reason": (
             "AMBIGUOUS_JUNCTIONS_RETAINED_AS_LOCAL_BREAKPOINTS"
             if accepted and (ambiguous_clusters or unpaired_ports)
+            else "LOCAL_GEOMETRY_FRAGMENTS_RETAINED_WITHOUT_FULL_X_COVERAGE"
+            if accepted and local_fragment_count
             else None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE"
         ),
-        "partial_path_review_required": bool(ambiguous_clusters or unpaired_ports),
+        "partial_path_review_required": partial_review_required,
+        "local_fragment_count": int(local_fragment_count),
         "ambiguous_junction_clusters": ambiguous_clusters,
         "endpoint_count": len(endpoints),
         "junction_count": int(len(junctions)),
@@ -793,6 +851,78 @@ def _ordered_skeleton_paths(
         **thinning,
     }
 
+
+def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
+    """Group partial paths from one ambiguous source component without joining them.
+
+    A full-span path remains an independent branch. When one source component
+    has been decomposed at ambiguous junctions, its safe local path segments are
+    returned as one branch group; the individual paths remain separate segments.
+    """
+    groups: list[list[dict]] = []
+    partial_by_source: dict[int, list[dict]] = {}
+    for index, item in enumerate(components):
+        path_qc = item.get("path_qc") or {}
+        source_index = int(item.get("source_component_index", index))
+        if path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW":
+            if source_index not in partial_by_source:
+                partial_by_source[source_index] = []
+                groups.append(partial_by_source[source_index])
+            partial_by_source[source_index].append(item)
+        else:
+            groups.append([item])
+
+    for group in groups:
+        group.sort(key=lambda item: (
+            int(item.get("bbox", [0, 0, 0, 0])[0]),
+            int(item.get("bbox", [0, 0, 0, 0])[1]),
+            -int(item.get("pixel_count", 0)),
+        ))
+    groups.sort(key=lambda group: (
+        min(int(item.get("bbox", [0, 0, 0, 0])[0]) for item in group),
+        min(int(item.get("bbox", [0, 0, 0, 0])[1]) for item in group),
+        -sum(int(item.get("pixel_count", 0)) for item in group),
+    ))
+    return groups
+
+
+def _branch_group_is_complete(group: list[dict]) -> bool:
+    """True only for one fully validated path with no partial-fragment marker."""
+    return (
+        len(group) == 1
+        and (group[0].get("path_qc") or {}).get("status") == "PATHS_EXTRACTED"
+        and group[0].get("path_kind", "FULL_X_SPAN_PATH") == "FULL_X_SPAN_PATH"
+    )
+
+
+def _branch_group_summary(index: int, group: list[dict]) -> dict:
+    boxes = [item["bbox"] for item in group]
+    x0 = min(int(box[0]) for box in boxes)
+    y0 = min(int(box[1]) for box in boxes)
+    x1 = max(int(box[2]) for box in boxes)
+    y1 = max(int(box[3]) for box in boxes)
+    return {
+        "component_index": int(index),
+        "source_component_index": int(group[0].get("source_component_index", index)),
+        "pixel_count": int(sum(item.get("pixel_count", 0) for item in group)),
+        "bbox": [x0, y0, x1, y1],
+        "x_span": int(x1 - x0),
+        "y_span": int(y1 - y0),
+        "path_count": int(len(group)),
+        "path_qc": group[0].get("path_qc", {}),
+        "path_segments": [
+            {
+                "bbox": [int(value) for value in item.get("bbox", [])],
+                "point_count": int(item.get("pixel_count", 0)),
+                "path_kind": item.get("path_kind", "FULL_X_SPAN_PATH"),
+            }
+            for item in group
+        ],
+        "source_component_pixel_count": int(
+            group[0].get("source_component_pixel_count", 0)
+        ),
+    }
+
 def detect_monotonic_color_branches(
     image_path: str,
     rgb: tuple[int, int, int],
@@ -804,39 +934,33 @@ def detect_monotonic_color_branches(
     min_branch_presence_fraction: float = 0.15,
     max_branches: int = 24,
 ) -> dict:
-    """Inventory disconnected 2-D trace paths; do not rank row bands by column.
+    """Inventory independent paths and grouped local fragments without joining them.
 
-    Kept under the historical function name for API compatibility. Branches
-    are now spatial path components and are validated again by the tracer.
+    A single fully validated data path takes precedence over disconnected
+    partial-review candidates (for example, a same-colour callout box). Those
+    excluded candidates remain explicitly recorded in QC.
     """
     result = _find_color_components(
         image_path, rgb, tolerance, plot_box=plot_box, color_match=color_match
     )
     components = result.get("components", [])
+    groups = _path_branch_groups(components)
     summaries = [
-        {
-            "component_index": int(index),
-            "pixel_count": int(item["pixel_count"]),
-            "bbox": [int(value) for value in item["bbox"]],
-            "x_span": int(item["x_span"]),
-            "y_span": int(item["y_span"]),
-            "path_qc": item.get("path_qc", {}),
-            "source_component_pixel_count": int(item.get("source_component_pixel_count", item["pixel_count"])),
-        }
-        for index, item in enumerate(components)
+        _branch_group_summary(index, group)
+        for index, group in enumerate(groups)
     ]
     if result.get("status") not in {"CONNECTED_COMPONENTS_FOUND", "NO_TRACE_COMPONENTS"}:
         return {
             "status": "NEEDS_REVIEW",
             "reason": result.get("reason") or result.get("status"),
             "branches": summaries,
-            "branch_count": len(components),
+            "branch_count": len(groups),
             "rejected_components": result.get("rejected_components", []),
             "edge_axis_columns_removed": result.get("edge_axis_columns_removed", []),
             "axis_spine_exclusion": result.get("axis_spine_exclusion", {}),
             "plot_box": result.get("plot_box"),
         }
-    if not components:
+    if not groups:
         return {
             "status": "NO_CONTINUOUS_PATH_COMPONENTS",
             "branch_count": 0,
@@ -844,28 +968,54 @@ def detect_monotonic_color_branches(
             "rejected_components": result.get("rejected_components", []),
             "plot_box": result.get("plot_box"),
         }
-    if len(components) > max_branches:
+
+    excluded_partial_branches = []
+    complete_indices = [
+        index for index, group in enumerate(groups)
+        if _branch_group_is_complete(group)
+    ]
+    if len(groups) > 1 and len(complete_indices) == 1:
+        selected = complete_indices[0]
+        excluded_partial_branches = [
+            summary for index, summary in enumerate(summaries)
+            if index != selected
+        ]
+        groups = [groups[selected]]
+        summaries = [_branch_group_summary(0, groups[0])]
+    if len(groups) > max_branches:
         return {
             "status": "TOO_MANY_PATH_COMPONENTS",
             "reason": "COMPONENT_COUNT_EXCEEDS_REVIEW_LIMIT",
-            "branch_count": len(components),
+            "branch_count": len(groups),
             "branches": summaries,
             "max_branches": max_branches,
+            "excluded_partial_branches": excluded_partial_branches,
             "rejected_components": result.get("rejected_components", []),
             "plot_box": result.get("plot_box"),
         }
+
+    rejected_components = list(result.get("rejected_components", []))
+    for item in excluded_partial_branches:
+        rejected_components.append({
+            "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
+            "bbox": item.get("bbox"),
+            "pixel_count": item.get("pixel_count"),
+            "path_count": item.get("path_count"),
+            "source_component_index": item.get("source_component_index"),
+        })
     return {
         "status": (
-            "MULTIPLE_MONOTONIC_COLOR_BRANCHES" if len(components) > 1
+            "MULTIPLE_MONOTONIC_COLOR_BRANCHES" if len(groups) > 1
             else "SINGLE_MONOTONIC_COLOR_BAND"
         ),
-        "branch_count": len(components),
+        "branch_count": len(groups),
         "branches": summaries,
+        "excluded_partial_branches": excluded_partial_branches,
         "supported_columns": result.get("active_pixels"),
         "support_fraction": 1.0,
-        "rejected_components": result.get("rejected_components", []),
+        "rejected_components": rejected_components,
         "plot_box": result.get("plot_box"),
-        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS_WITH_EXPLICIT_SEGMENT_BREAKS",
         "provisional": True,
     }
 
@@ -884,11 +1034,11 @@ def trace_monotonic_color(
     branch_index: int | None = None,
     branch_count: int | None = None,
 ) -> tuple[list[SeriesPoint], dict]:
-    """Trace one connected 2-D colour path without collapsing vertical segments.
+    """Trace ordered paths while retaining ambiguous local fragments as segments.
 
-    Disconnected components remain separate series candidates. Components with
-    loops, junctions, ambiguous skeletons or backward-X motion are rejected
-    rather than joined or assigned an arbitrary median path.
+    Separate path segments are never connected by synthetic lines. Multiple
+    disconnected complete branches still require explicit selection; a unique
+    complete path may be selected over partial-review annotation candidates.
     """
     if plot_box is None:
         return [], {"status": "NEEDS_REVIEW", "reason": "PLOT_REGION_REQUIRED"}
@@ -905,7 +1055,8 @@ def trace_monotonic_color(
             "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
         }
     components = result.get("components", [])
-    if not components:
+    groups = _path_branch_groups(components)
+    if not groups:
         return [], {
             "status": "NEEDS_REVIEW",
             "reason": "NO_CONTINUOUS_PATH_COMPONENTS",
@@ -914,65 +1065,136 @@ def trace_monotonic_color(
             },
             "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
         }
-    if branch_index is None and len(components) > 1:
-        return [], {
-            "status": "NEEDS_REVIEW",
-            "reason": "MULTIPLE_DISCONNECTED_PATHS_REQUIRE_SEPARATE_SERIES",
-            "component_count": len(components),
-            "branches": [
-                {
-                    "component_index": int(index),
-                    "pixel_count": int(item["pixel_count"]),
-                    "bbox": [int(value) for value in item["bbox"]],
-                    "x_span": int(item["x_span"]),
-                }
-                for index, item in enumerate(components)
-            ],
-            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
-        }
-    selected_index = 0 if branch_index is None else int(branch_index)
-    if selected_index < 0 or selected_index >= len(components):
+
+    auto_excluded = []
+    if branch_index is None and len(groups) > 1:
+        complete_indices = [
+            index for index, group in enumerate(groups)
+            if _branch_group_is_complete(group)
+        ]
+        if len(complete_indices) == 1 and all(
+            index == complete_indices[0]
+            or all(
+                (item.get("path_qc") or {}).get("status")
+                == "PARTIAL_PATHS_NEEDS_REVIEW"
+                for item in group
+            )
+            for index, group in enumerate(groups)
+        ):
+            selected_index = complete_indices[0]
+            auto_excluded = [
+                _branch_group_summary(index, group)
+                for index, group in enumerate(groups)
+                if index != selected_index
+            ]
+        else:
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "MULTIPLE_DISCONNECTED_PATHS_REQUIRE_SEPARATE_SERIES",
+                "component_count": len(groups),
+                "branches": [
+                    _branch_group_summary(index, group)
+                    for index, group in enumerate(groups)
+                ],
+                "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+            }
+    else:
+        selected_index = 0 if branch_index is None else int(branch_index)
+
+    if selected_index < 0 or selected_index >= len(groups):
         return [], {
             "status": "NEEDS_REVIEW",
             "reason": "PATH_COMPONENT_INDEX_OUT_OF_RANGE",
-            "component_count": len(components),
+            "component_count": len(groups),
             "requested_component_index": selected_index,
         }
 
-    path = components[selected_index]["path"]
-    path_qc = components[selected_index]["path_qc"]
-    points = [
-        SeriesPoint(
-            point_index=index,
-            x=map_pixel(x_calibration, float(px)) if x_calibration else None,
-            y=map_pixel(y_calibration, float(py)) if y_calibration else None,
-            pixel_x=float(px),
-            pixel_y=float(py),
+    selected_group = groups[selected_index]
+    selected_group = sorted(selected_group, key=lambda item: (
+        int(item.get("bbox", [0, 0, 0, 0])[0]),
+        int(item.get("bbox", [0, 0, 0, 0])[1]),
+    ))
+    points = []
+    path_segments = []
+    for segment_index, component in enumerate(selected_group):
+        path = component["path"]
+        start_point_index = len(points)
+        points.extend(
+            SeriesPoint(
+                point_index=len(points),
+                x=map_pixel(x_calibration, float(px)) if x_calibration else None,
+                y=map_pixel(y_calibration, float(py)) if y_calibration else None,
+                pixel_x=float(px),
+                pixel_y=float(py),
+            )
+            for py, px in path
         )
-        for index, (py, px) in enumerate(path)
+        end_point_index = len(points) - 1
+        path_segments.append({
+            "segment_index": int(segment_index),
+            "start_point_index": int(start_point_index),
+            "end_point_index": int(end_point_index),
+            "point_count": int(end_point_index - start_point_index + 1),
+            "bbox": [int(value) for value in component["bbox"]],
+            "path_kind": component.get("path_kind", "FULL_X_SPAN_PATH"),
+        })
+
+    if not points:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "SELECTED_BRANCH_CONTAINS_NO_ORDERED_POINTS",
+            "component_count": len(groups),
+        }
+
+    path_qc = dict(selected_group[0].get("path_qc") or {})
+    local_fragment_count = sum(
+        1 for item in selected_group
+        if str(item.get("path_kind", "")).startswith("LOCAL_")
+    )
+    partial_review_required = bool(
+        len(selected_group) > 1
+        or path_qc.get("partial_path_review_required")
+        or path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+        or local_fragment_count
+    )
+    path_qc.update({
+        "selected_branch_index": int(selected_index),
+        "selected_path_count": int(len(selected_group)),
+        "path_segments": path_segments,
+        "local_fragment_count": int(local_fragment_count),
+        "partial_path_review_required": partial_review_required,
+    })
+    boxes = [item["bbox"] for item in selected_group]
+    component_bbox = [
+        min(int(box[0]) for box in boxes),
+        min(int(box[1]) for box in boxes),
+        max(int(box[2]) for box in boxes),
+        max(int(box[3]) for box in boxes),
     ]
-    component = components[selected_index]
+    component_pixel_count = int(
+        sum(item.get("pixel_count", 0) for item in selected_group)
+    )
     return points, {
         "status": (
             "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
-            if path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
-            else "EXTRACTED_PROVISIONAL"
+            if partial_review_required else "EXTRACTED_PROVISIONAL"
         ),
         "method": "raster_color_connected_path",
-        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
-        "path_order": "CONNECTED_PIXEL_GRAPH_LEFT_TO_RIGHT",
+        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS_WITH_EXPLICIT_SEGMENT_BREAKS",
+        "path_order": "LEFT_TO_RIGHT_WITHIN_EACH_DISCONNECTED_SEGMENT",
         "component_index": selected_index,
-        "component_count": len(components),
-        "component_bbox": component["bbox"],
-        "component_pixel_count": component["pixel_count"],
-        "component_x_span": component["x_span"],
-        "component_y_span": component["y_span"],
+        "component_count": len(groups),
+        "component_bbox": component_bbox,
+        "component_pixel_count": component_pixel_count,
+        "component_x_span": int(component_bbox[2] - component_bbox[0]),
+        "component_y_span": int(component_bbox[3] - component_bbox[1]),
         "path_points": len(points),
+        "path_segment_count": len(path_segments),
+        "path_segments": path_segments,
         "plot_box": result.get("plot_box"),
         "qc_status": (
             "NEEDS_REVIEW_PARTIAL_PATH"
-            if path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
-            else "PROVISIONAL_UNCALIBRATED"
+            if partial_review_required else "PROVISIONAL_UNCALIBRATED"
         ),
         "geometry_only": x_calibration is None or y_calibration is None,
         "numeric_mapping_status": (
@@ -995,11 +1217,11 @@ def trace_monotonic_color(
             "connectivity": result.get("connectivity"),
         },
         "path_qc": path_qc,
-        "review_required": path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW",
-        "branch_index": branch_index,
-        "branch_count": branch_count or len(components),
+        "review_required": partial_review_required,
+        "excluded_partial_branches": auto_excluded,
+        "branch_index": selected_index,
+        "branch_count": branch_count or len(groups),
     }
-
 
 def map_explicit_polyline(
     points: Iterable[tuple[float, float]],
