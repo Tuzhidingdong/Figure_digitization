@@ -442,6 +442,7 @@ def _ordered_skeleton_paths(
     ] = {}
     junction_pairings = []
     ambiguous_clusters = []
+    ambiguous_ports: set[tuple[int, int]] = set()
     unpaired_ports = []
 
     def shortest_cluster_bridge(cluster, start_nodes, end_nodes):
@@ -507,6 +508,7 @@ def _ordered_skeleton_paths(
                     contacts.setdefault(neighbour, set()).add(node)
         ports = sorted(contacts, key=lambda point: (point[1], point[0]))
         if len(ports) < 2:
+            ambiguous_ports.update(ports)
             ambiguous_clusters.append({
                 "cluster_index": int(cluster_index),
                 "junction_pixels": int(len(cluster)),
@@ -544,7 +546,8 @@ def _ordered_skeleton_paths(
             best, first, second = scored[0]
             margin = scored[1][0] - best
             if best > 0.65 or margin < 0.15:
-                ambiguous_clusters.append({
+                ambiguous_ports.update(ports)
+            ambiguous_clusters.append({
                     "cluster_index": int(cluster_index),
                     "junction_pixels": int(len(cluster)),
                     "port_count": int(len(ports)),
@@ -556,6 +559,7 @@ def _ordered_skeleton_paths(
                 continue
             pairs = [(first, second)]
             unpaired = next(port for port in ports if port not in {first, second})
+            ambiguous_ports.add(unpaired)
             unpaired_ports.append({
                 "cluster_index": int(cluster_index),
                 "pixel": [int(unpaired[1]), int(unpaired[0])],
@@ -580,7 +584,8 @@ def _ordered_skeleton_paths(
             best_total, worst_pair, selected_pairs, _ = possible[0]
             margin = possible[1][0] - best_total
             if worst_pair > 0.75 or margin < 0.20:
-                ambiguous_clusters.append({
+                ambiguous_ports.update(ports)
+            ambiguous_clusters.append({
                     "cluster_index": int(cluster_index),
                     "junction_pixels": int(len(cluster)),
                     "port_count": int(len(ports)),
@@ -592,6 +597,7 @@ def _ordered_skeleton_paths(
                 continue
             pairs = list(selected_pairs)
         else:
+            ambiguous_ports.update(ports)
             ambiguous_clusters.append({
                 "cluster_index": int(cluster_index),
                 "junction_pixels": int(len(cluster)),
@@ -612,7 +618,8 @@ def _ordered_skeleton_paths(
                 cluster, contacts[left], contacts[right]
             )
             if not bridge:
-                ambiguous_clusters.append({
+                ambiguous_ports.update(ports)
+            ambiguous_clusters.append({
                     **cluster_record,
                     "reason": "NO_JUNCTION_BRIDGE_PATH",
                 })
@@ -630,19 +637,9 @@ def _ordered_skeleton_paths(
             })
         junction_pairings.append(cluster_record)
 
-    if ambiguous_clusters:
-        return [], {
-            "status": "NEEDS_REVIEW",
-            "reason": "AMBIGUOUS_JUNCTION_CONTINUATION",
-            "endpoint_count": int(len(original_endpoints)),
-            "junction_count": int(len(junctions)),
-            "junction_cluster_count": int(len(junction_clusters)),
-            "junction_pairings": junction_pairings,
-            "ambiguous_junction_clusters": ambiguous_clusters,
-            "unpaired_ports": unpaired_ports,
-            "skeleton_pixels": int(len(points)),
-            **thinning,
-        }
+    # Ambiguous junction clusters are hard breakpoints, not a reason to discard
+    # every path in the source component. Their external ports remain terminals
+    # in the compressed graph; no pairing or bridge is invented across them.
 
     for point, neighbours in compressed_adjacency.items():
         if len(neighbours) > 2:
@@ -656,9 +653,11 @@ def _ordered_skeleton_paths(
                 **thinning,
             }
 
+    original_endpoint_set = set(original_endpoints)
     endpoints = [
         point for point, neighbours in compressed_adjacency.items()
-        if len(neighbours) == 1 and len(adjacency[point]) == 1
+        if len(neighbours) == 1
+        and (point in original_endpoint_set or point in ambiguous_ports)
     ]
     used_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
     paths = []
@@ -695,11 +694,12 @@ def _ordered_skeleton_paths(
         if len(path) >= 8:
             if (path[-1][1], path[-1][0]) < (path[0][1], path[0][0]):
                 path.reverse()
-            # A path must terminate at genuine raster endpoints, not at an
-            # unpaired junction port. Such a spur is retained only in QC.
+            # Keep a segment only when both ends are genuine raster endpoints
+            # or explicit ambiguous-junction breakpoints. Never connect across
+            # an uncertain cluster.
             if (
-                len(adjacency[path[0]]) != 1
-                or len(adjacency[path[-1]]) != 1
+                path[0] not in original_endpoint_set | ambiguous_ports
+                or path[-1] not in original_endpoint_set | ambiguous_ports
             ):
                 return
             paths.append(path)
@@ -769,8 +769,18 @@ def _ordered_skeleton_paths(
         sum(point[0] for point in path) / len(path),
     ))
     return accepted, {
-        "status": "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW",
-        "reason": None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE",
+        "status": (
+            "PARTIAL_PATHS_NEEDS_REVIEW"
+            if accepted and ambiguous_clusters
+            else "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW"
+        ),
+        "reason": (
+            "AMBIGUOUS_JUNCTIONS_RETAINED_AS_LOCAL_BREAKPOINTS"
+            if accepted and ambiguous_clusters
+            else None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE"
+        ),
+        "partial_path_review_required": bool(ambiguous_clusters),
+        "ambiguous_junction_clusters": ambiguous_clusters,
         "endpoint_count": len(endpoints),
         "junction_count": int(len(junctions)),
         "junction_cluster_count": int(len(junction_clusters)),
@@ -977,6 +987,7 @@ def trace_monotonic_color(
             "connectivity": result.get("connectivity"),
         },
         "path_qc": path_qc,
+        "review_required": path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW",
         "branch_index": branch_index,
         "branch_count": branch_count or len(components),
     }
