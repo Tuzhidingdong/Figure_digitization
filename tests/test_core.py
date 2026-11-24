@@ -1827,13 +1827,20 @@ def test_compact_rejected_component_uses_top_level_reason_when_nested_qc_differs
         "path_kind": "FULL_X_SPAN_PATH",
         "path_qc": {"status": "PATHS_EXTRACTED"},
     }]
+    # Match the observed real failing candidate: 288 source pixels is more
+    # than 30% of the thin waveform's 366 pixels, while its bbox is compact
+    # and spatially separate.
     rejected = [{
-        "bbox": [82, 8, 126, 18],
-        "pixel_count": 71,
+        "bbox": [82, 4, 127, 19],
+        "pixel_count": 288,
         "rejection_reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
         "path_qc": {
             "status": "NEEDS_REVIEW",
-            "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+            "reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+            "ambiguous_junction_clusters": [{
+                "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+                "port_count": 7,
+            }],
         },
     }]
 
@@ -1845,10 +1852,18 @@ def test_compact_rejected_component_uses_top_level_reason_when_nested_qc_differs
     assert excluded[0]["source_qc_rejection_reason"] == (
         "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
     )
-    assert excluded[0]["source_path_qc_reason"] == "UNSUPPORTED_JUNCTION_PORT_COUNT"
+    assert excluded[0]["source_path_qc_reason"] == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    )
+    assert excluded[0]["path_qc"]["ambiguous_junction_clusters"][0]["reason"] == (
+        "UNSUPPORTED_JUNCTION_PORT_COUNT"
+    )
     assert excluded[0]["classification"] == (
         "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC"
     )
+    assert excluded[0]["decision_basis"]["candidate_component_pixel_count"] == 288
+    assert excluded[0]["decision_basis"]["selected_path_pixel_count"] == 366
+    assert excluded[0]["decision_basis"]["pixel_count_ratio_used_for_selection"] is False
 
 
 def test_full_span_partial_qc_branch_is_not_auto_excluded():
