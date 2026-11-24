@@ -244,7 +244,8 @@ def _find_color_components(
             path_record = next(
                 (
                     item for item in path_record
-                    if item.get("path_index") == path_index
+                    if item.get("bbox") == path_summary["bbox"]
+                    and item.get("path_points") == len(path)
                 ),
                 {},
             )
