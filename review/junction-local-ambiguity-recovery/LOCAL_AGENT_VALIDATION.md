@@ -2,7 +2,7 @@
 
 Target repository: `Tuzhidingdong/Figure_digitization`
 Target branch: `fix/junction-local-ambiguity-recovery`
-Expected source HEAD at handoff: `d8a20055ec3f9749a8fc7aa9994ced0fa6a4ea25`
+Expected source HEAD at handoff: `de0bc4f59402cce4d6e6d484984feda020202614`
 Base: `d7a53c624382865783dc821b546d6c46a746947e`
 
 ## Safety and sync
