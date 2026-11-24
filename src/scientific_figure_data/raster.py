@@ -667,6 +667,26 @@ def _ordered_skeleton_paths(
             })
         junction_pairings.append(cluster_record)
 
+    # A compact unsupported N-way junction (for example, a five-way star)
+    # is not equivalent to a long dense overlap zone. Its arms cannot safely be
+    # attributed to separate traces, so reject the whole source component.
+    hard_unsupported_junctions = [
+        item for item in ambiguous_clusters
+        if item.get("reason") == "UNSUPPORTED_JUNCTION_PORT_COUNT"
+        and 3 <= int(item.get("port_count", 0)) <= 7
+    ]
+    if hard_unsupported_junctions:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+            "ambiguous_junction_clusters": hard_unsupported_junctions,
+            "endpoint_count": len(original_endpoints),
+            "junction_count": int(len(junctions)),
+            "junction_cluster_count": int(len(junction_clusters)),
+            "skeleton_pixels": int(len(points)),
+            **thinning,
+        }
+
     # Ambiguous junction clusters are hard breakpoints, not a reason to discard
     # every path in the source component. Their external ports remain terminals
     # in the compressed graph; no pairing or bridge is invented across them.
