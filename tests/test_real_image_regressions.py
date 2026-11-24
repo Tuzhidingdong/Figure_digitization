@@ -95,7 +95,7 @@ def test_p8_real_figure_detects_two_red_branches_and_one_blue_band(
     )
     assert red_branches["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", red_branches
     assert red_branches["branch_count"] == 2, red_branches
-    assert len(red_branches["branch_centers_y"]) == 2, red_branches
+    assert len(red_branches["branches"]) == 2, red_branches
     assert blue_branches["status"] == "SINGLE_MONOTONIC_COLOR_BAND", blue_branches
     assert blue_branches["branch_count"] == 1, blue_branches
 

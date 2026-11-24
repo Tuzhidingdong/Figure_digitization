@@ -403,7 +403,7 @@ def test_process_paper_auto_traces_and_reconstructs_monotonic_raster_curve(
     assert result["panel_count"] == 1
     assert result["series_count"] == 1
     series = result["series"][0]
-    assert series["extraction_method"] == "raster_color_column_median"
+    assert series["extraction_method"] == "raster_color_connected_path"
     assert series["extraction_status"] == "EXTRACTED_PROVISIONAL"
     assert series["metadata"]["points_count"] > 100
     assert series["metadata"]["trace_specification"]["status"] == "READY"
@@ -860,8 +860,9 @@ def test_branch_detector_recovers_secondary_persistent_band_when_single_band_is_
     )
     assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
     assert detected["branch_count"] == 2, detected
-    assert detected["modal_branch_count"] == 1, detected
-    assert detected["branch_presence_fraction"] >= 0.15, detected
+    assert len(detected["branches"]) == 2, detected
+    assert detected["branches"][0]["x_span"] > 200, detected
+    assert detected["branches"][1]["x_span"] > 100, detected
 
     points, qc = trace_monotonic_color(
         str(image_path), color, 12, None, None,

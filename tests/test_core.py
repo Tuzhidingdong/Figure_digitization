@@ -1579,7 +1579,7 @@ def test_pipeline_auto_detects_simple_single_color_time_series_without_override(
     )
     assert len(records) == 1
     record = records[0]
-    assert record.extraction_method == "raster_color_column_median"
+    assert record.extraction_method == "raster_color_connected_path"
     assert record.extraction_status == "EXTRACTED_PROVISIONAL"
     assert len(record.points) >= 150
     assert record.metadata["plot_detection"]["status"] == "PROVISIONAL_PLOT_BOX"
@@ -1717,10 +1717,11 @@ def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_
             "Figure1__a" / "panel_series.csv").is_file()
 
 
-def test_same_color_multiple_bands_are_rejected_by_raster_tracer(tmp_path: Path):
+def test_same_color_disconnected_paths_are_kept_as_separate_series(tmp_path: Path):
     from PIL import Image, ImageDraw
-    from scientific_figure_data.calibration import fit_linear_axis
-    from scientific_figure_data.raster import trace_monotonic_color
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
 
     image = Image.new("RGB", (120, 70), "white")
     draw = ImageDraw.Draw(image)
@@ -1728,14 +1729,93 @@ def test_same_color_multiple_bands_are_rejected_by_raster_tracer(tmp_path: Path)
     draw.line((5, 48, 115, 48), fill=(200, 30, 40), width=2)
     image_path = tmp_path / "same-color-two-curves.png"
     image.save(image_path)
-    x_cal = fit_linear_axis("x", [{"pixel": 0, "value": 0}, {"pixel": 120, "value": 12}], "s")
-    y_cal = fit_linear_axis("y", [{"pixel": 60, "value": 0}, {"pixel": 0, "value": 6}], "V")
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), (200, 30, 40), 5, plot_box=(0, 0, 120, 70)
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 2, detected
+    for branch_index, expected_y in enumerate((15, 48)):
+        points, qc = trace_monotonic_color(
+            str(image_path), (200, 30, 40), 5, None, None,
+            plot_box=(0, 0, 120, 70), branch_index=branch_index, branch_count=2,
+        )
+        assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+        assert len(points) >= 100
+        assert all(abs(point.pixel_y - expected_y) <= 1 for point in points)
+        assert all(
+            right.pixel_x >= left.pixel_x - 1
+            for left, right in zip(points, points[1:])
+        )
+
+
+def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    color = (210, 25, 35)
+    image = Image.new("RGB", (190, 110), "white")
+    draw = ImageDraw.Draw(image)
+    waveform = [
+        (10, 25), (42, 25), (42, 76), (76, 76), (76, 25),
+        (110, 25), (110, 76), (144, 76), (144, 25), (180, 25),
+    ]
+    draw.line(waveform, fill=color, width=3)
+    # A closed callout box and short dashed annotation marks share the curve hue.
+    draw.rectangle((82, 8, 126, 18), outline=color, width=2)
+    for x in range(84, 124, 8):
+        draw.line((x, 4, min(x + 3, 124), 4), fill=color, width=2)
+    image_path = tmp_path / "waveform-with-callout.png"
+    image.save(image_path)
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), color, 6, plot_box=(4, 2, 186, 84)
+    )
+    assert detected["status"] == "SINGLE_MONOTONIC_COLOR_BAND", detected
+    assert detected["branch_count"] == 1, detected
     points, qc = trace_monotonic_color(
-        str(image_path), (200, 30, 40), 5, x_cal, y_cal, plot_box=(0, 0, 120, 70)
+        str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+    assert len(points) > 150
+    assert min(point.pixel_y for point in points) <= 26
+    assert max(point.pixel_y for point in points) >= 75
+    assert any(
+        left.pixel_x == right.pixel_x and abs(left.pixel_y - right.pixel_y) > 10
+        for left, right in zip(points, points[1:])
+    )
+    assert not any(8 <= point.pixel_y <= 18 for point in points)
+
+
+def test_2d_path_tracer_rejects_ambiguous_same_color_crossing(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    color = (205, 25, 35)
+    image = Image.new("RGB", (120, 90), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((8, 12, 110, 76), fill=color, width=3)
+    draw.line((8, 76, 110, 12), fill=color, width=3)
+    image_path = tmp_path / "crossing-same-color-paths.png"
+    image.save(image_path)
+
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 6, None, None, plot_box=(2, 2, 116, 86)
     )
     assert points == []
     assert qc["status"] == "NEEDS_REVIEW"
-    assert qc["reason"] == "MULTIPLE_SAME_COLOR_BANDS"
+    rejected = qc["component_detection"]["rejected_components"]
+    assert rejected
+    assert any(
+        item.get("rejection_reason") in {
+            "BRANCHED_PIXEL_GRAPH", "CLOSED_COMPONENT_OR_LOOP",
+        }
+        for item in rejected
+    )
 
 
 def test_cli_resume_processes_first_time_then_skips_unchanged_and_reprocesses_changed(
@@ -2053,7 +2133,7 @@ def test_hybrid_pipeline_falls_back_to_unique_raster_when_vector_candidates_are_
         {"crop_left_pdf": 0, "crop_top_pdf": 100, "render_scale": 1,
          "page_rotation_degrees": 0},
     )[0]
-    assert record.extraction_method == "raster_color_column_median"
+    assert record.extraction_method == "raster_color_connected_path"
     assert record.metadata["vector_fallback"] == "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
     assert record.metadata["vector_selection"]["reason"] == "MULTIPLE_VECTOR_CANDIDATES"
     assert len(record.points) > 0

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Iterable
 
 from .calibration import map_pixel
@@ -158,10 +157,19 @@ def _find_color_components(
             summary["rejection_reason"] = "COMPONENT_X_SPAN_TOO_SHORT"
             rejected.append(summary)
             continue
-        components.append({
+        candidate = {
             **summary,
             "coords": np.asarray(pixels, dtype=np.int32),
-        })
+        }
+        path, path_qc = _ordered_skeleton_path(candidate)
+        if not path:
+            summary["rejection_reason"] = path_qc.get("reason", "PATH_VALIDATION_FAILED")
+            summary["path_qc"] = path_qc
+            rejected.append(summary)
+            continue
+        candidate["path"] = path
+        candidate["path_qc"] = path_qc
+        components.append(candidate)
 
     components.sort(key=lambda item: (
         item["bbox"][0], item["bbox"][1], -item["pixel_count"]
@@ -482,20 +490,8 @@ def trace_monotonic_color(
             "requested_component_index": selected_index,
         }
 
-    path, path_qc = _ordered_skeleton_path(components[selected_index])
-    if not path:
-        return [], {
-            "status": "NEEDS_REVIEW",
-            "reason": path_qc.get("reason", "PATH_EXTRACTION_FAILED"),
-            "component_index": selected_index,
-            "component": {
-                key: value for key, value in components[selected_index].items()
-                if key != "coords"
-            },
-            "path_qc": path_qc,
-            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
-        }
-
+    path = components[selected_index]["path"]
+    path_qc = components[selected_index]["path_qc"]
     points = [
         SeriesPoint(
             point_index=index,
