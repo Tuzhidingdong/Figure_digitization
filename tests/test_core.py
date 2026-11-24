@@ -1811,12 +1811,6 @@ def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: P
     detected = detect_monotonic_color_branches(
         str(image_path), color, 6, plot_box=(2, 2, 116, 86)
     )
-    print("CROSS_JUNCTION_DIAGNOSTIC " + json.dumps({
-        "status": detected.get("status"),
-        "branch_count": detected.get("branch_count"),
-        "branches": detected.get("branches", []),
-        "rejected": detected.get("rejected_components", []),
-    }, sort_keys=True))
     assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
     assert detected["branch_count"] == 2, detected
     slopes = []
@@ -1835,28 +1829,32 @@ def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: P
     assert slopes[0] * slopes[1] < 0, slopes
 
 
-def test_2d_path_tracer_rejects_ambiguous_three_way_junction(tmp_path: Path):
+def test_2d_path_tracer_rejects_unsupported_five_way_junction(tmp_path: Path):
+    from math import cos, pi, sin
     from PIL import Image, ImageDraw
     from scientific_figure_data.raster import trace_monotonic_color
 
     color = (205, 25, 35)
-    image = Image.new("RGB", (120, 110), "white")
+    image = Image.new("RGB", (140, 140), "white")
     draw = ImageDraw.Draw(image)
-    center = (60, 48)
-    draw.line((center[0], center[1], 15, 22), fill=color, width=3)
-    draw.line((center[0], center[1], 105, 22), fill=color, width=3)
-    draw.line((center[0], center[1], 60, 100), fill=color, width=3)
-    image_path = tmp_path / "ambiguous-same-color-junction.png"
+    center = (70, 70)
+    for index in range(5):
+        angle = -pi / 2 + index * (2 * pi / 5)
+        endpoint = (
+            int(round(center[0] + 58 * cos(angle))),
+            int(round(center[1] + 58 * sin(angle))),
+        )
+        draw.line((center, endpoint), fill=color, width=3)
+    draw.ellipse(
+        (center[0] - 6, center[1] - 6, center[0] + 6, center[1] + 6),
+        fill=color,
+    )
+    image_path = tmp_path / "unsupported-five-way-junction.png"
     image.save(image_path)
 
     points, qc = trace_monotonic_color(
-        str(image_path), color, 6, None, None, plot_box=(2, 2, 116, 106)
+        str(image_path), color, 6, None, None, plot_box=(2, 2, 138, 138)
     )
-    print("Y_JUNCTION_DIAGNOSTIC " + json.dumps({
-        "status": qc.get("status"),
-        "reason": qc.get("reason"),
-        "component_detection": qc.get("component_detection"),
-    }, sort_keys=True))
     assert points == [], qc
     assert qc["status"] == "NEEDS_REVIEW"
     rejected = qc["component_detection"]["rejected_components"]

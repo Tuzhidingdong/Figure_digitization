@@ -371,6 +371,67 @@ def _ordered_skeleton_paths(
                     stack.append(neighbour)
         junction_clusters.append(cluster)
 
+    # A crossing can thin into two adjacent degree-3 pixels rather than one
+    # degree-4 pixel. Merge junction regions connected by a short, unbranched
+    # skeleton bridge before estimating their external arms.
+    from collections import deque
+
+    merge_distance = max(3, min(10, int(round(minimum_path_x_span * 0.25))))
+
+    def find_short_junction_bridge(first_cluster, second_cluster):
+        queue = deque()
+        parents = {}
+        distances = {}
+        for point in sorted(first_cluster, key=lambda item: (item[1], item[0])):
+            queue.append(point)
+            parents[point] = None
+            distances[point] = 0
+        while queue:
+            current = queue.popleft()
+            if distances[current] >= merge_distance:
+                continue
+            for neighbour in adjacency[current]:
+                if neighbour in first_cluster:
+                    continue
+                if neighbour in second_cluster:
+                    path = [neighbour]
+                    cursor = current
+                    while cursor is not None:
+                        path.append(cursor)
+                        cursor = parents[cursor]
+                    path.reverse()
+                    return path
+                if neighbour in junction_set or neighbour in parents:
+                    continue
+                parents[neighbour] = current
+                distances[neighbour] = distances[current] + 1
+                queue.append(neighbour)
+        return None
+
+    changed = True
+    while changed:
+        changed = False
+        for first_index in range(len(junction_clusters)):
+            for second_index in range(first_index + 1, len(junction_clusters)):
+                bridge = find_short_junction_bridge(
+                    junction_clusters[first_index],
+                    junction_clusters[second_index],
+                )
+                if bridge is None:
+                    continue
+                merged = (
+                    junction_clusters[first_index]
+                    | junction_clusters[second_index]
+                    | set(bridge)
+                )
+                junction_set.update(bridge)
+                junction_clusters[first_index] = merged
+                junction_clusters.pop(second_index)
+                changed = True
+                break
+            if changed:
+                break
+
     compressed_adjacency = {
         point: [neighbour for neighbour in neighbours if neighbour not in junction_set]
         for point, neighbours in adjacency.items()
@@ -711,7 +772,10 @@ def _ordered_skeleton_paths(
         "status": "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW",
         "reason": None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE",
         "endpoint_count": len(endpoints),
-        "junction_count": len(junctions),
+        "junction_count": int(len(junctions)),
+        "junction_cluster_count": int(len(junction_clusters)),
+        "junction_pairings": junction_pairings,
+        "unpaired_ports": unpaired_ports,
         "path_count": len(accepted),
         "path_summaries": summaries,
         "skeleton_pixels": len(points),
