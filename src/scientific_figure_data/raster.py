@@ -899,6 +899,28 @@ def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
             int(item.get("bbox", [0, 0, 0, 0])[1]),
             -int(item.get("pixel_count", 0)),
         ))
+
+    # If every surviving candidate is explicitly partial-review geometry,
+    # preserve them as one review collection with independent path segments.
+    # This is essential for dashed/fractured traces such as blue early-cycle
+    # curves: returning zero points merely because their fragments are
+    # disconnected would discard all available geometry. No line is drawn
+    # between the segments and the collection cannot be a complete extraction.
+    if len(groups) > 1 and all(
+        all(
+            (item.get("path_qc") or {}).get("status")
+            == "PARTIAL_PATHS_NEEDS_REVIEW"
+            for item in group
+        )
+        for group in groups
+    ):
+        groups = [[item for group in groups for item in group]]
+        groups[0].sort(key=lambda item: (
+            int(item.get("bbox", [0, 0, 0, 0])[0]),
+            int(item.get("bbox", [0, 0, 0, 0])[1]),
+            -int(item.get("pixel_count", 0)),
+        ))
+
     groups.sort(key=lambda group: (
         min(int(item.get("bbox", [0, 0, 0, 0])[0]) for item in group),
         min(int(item.get("bbox", [0, 0, 0, 0])[1]) for item in group),
