@@ -771,15 +771,15 @@ def _ordered_skeleton_paths(
     return accepted, {
         "status": (
             "PARTIAL_PATHS_NEEDS_REVIEW"
-            if accepted and ambiguous_clusters
+            if accepted and (ambiguous_clusters or unpaired_ports)
             else "PATHS_EXTRACTED" if accepted else "NEEDS_REVIEW"
         ),
         "reason": (
             "AMBIGUOUS_JUNCTIONS_RETAINED_AS_LOCAL_BREAKPOINTS"
-            if accepted and ambiguous_clusters
+            if accepted and (ambiguous_clusters or unpaired_ports)
             else None if accepted else "NO_PATH_SPANS_REQUIRED_X_RANGE"
         ),
-        "partial_path_review_required": bool(ambiguous_clusters),
+        "partial_path_review_required": bool(ambiguous_clusters or unpaired_ports),
         "ambiguous_junction_clusters": ambiguous_clusters,
         "endpoint_count": len(endpoints),
         "junction_count": int(len(junctions)),
