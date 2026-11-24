@@ -1777,6 +1777,14 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     )
     assert detected["status"] == "SINGLE_MONOTONIC_COLOR_BAND", detected
     assert detected["branch_count"] == 1, detected
+    assert len(detected.get("excluded_partial_branches", [])) == 1, detected
+    excluded = detected["excluded_partial_branches"][0]
+    assert excluded["bbox"] == [82, 8, 126, 18], excluded
+    assert any(
+        item.get("rejection_reason")
+        == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
+        for item in detected.get("rejected_components", [])
+    ), detected
     points, qc = trace_monotonic_color(
         str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
     )
