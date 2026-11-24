@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-24",
+  "repository": "Tuzhidingdong/Figure_digitization",
+  "branch": "fix/partial-branch-qc-preservation",
+  "head": "2c472688b1c5fb2d346d4c2df521ca8baa39a720",
+  "parent": "804c0931f0d9ed4e632680b61fcbdc214399eb5c",
+  "required_code_commit": "aa3618cfa01cf31d512f8778c1dfbcb508d886fc",
+  "required_code_commit_is_ancestor": true,
+  "algorithm_version": "0.8.0",
+  "python": "3.13.9",
+  "tests": {
+    "command": "python -m pytest tests/test_core.py tests/test_automatic_digitization.py tests/test_real_image_regressions.py tests/test_upstream_compat.py -o addopts=\"\" -q --durations=0",
+    "collected": 158,
+    "passed": 157,
+    "failed": 1,
+    "skipped": 0,
+    "exit_code": 1,
+    "duration_seconds": 204.88,
+    "failed_nodes": [
+      "tests/test_core.py::test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations"
+    ],
+    "focused_rerun": "not performed: no code correction authorized; failure reproduced by direct probe"
+  },
+  "source_images": [
+    {
+      "case": "P3_02",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P3_02.png",
+      "bytes": 827536,
+      "sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e"
+    },
+    {
+      "case": "P8_06",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P8_06.png",
+      "bytes": 450356,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    }
+  ],
+  "run_outputs": {
+    "directory": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124",
+    "reconstruction_manifest": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\reconstruction_manifest.json",
+    "extraction_run_json": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\extraction_run.json",
+    "series_csv": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\series\\MAIN_FIG_P3_02__auto-03\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-01\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-02\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_branch_qc_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-04\\panel_series.csv"
+    ]
+  },
+  "comparison_baselines": {
+    "original": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124",
+    "diagnostic": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124",
+    "previous_candidate": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124"
+  },
+  "summary": {
+    "P3_02": {
+      "series": 17,
+      "points": 1377,
+      "segments": 66,
+      "ring_artifacts_still_present": true
+    },
+    "P8_06": {
+      "panel_a_red_points": 22146,
+      "panel_a_red_segments": 178,
+      "panel_a_blue_points": 1835,
+      "panel_a_blue_segments": 26,
+      "panel_b_points": 1226,
+      "panel_c_points": 0,
+      "panel_d_series": 3,
+      "panel_d_points": 953,
+      "panel_d_second_red_points": 319
+    }
+  },
+  "verdict": {
+    "overall": "PARTIAL - not accepted",
+    "panel_d_restored": "PASS",
+    "callout_exclusion_qc": "FAIL",
+    "p3_ring_artifacts": "FAIL - still present",
+    "segment_geometry": "PASS",
+    "scientific_point_accuracy": "NOT_ASSESSED_NO_ANNOTATED_BENCHMARK"
+  },
+  "artifacts": [
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P3_02_reconstructed.png",
+      "repo_path": "review/partial-branch-qc-preservation/P3_02_reconstructed.png",
+      "bytes": 204383,
+      "sha256": "e2ebc6508d14e9f0326f049d4182467e0daf969c2936608e83a4b372a7ee38a9"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P3_02_side_by_side.png",
+      "repo_path": "review/partial-branch-qc-preservation/P3_02_side_by_side.png",
+      "bytes": 988542,
+      "sha256": "55006ebda28ee97d9f79052c97f8474675e9e0020d416fd58d1d5947a9dccabb"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P3_02_overlay.png",
+      "repo_path": "review/partial-branch-qc-preservation/P3_02_overlay.png",
+      "bytes": 807533,
+      "sha256": "a5533a351143e385950f71684f139276aa16658e98c36d6698cd18ea41f4c534"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P8_06_reconstructed.png",
+      "repo_path": "review/partial-branch-qc-preservation/P8_06_reconstructed.png",
+      "bytes": 254194,
+      "sha256": "63b8c2433fc25489811691917c71de3ddf73f8355f690ed2f5ccaad74c8452d2"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P8_06_side_by_side.png",
+      "repo_path": "review/partial-branch-qc-preservation/P8_06_side_by_side.png",
+      "bytes": 719263,
+      "sha256": "57e2e4caacc6e2f14e4ebcad4f3cb2c25975a508008ed1df5aee9e1952b023cb"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\P8_06_overlay.png",
+      "repo_path": "review/partial-branch-qc-preservation/P8_06_overlay.png",
+      "bytes": 467545,
+      "sha256": "549256a018eb2db5a120db533a79579665b8fa1275cec826a4540cc92cbed399"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-branch-qc-preservation\\validation_report.md",
+      "repo_path": "review/partial-branch-qc-preservation/validation_report.md",
+      "bytes": 14660,
+      "sha256": "6732afa9c9994d12e030667b4e807d615909d4e3cb3383b79a96676e38fe7f58"
+    }
+  ],
+  "artifact_count": 7,
+  "total_artifact_bytes": 3456120,
+  "manifest_note": "Self-hash omitted (circular); all other artifacts hashed."
+}
