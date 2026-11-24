@@ -460,11 +460,11 @@ def _ordered_skeleton_paths(
             # separate series. It is a spur/annotation candidate, not a
             # uniquely traceable endpoint-to-endpoint curve.
             if len(adjacency[path[0]]) != 1 or len(adjacency[path[-1]]) != 1:
-                continue
+                return
             paths.append(path)
 
-    # Endpoint-origin paths include both the main trajectory and any unpaired
-    # spur. A short marker loop has no endpoint and is deliberately not traced.
+    # Endpoint-origin paths must terminate at endpoints on both sides. A short
+    # spur ending at a junction and a marker loop are deliberately not traced.
     for endpoint in sorted(endpoints, key=lambda point: (point[1], point[0])):
         neighbour = adjacency[endpoint][0]
         if edge_key(endpoint, neighbour) not in used_edges:
