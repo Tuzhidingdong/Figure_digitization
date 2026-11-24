@@ -1793,6 +1793,9 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert excluded_record.get("source_qc_rejection_reason") == (
         "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
     ), excluded_record
+    assert excluded_record.get("source_path_qc_reason") == (
+        "UNSUPPORTED_JUNCTION_PORT_COUNT"
+    ), excluded_record
     points, qc = trace_monotonic_color(
         str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
     )
@@ -1812,6 +1815,40 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert qc["excluded_partial_branches"][0]["bbox"] == [82, 8, 126, 18], qc
 
 
+
+
+
+def test_compact_rejected_component_uses_top_level_reason_when_nested_qc_differs():
+    from scientific_figure_data.raster import _compact_rejected_review_candidates
+
+    selected_group = [{
+        "bbox": [11, 25, 179, 77],
+        "pixel_count": 366,
+        "path_kind": "FULL_X_SPAN_PATH",
+        "path_qc": {"status": "PATHS_EXTRACTED"},
+    }]
+    rejected = [{
+        "bbox": [82, 8, 126, 18],
+        "pixel_count": 71,
+        "rejection_reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+        "path_qc": {
+            "status": "NEEDS_REVIEW",
+            "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+        },
+    }]
+
+    excluded = _compact_rejected_review_candidates(rejected, selected_group)
+    assert len(excluded) == 1, excluded
+    assert excluded[0]["rejection_reason"] == (
+        "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
+    )
+    assert excluded[0]["source_qc_rejection_reason"] == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    )
+    assert excluded[0]["source_path_qc_reason"] == "UNSUPPORTED_JUNCTION_PORT_COUNT"
+    assert excluded[0]["classification"] == (
+        "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC"
+    )
 
 
 def test_full_span_partial_qc_branch_is_not_auto_excluded():
