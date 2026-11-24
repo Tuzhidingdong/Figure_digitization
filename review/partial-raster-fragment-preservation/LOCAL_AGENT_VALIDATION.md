@@ -3,7 +3,7 @@
 Repository: `Tuzhidingdong/Figure_digitization`
 Target branch: `fix/partial-raster-fragment-preservation`
 Validation baseline commit: `43d1b6c5aca07b9ee22977f0eae360154912a7fe`
-Current branch HEAD at handoff: `eaeed9bf6c07fff07b4282f559534bd9338c8876`
+Current branch HEAD at handoff: `e03a5bc034f0651025313d7ec8e854c4de906357`
 Algorithm version: `0.7.0`
 
 This is a candidate implementation. It has **not** been executed in the local Windows environment and is not yet accepted.
