@@ -555,7 +555,7 @@ def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
     path = paper_root / "series" / f"{figure_id}__{panel_id}" / "panel_series.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
-        "series_id", "point_index", "x_value", "x_label", "y_value",
+        "series_id", "point_index", "path_segment_index", "x_value", "x_label", "y_value",
         "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type",
         "y_axis_side", "y_left_candidate", "y_right_candidate", "y_mapping_status",
     ]
@@ -616,10 +616,29 @@ def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
                     return ""
                 return float(slope) * float(pixel_y) + float(intercept)
 
+            raster_qc = item.metadata.get("raster_qc", {})
+            path_segments = (
+                raster_qc.get("path_segments", [])
+                if isinstance(raster_qc, dict) else []
+            )
+            segment_by_point = {}
+            for segment in path_segments if isinstance(path_segments, list) else []:
+                if not isinstance(segment, dict):
+                    continue
+                try:
+                    segment_index = int(segment["segment_index"])
+                    segment_start = int(segment["start_point_index"])
+                    segment_end = int(segment["end_point_index"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                for point_index in range(segment_start, segment_end + 1):
+                    segment_by_point[point_index] = segment_index
+
             for point in item.points:
                 writer.writerow({
                     "series_id": item.series_id,
                     "point_index": point.point_index,
+                    "path_segment_index": segment_by_point.get(point.point_index, 0),
                     "x_value": point.x if isinstance(point.x, (int, float)) else "",
                     "x_label": point.x if isinstance(point.x, str) else "",
                     "y_value": point.y if point.y is not None else "",
