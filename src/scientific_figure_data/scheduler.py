@@ -19,7 +19,10 @@ from .storage import connect_catalog, Catalog
 from .hashing import atomic_write_json, sha256_json
 
 
-def _worker_initializer(temp_directory: str | None = None):
+def _worker_initializer(
+    temp_directory: str | None = None,
+    worker_log_directory: str | None = None,
+):
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
@@ -29,11 +32,142 @@ def _worker_initializer(temp_directory: str | None = None):
             os.environ[variable] = temp_directory
         import tempfile
         tempfile.tempdir = temp_directory
+
+    # A spawned worker must not keep the caller's stdout/stderr pipe open.
+    # This is especially important on Windows, where a surviving child can
+    # otherwise prevent PowerShell/Tee-Object from observing end-of-file after
+    # an abnormal parent exit. Keep worker diagnostics in a per-run log instead.
+    if worker_log_directory:
+        from pathlib import Path
+        Path(worker_log_directory).mkdir(parents=True, exist_ok=True)
+        log_path = Path(worker_log_directory) / f"worker-{os.getpid()}.log"
+        try:
+            import sys
+            for stream in (sys.stdout, sys.stderr):
+                try:
+                    stream.flush()
+                except Exception:
+                    pass
+            log_handle = open(log_path, "a", encoding="utf-8", buffering=1)
+            os.dup2(log_handle.fileno(), 1)
+            os.dup2(log_handle.fileno(), 2)
+            log_handle.close()
+        except OSError:
+            # Fall back to os.devnull so the worker still releases inherited
+            # console/pipe handles even when the diagnostic directory is not writable.
+            devnull = open(os.devnull, "w", encoding="utf-8")
+            os.dup2(devnull.fileno(), 1)
+            os.dup2(devnull.fileno(), 2)
+            devnull.close()
+
     try:
         import cv2
         cv2.setNumThreads(1)
     except ImportError:
         pass
+
+    # ProcessPoolExecutor workers may be executing native OCR/image code when
+    # their parent disappears. The parent sentinel is more reliable than PID
+    # polling (which can be confused by PID reuse); exit promptly if orphaned.
+    try:
+        from multiprocessing import parent_process
+        from threading import Thread
+
+        parent = parent_process()
+        if parent is not None:
+            def watch_parent():
+                while True:
+                    try:
+                        if not parent.is_alive():
+                            os._exit(0)
+                    except Exception:
+                        os._exit(0)
+                    time.sleep(1.0)
+
+            Thread(
+                target=watch_parent,
+                name="sfd-parent-liveness-guard",
+                daemon=True,
+            ).start()
+    except Exception:
+        # The bounded executor shutdown remains the fallback if a runtime does
+        # not expose parent_process() as expected.
+        pass
+
+
+def _shutdown_executor_bounded(executor, grace_seconds: float = 8.0) -> dict:
+    """Stop only this executor's children, with a bounded wait and escalation.
+
+    ProcessPoolExecutor.shutdown(wait=True) can wait forever for a stuck native
+    worker. Capture the executor-owned process handles, request normal shutdown,
+    then terminate/kill only those exact children if they do not exit in time.
+    """
+    if executor is None:
+        return {"status": "NOT_CREATED", "workers": []}
+
+    processes = list((getattr(executor, "_processes", None) or {}).values())
+    shutdown_error = None
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)
+    except TypeError:
+        try:
+            executor.shutdown(wait=False)
+        except Exception as exc:
+            shutdown_error = f"{type(exc).__name__}: {exc}"
+    except Exception as exc:
+        shutdown_error = f"{type(exc).__name__}: {exc}"
+
+    deadline = time.monotonic() + max(0.0, float(grace_seconds))
+    for process in processes:
+        try:
+            process.join(timeout=max(0.0, deadline - time.monotonic()))
+        except (AssertionError, OSError, ValueError):
+            continue
+
+    worker_reports = []
+    for process in processes:
+        try:
+            alive = process.is_alive()
+        except (AssertionError, OSError, ValueError):
+            alive = False
+        action = "EXITED_GRACEFULLY"
+        if alive:
+            action = "TERMINATE_SENT"
+            try:
+                process.terminate()
+                process.join(timeout=2.0)
+            except (AssertionError, OSError, ValueError):
+                pass
+            try:
+                alive = process.is_alive()
+            except (AssertionError, OSError, ValueError):
+                alive = False
+        if alive and callable(getattr(process, "kill", None)):
+            action = "KILL_SENT"
+            try:
+                process.kill()
+                process.join(timeout=2.0)
+            except (AssertionError, OSError, ValueError):
+                pass
+            try:
+                alive = process.is_alive()
+            except (AssertionError, OSError, ValueError):
+                alive = False
+        worker_reports.append({
+            "pid": getattr(process, "pid", None),
+            "exitcode": getattr(process, "exitcode", None),
+            "action": action,
+            "still_alive": bool(alive),
+        })
+
+    return {
+        "status": (
+            "WORKERS_REAPED" if not any(item["still_alive"] for item in worker_reports)
+            else "WORKER_REMAINS_AFTER_KILL"
+        ),
+        "shutdown_error": shutdown_error,
+        "workers": worker_reports,
+    }
 
 
 def _process_paper_task(input_root: str, paper_relative: str, output_root: str,
@@ -221,6 +355,10 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     temp_parent = output_root / ".sfd-runtime-tmp"
     temp_parent.mkdir(parents=True, exist_ok=True)
     run_temp_directory = Path(tempfile.mkdtemp(prefix=f"run-{os.getpid()}-", dir=temp_parent))
+    worker_log_directory = (
+        output_root / "logs" / f"workers-run-{os.getpid()}-{time.time_ns()}"
+    )
+    worker_log_directory.mkdir(parents=True, exist_ok=False)
     original_tempdir = tempfile.tempdir
     original_temp_env = {name: os.environ.get(name) for name in ("TMP", "TEMP", "TMPDIR")}
     for name in ("TMP", "TEMP", "TMPDIR"):
@@ -232,6 +370,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     sfd_temp_bytes_before_cleanup = 0
     sfd_temp_cleanup_succeeded = False
     sfd_worker_temp_isolation_verified = None
+    executor_shutdown_reports = []
     run_temp_relative = run_temp_directory.relative_to(output_root).as_posix()
 
     ledger = JobLedger(output_root / "catalog.sqlite", lease_seconds)
@@ -247,7 +386,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     def new_executor():
         return ProcessPoolExecutor(
             max_workers=workers, mp_context=context,
-            initializer=_worker_initializer, initargs=(str(run_temp_directory),),
+            initializer=_worker_initializer,
+            initargs=(str(run_temp_directory), str(worker_log_directory)),
             max_tasks_per_child=5,
         )
 
@@ -381,7 +521,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         ledger.finish(paper_id, JobState.FAILED_PERMANENT.value, error)
                         results["failed"] += 1
                     if not running:
-                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor_shutdown_reports.append(
+                            _shutdown_executor_bounded(executor, grace_seconds=1.0)
+                        )
                         executor_generation += 1
                         executor = new_executor()
                     break
@@ -481,7 +623,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                                               "WORKER_POOL_BROKEN: retry limit reached")
                                 results["failed"] += 1
                             running.pop(pending_future, None)
-                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor_shutdown_reports.append(
+                            _shutdown_executor_bounded(executor, grace_seconds=1.0)
+                        )
                         executor_generation += 1
                         executor = new_executor()
             for _, paper_id, _ in running.values():
@@ -504,7 +648,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
     finally:
         try:
             if executor is not None:
-                executor.shutdown(wait=True, cancel_futures=True)
+                executor_shutdown_reports.append(
+                    _shutdown_executor_bounded(executor, grace_seconds=8.0)
+                )
         finally:
             sfd_temp_bytes_before_cleanup = _directory_file_bytes(run_temp_directory)
             peak_sfd_temp_bytes = max(peak_sfd_temp_bytes, sfd_temp_bytes_before_cleanup)
@@ -609,6 +755,8 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         "workers": workers,
         "requested_workers": requested_workers,
         "max_open_pdfs": max_open_pdfs,
+        "worker_log_directory": worker_log_directory.as_posix(),
+        "worker_shutdown": executor_shutdown_reports,
         "elapsed_seconds": round(elapsed, 3),
         "throughput_papers_per_minute": round((total_seen / elapsed) * 60, 3) if elapsed else 0.0,
         "peak_parent_and_worker_rss_bytes": peak_rss_bytes or None,

@@ -538,7 +538,12 @@ def _replace_series_points_atomic(
         with csv_path.open("r", newline="", encoding="utf-8") as source, \
              os.fdopen(fd, "w", newline="", encoding="utf-8") as target:
             reader = csv.DictReader(source)
-            writer = csv.DictWriter(target, fieldnames=header)
+            # Preserve additive columns introduced by newer extraction
+            # schemas, including candidate values for unresolved dual Y axes.
+            # Replacing reviewed point rows may leave those candidates blank,
+            # but must not discard or reject metadata columns on untouched rows.
+            output_header = list(dict.fromkeys((reader.fieldnames or []) + header))
+            writer = csv.DictWriter(target, fieldnames=output_header)
             writer.writeheader()
             replaced_ids = set(replacements)
             for row in reader:

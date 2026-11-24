@@ -19,9 +19,10 @@ from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
 from .pdf_backend import PdfiumBackend
-from .raster import map_explicit_polyline, trace_monotonic_color
+from .raster import (map_explicit_polyline, trace_monotonic_color,
+                     detect_monotonic_color_branches)
 from .profiles import profile_registry_fingerprint
-from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, estimate_ocr_text_ink_color)
+from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, detect_colored_y_axis_spines, estimate_ocr_text_ink_color)
 from .panel_segmentation import detect_panel_regions
 from .trace_spec import generate_trace_specification
 from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
@@ -30,7 +31,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.4.0"
+ALGORITHM_VERSION = "0.6.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -603,7 +604,7 @@ def _extract_panel(
         }]
 
     # Expand only an unconfigured default record, and only when chart semantics
-    # and plot geometry support the X-monotonic tracer. Explicit series definitions
+    # and plot geometry support ordered-X connected 2-D raster paths. Explicit series definitions
     # are never replaced or reinterpreted by this visual candidate pass.
     if (
         generated_default_definition and image_path and len(definitions) == 1
@@ -670,15 +671,39 @@ def _extract_panel(
                     and len(candidates) >= 2
                 )
                 for color_index, candidate in enumerate(candidates, 1):
-                    definition = dict(base_definition)
-                    if multiple_families:
-                        definition["series_id"] = f"{base_id}_auto_color_{color_index:02d}"
-                    definition["color_rgb"] = list(candidate["color_rgb"])
-                    definition["_auto_color_candidate"] = dict(candidate)
-                    definition["_auto_color_detection"] = family_detection
-                    definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
-                    definition["_auto_plot_detection"] = pre_plot_detection
-                    expanded.append(definition)
+                    branch_detection = detect_monotonic_color_branches(
+                        str(image_path),
+                        tuple(int(value) for value in candidate["color_rgb"]),
+                        int(candidate.get("color_tolerance", 24)),
+                        plot_box=tuple(pre_plot_box_pixels),
+                        color_match=candidate.get("color_match"),
+                    )
+                    branch_count = (
+                        int(branch_detection.get("branch_count", 1))
+                        if branch_detection.get("status") == "MULTIPLE_MONOTONIC_COLOR_BRANCHES"
+                        else 1
+                    )
+                    for branch_index in range(branch_count):
+                        definition = dict(base_definition)
+                        color_id = (
+                            f"{base_id}_auto_color_{color_index:02d}"
+                            if multiple_families else base_id
+                        )
+                        if multiple_families or branch_count > 1:
+                            definition["series_id"] = (
+                                f"{color_id}_branch_{branch_index + 1:02d}"
+                                if branch_count > 1 else color_id
+                            )
+                        definition["color_rgb"] = list(candidate["color_rgb"])
+                        definition["_auto_color_candidate"] = dict(candidate)
+                        definition["_auto_color_detection"] = family_detection
+                        definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
+                        definition["_auto_plot_detection"] = pre_plot_detection
+                        definition["_auto_trace_branch_detection"] = branch_detection
+                        if branch_count > 1:
+                            definition["_auto_trace_branch_index"] = branch_index
+                            definition["_auto_trace_branch_count"] = branch_count
+                        expanded.append(definition)
                 if expanded:
                     definitions = expanded
 
@@ -786,7 +811,11 @@ def _extract_panel(
         family = explicit_family or str(classification.get("chart_family", "UNCLASSIFIED")).upper()
         record.metadata["chart_family_classification"] = classification
 
-        plot_box = definition.get("plot_box") or definition.get("_auto_plot_box_pixels")
+        plot_box = (
+            definition.get("plot_box")
+            or definition.get("_auto_plot_box_pixels")
+            or panel.get("plot_box")
+        )
         plot_detection = definition.get("_auto_plot_detection")
         if not plot_box and image_path:
             try:
@@ -867,11 +896,23 @@ def _extract_panel(
         native_payload = None
         x_axis_anchors = definition.get("x_axis_anchors", [])
         y_axis_anchors = definition.get("y_axis_anchors", [])
+        explicit_y_side = definition.get("y_axis_side") or panel.get("y_axis_side")
+        automatic_color_candidate = isinstance(
+            definition.get("_auto_color_candidate"), dict
+        )
         requested_y_side = str(
-            definition.get("y_axis_side") or panel.get("y_axis_side") or record.y_axis_side or "UNASSIGNED"
+            explicit_y_side
+            or (record.y_axis_side if not automatic_color_candidate else "UNASSIGNED")
+            or "UNASSIGNED"
         ).upper()
         if requested_y_side not in {"LEFT", "RIGHT"}:
             requested_y_side = "UNASSIGNED"
+        # An OCR axis title identifies a panel axis, not necessarily the Y axis
+        # used by every automatically discovered color family. For dual-axis
+        # plots, leave each automatic family unassigned until color evidence is
+        # evaluated against both calibrated sides.
+        if automatic_color_candidate and explicit_y_side is None:
+            record.y_axis_side = "UNASSIGNED"
         y_axis_anchors_by_side = {"LEFT": [], "RIGHT": []}
         if len(y_axis_anchors) >= 2 and requested_y_side in y_axis_anchors_by_side:
             y_axis_anchors_by_side[requested_y_side] = list(y_axis_anchors)
@@ -1074,6 +1115,16 @@ def _extract_panel(
             axis_ocr_rows = ocr_axis_evidence if isinstance(ocr_axis_evidence, dict) else {}
             side_matches = []
             side_color_evidence = {}
+            try:
+                axis_spine_detection = detect_colored_y_axis_spines(
+                    image_path, tuple(plot_box_pixels)
+                )
+            except OptionalDependencyError:
+                axis_spine_detection = {
+                    "status": "UNAVAILABLE",
+                    "reason": "OPTIONAL_IMAGE_DEPENDENCY_MISSING",
+                    "sides": {},
+                }
             curve_color_match = (
                 color_detection.get("color_match")
                 if isinstance(color_detection, dict) else None
@@ -1102,12 +1153,36 @@ def _extract_panel(
                     "status": "NO_AXIS_TITLE_COLOR_EVIDENCE",
                     "colored_label_count": 0,
                 }
+                spine_evidence = (
+                    axis_spine_detection.get("sides", {}).get(side, {})
+                    if isinstance(axis_spine_detection, dict) else {}
+                )
+                spine_ink = {
+                    "status": (
+                        "CHROMATIC_TEXT_COLOR_DETECTED"
+                        if spine_evidence.get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                        else spine_evidence.get("status", "NO_AXIS_SPINE_COLOR_EVIDENCE")
+                    ),
+                    "color_rgb": spine_evidence.get("color_rgb"),
+                    "hue_degrees": spine_evidence.get("hue_center_degrees"),
+                    "hue_purity": spine_evidence.get("hue_purity"),
+                    "vertical_row_coverage": spine_evidence.get("vertical_row_coverage"),
+                    "longest_vertical_run_fraction": spine_evidence.get(
+                        "longest_vertical_run_fraction"
+                    ),
+                    "chromatic_pixel_count": spine_evidence.get("chromatic_pixel_count", 0),
+                }
                 candidate_inks = []
                 for source_name, ink in (
                     ("NUMERIC_TICK_LABELS", tick_ink),
                     ("AXIS_TITLE", title_ink),
+                    ("AXIS_SPINE", spine_ink),
                 ):
-                    if ink.get("status") == "CHROMATIC_TEXT_COLOR_DETECTED":
+                    if (
+                        ink.get("status") == "CHROMATIC_TEXT_COLOR_DETECTED"
+                        and isinstance(ink.get("color_rgb"), (list, tuple))
+                        and len(ink["color_rgb"]) == 3
+                    ):
                         candidate_inks.append({"source": source_name, **ink})
 
                 def ink_distance(ink):
@@ -1144,8 +1219,9 @@ def _extract_panel(
                 side_color_evidence[side] = {
                     "tick_labels": tick_ink,
                     "axis_title": title_ink,
+                    "axis_spine": spine_evidence,
                     "candidate_inks": candidate_inks,
-                    "conflicting_text_color_sources": conflicting_sources,
+                    "conflicting_color_sources": conflicting_sources,
                 }
                 if not conflicting_sources and matching:
                     selected_ink = min(matching, key=lambda item: item[0])
@@ -1163,14 +1239,100 @@ def _extract_panel(
                     side: round(distance, 3)
                     for side, distance, _, _ in side_matches
                 },
-                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_AXIS_TEXT_COLOR",
+                "axis_spine_detection": axis_spine_detection,
+                "matching_rule": "UNIQUE_CURVE_TO_CHROMATIC_Y_AXIS_TEXT_OR_SPINE_COLOR",
             }
             if len(side_matches) == 1:
                 selected_side, distance, selected_ink, distance_kind = side_matches[0]
                 y_cal = y_axis_calibrations[selected_side]
                 y_axis_anchors = y_axis_anchors_by_side[selected_side]
                 record.y_axis_side = selected_side
+                y_axis_text_color_association["status"] = "MATCHED"
+                y_axis_text_color_association["selected_side"] = selected_side
                 calibration_errors.pop("y", None)
+            elif not side_matches and automatic_color_candidate and len(y_axis_calibrations) == 2:
+                # Some dual-axis figures color only one Y axis. If exactly two
+                # independently detected hue families exist and exactly one
+                # family is uniquely tied to one chromatic axis, the other hue
+                # family may be assigned to the sole remaining axis by
+                # exclusion. This is recorded as provisional evidence, never
+                # treated as an explicit user-side assignment.
+                family_detection = (
+                    definition.get("_auto_color_detection")
+                    or (color_detection.get("family_detection")
+                        if isinstance(color_detection, dict) else None)
+                )
+                family_candidates = (
+                    family_detection.get("families", [])
+                    if isinstance(family_detection, dict) else []
+                )
+                if len(family_candidates) == 2 and curve_hue is not None:
+                    sibling_hues = [
+                        float(item["color_match"]["hue_center_degrees"])
+                        for item in family_candidates
+                        if isinstance(item.get("color_match"), dict)
+                        and item["color_match"].get("hue_center_degrees") is not None
+                        and abs(
+                            (float(item["color_match"]["hue_center_degrees"])
+                             - curve_hue + 180.0) % 360.0 - 180.0
+                        ) > 2.0
+                    ]
+                    if len(sibling_hues) == 1:
+                        sibling_matches = []
+                        for side, evidence in side_color_evidence.items():
+                            for ink in evidence.get("candidate_inks", []):
+                                ink_hue = ink.get("hue_degrees")
+                                if ink_hue is None:
+                                    continue
+                                distance = abs(
+                                    (float(ink_hue) - sibling_hues[0] + 180.0) % 360.0 - 180.0
+                                )
+                                if distance <= 14.0:
+                                    sibling_matches.append(side)
+                                    break
+                        sibling_sides = sorted(set(sibling_matches))
+                        if len(sibling_sides) == 1:
+                            sibling_side = sibling_sides[0]
+                            residual_side = next(
+                                side for side in ("LEFT", "RIGHT")
+                                if side != sibling_side
+                            )
+                            sibling_evidence = side_color_evidence.get(sibling_side, {})
+                            residual_evidence = side_color_evidence.get(residual_side, {})
+                            sibling_has_spine = (
+                                sibling_evidence.get("axis_spine", {}).get("status")
+                                == "CHROMATIC_Y_AXIS_SPINE_DETECTED"
+                            )
+                            residual_has_color = bool(
+                                residual_evidence.get("candidate_inks")
+                            )
+                            if (
+                                sibling_has_spine
+                                and not residual_has_color
+                                and not sibling_evidence.get("conflicting_color_sources")
+                                and not residual_evidence.get("conflicting_color_sources")
+                            ):
+                                y_cal = y_axis_calibrations[residual_side]
+                                y_axis_anchors = y_axis_anchors_by_side[residual_side]
+                                record.y_axis_side = residual_side
+                                y_axis_text_color_association = {
+                                    **y_axis_text_color_association,
+                                    "status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+                                    "selected_side": residual_side,
+                                    "sibling_color_hue_degrees": sibling_hues[0],
+                                    "sibling_selected_side": sibling_side,
+                                    "assignment_basis": (
+                                        "TWO_HUE_FAMILIES_ONE_CHROMATIC_Y_AXIS_SPINE"
+                                    ),
+                                }
+                                calibration_errors.pop("y", None)
+            association_status = y_axis_text_color_association.get("status")
+            if association_status == "MATCHED":
+                selected_side = y_axis_text_color_association["selected_side"]
+                selected_match = next(
+                    item for item in side_matches if item[0] == selected_side
+                )
+                distance, selected_ink, distance_kind = selected_match[1:]
                 series_axis_assignment = {
                     "status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
                     "selected_side": selected_side,
@@ -1178,11 +1340,37 @@ def _extract_panel(
                     "reason": None,
                     "evidence": {
                         "curve_color_rgb": [int(value) for value in trace_color_rgb],
-                        "axis_text_color_rgb": selected_ink["color_rgb"],
-                        "axis_text_evidence_source": selected_ink["source"],
+                        "axis_color_evidence_rgb": selected_ink["color_rgb"],
+                        "axis_color_evidence_source": selected_ink["source"],
+                        # Preserve prior text-specific keys without
+                        # mislabelling an axis spine as text.
+                        "axis_text_color_rgb": (
+                            selected_ink["color_rgb"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
+                        "axis_text_evidence_source": (
+                            selected_ink["source"]
+                            if selected_ink["source"] != "AXIS_SPINE" else None
+                        ),
                         "distance_kind": distance_kind,
                         "color_distance": round(distance, 3),
                     },
+                }
+            elif association_status == "ASSIGNED_BY_DUAL_AXIS_EXCLUSION":
+                series_axis_assignment = {
+                    "status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+                    "selected_side": y_axis_text_color_association["selected_side"],
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": None,
+                    "evidence": y_axis_text_color_association,
+                }
+            else:
+                series_axis_assignment = {
+                    "status": "AMBIGUOUS_DUAL_Y_AXIS",
+                    "selected_side": None,
+                    "available_sides": list(y_axis_calibrations),
+                    "reason": "SERIES_TO_Y_AXIS_MAPPING_REQUIRED",
+                    "evidence": y_axis_text_color_association,
                 }
 
         plot_box_source = (
@@ -1366,12 +1554,19 @@ def _extract_panel(
                                "calibration_errors": calibration_errors}
         elif image_path and trace_specification.get("status") == "READY":
             specification = trace_specification["specification"]
+            branch_index = definition.get("_auto_trace_branch_index")
+            branch_count = definition.get("_auto_trace_branch_count")
             record.points, qc = trace_monotonic_color(
                 str(image_path), tuple(int(v) for v in specification["color_rgb"]),
                 int(specification["color_tolerance"]),
-                x_cal, y_cal, plot_box=tuple(specification["plot_box_pixels"]),
+                x_cal, y_cal,
+                plot_box=tuple(specification["plot_box_pixels"]),
                 color_match=specification.get("color_match"),
+                branch_index=int(branch_index) if branch_index is not None else None,
+                branch_count=int(branch_count) if branch_count is not None else None,
             )
+            if definition.get("_auto_trace_branch_detection"):
+                qc["branch_detection"] = definition["_auto_trace_branch_detection"]
             record.extraction_method = qc.get("method", "RASTER_COLOR")
             record.extraction_status = (
                 "EXTRACTED_PROVISIONAL" if record.points and x_cal and y_cal
@@ -1682,6 +1877,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         "error": f"{type(exc).__name__}: {exc}",
                     }
         panel_sources = _figure_panels(source_figure)
+        figure_layout_ocr_evidence: list[dict] = []
         if (
             len(panel_sources) == 1
             and panel_sources[0].get("segmentation_provenance") == "SINGLE_PANEL_FALLBACK"
@@ -1690,27 +1886,57 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             figure_image = _safe_local_file(paper_dir, str(source_figure.get("image_path")))
             if figure_image is not None:
                 try:
-                    whole_plot = detect_plot_box(figure_image)
-                    image_size = whole_plot.get("image_size") or [0, 0]
-                    whole_box = whole_plot.get("pixel_bbox")
-                    whole_area_fraction = 0.0
-                    if whole_box and len(image_size) == 2 and image_size[0] > 0 and image_size[1] > 0:
-                        whole_area_fraction = (
-                            max(0, whole_box[2] - whole_box[0])
-                            * max(0, whole_box[3] - whole_box[1])
-                            / (image_size[0] * image_size[1])
-                        )
-                    if whole_plot.get("status") == "PROVISIONAL_PLOT_BOX" and whole_area_fraction >= 0.42:
-                        figure["panel_segmentation"] = {
-                            "status": "SINGLE_PANEL_FRAME_RETAINED",
-                            "reason": "ONE_DOMINANT_PLOT_FRAME_COVERS_MOST_OF_SOURCE_IMAGE",
-                            "plot_detection": whole_plot,
-                        }
+                    # OCR boxes are useful layout evidence: axis titles, ticks and
+                    # subfigure labels can otherwise bridge otherwise empty
+                    # inter-panel whitespace in geometric projections. Reuse
+                    # this one full-figure OCR pass for each resulting crop.
+                    if options.get("ocr"):
+                        try:
+                            from .ocr import run_ocr
+                            figure_layout_ocr_evidence = run_ocr(figure_image)
+                        except Exception as ocr_exc:
+                            snapshot.warnings.append(
+                                f"OCR_LAYOUT_PROBE_FAILED:{figure_id}:{type(ocr_exc).__name__}"
+                            )
+                    # Always inspect the complete figure for multiple panel frames
+                    # before accepting any one large rectangle as the only plot.
+                    segmentation = detect_panel_regions(
+                        figure_image,
+                        ocr_rows=figure_layout_ocr_evidence or None,
+                    )
+                    figure["panel_segmentation"] = segmentation
+                    if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
+                        panel_sources = segmentation["panels"]
+                    elif segmentation.get("status") == "SINGLE_PLOT_FRAME_DETECTED":
+                        frame_box = segmentation.get("plot_frame_bbox_pixels")
+                        if isinstance(frame_box, list) and len(frame_box) == 4:
+                            panel_sources = [{
+                                "panel_id": "auto-single-frame",
+                                "plot_box": frame_box,
+                                "segmentation_provenance": "AUTO_SINGLE_PLOT_FRAME_CANDIDATE",
+                                "segmentation_status": "SINGLE_PLOT_FRAME_RETAINED",
+                            }]
+                            figure["panel_segmentation"] = {
+                                "status": "SINGLE_PANEL_FRAME_RETAINED",
+                                "reason": "ONE_SUPPORTED_PLOT_FRAME",
+                                "plot_frame_detection": segmentation.get("plot_frame_detection"),
+                                "plot_frame_bbox_pixels": frame_box,
+                            }
                     else:
-                        segmentation = detect_panel_regions(figure_image)
-                        figure["panel_segmentation"] = segmentation
-                        if segmentation.get("status") == "PROVISIONAL_PANELS_DETECTED":
-                            panel_sources = segmentation["panels"]
+                        whole_plot = detect_plot_box(figure_image)
+                        if whole_plot.get("status") == "PROVISIONAL_PLOT_BOX":
+                            panel_sources = [{
+                                "panel_id": "auto-whole-frame",
+                                "plot_box": whole_plot.get("pixel_bbox"),
+                                "segmentation_provenance": "AUTO_SINGLE_PLOT_FRAME_FALLBACK",
+                                "segmentation_status": "SINGLE_PLOT_FRAME_RETAINED",
+                            }]
+                            figure["panel_segmentation"] = {
+                                "status": "SINGLE_PANEL_FRAME_RETAINED",
+                                "reason": "ONE_PLOT_FRAME_FALLBACK_AFTER_MULTI_PANEL_SCAN",
+                                "plot_detection": whole_plot,
+                                "multi_panel_detection": segmentation,
+                            }
                 except OptionalDependencyError as exc:
                     figure["panel_segmentation"] = {
                         "status": "UNAVAILABLE", "reason": str(exc),
@@ -1726,7 +1952,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             panel_path = _safe_local_file(paper_dir, panel.get("image_path") or source_figure.get("image_path"))
             saved_crop = None
             crop_mapping = None
-            auto_panel_bbox = panel.get("segmentation_provenance") == "AUTO_RASTER_WHITESPACE_SEGMENTATION"
+            auto_panel_bbox = panel.get("segmentation_provenance") in {
+                "AUTO_RASTER_WHITESPACE_SEGMENTATION",
+                "AUTO_PLOT_FRAME_CANDIDATE_SEGMENTATION",
+            }
             if panel_path and bbox and (not panel_specific_image or auto_panel_bbox):
                 if _within_paper_disk_budget(paper_output, temp_disk_limit_mb, context_index_bytes):
                     saved_crop = _crop_local_image(
@@ -1807,13 +2036,54 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             ocr_evidence = []
             ocr_status = {"status": "NOT_REQUESTED"}
             if options.get("ocr"):
-                if saved_crop:
+                if (
+                    saved_crop
+                    and figure_layout_ocr_evidence
+                    and auto_panel_bbox
+                    and isinstance(bbox, (list, tuple))
+                    and len(bbox) == 4
+                ):
+                    # Localize full-figure OCR polygons into the saved panel crop.
+                    # The crop is an unscaled pixel slice of the source image.
+                    x0, y0, x1, y1 = [float(value) for value in bbox]
+                    for row in figure_layout_ocr_evidence:
+                        if not isinstance(row, dict):
+                            continue
+                        polygon = row.get("polygon")
+                        if not isinstance(polygon, list) or len(polygon) < 4:
+                            continue
+                        try:
+                            points = [
+                                [float(point[0]), float(point[1])]
+                                for point in polygon
+                                if isinstance(point, (list, tuple)) and len(point) >= 2
+                            ]
+                            if len(points) < 4:
+                                continue
+                            center_x = sum(point[0] for point in points) / len(points)
+                            center_y = sum(point[1] for point in points) / len(points)
+                        except (TypeError, ValueError, OverflowError, IndexError):
+                            continue
+                        if x0 <= center_x < x1 and y0 <= center_y < y1:
+                            localized = dict(row)
+                            localized["polygon"] = [
+                                [point[0] - x0, point[1] - y0]
+                                for point in points
+                            ]
+                            ocr_evidence.append(localized)
+                    ocr_status = {
+                        "status": "FIGURE_OCR_REUSED" if ocr_evidence else "FIGURE_OCR_EMPTY_FOR_PANEL",
+                        "record_count": len(ocr_evidence),
+                        "source": "FULL_FIGURE_OCR",
+                    }
+                if saved_crop and not ocr_evidence:
                     try:
                         from .ocr import run_ocr
                         ocr_evidence = run_ocr(saved_crop)
                         ocr_status = {
                             "status": "SUCCEEDED" if ocr_evidence else "SUCCEEDED_EMPTY",
                             "record_count": len(ocr_evidence),
+                            "source": "PANEL_CROP_OCR",
                         }
                     except Exception as exc:
                         error_message = str(exc).strip() or "No error message supplied."
@@ -1826,7 +2096,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                             f"OCR_FAILED:{figure_id}/{panel_id}:{type(exc).__name__}"
                         )
                         review_needed = True
-                else:
+                elif not saved_crop:
                     ocr_status = {
                         "status": "NOT_RUN",
                         "reason": "NO_SAVED_PANEL_IMAGE",
@@ -1873,8 +2143,12 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                         }
                     if rendering.get("status") in {"RENDERED", "GEOMETRY_ONLY_OVERLAY"}:
                         for path_key in ("reconstructed_path", "overlay_path"):
+                            path_value = rendering.get(path_key)
+                            if not path_value:
+                                rendering[path_key] = None
+                                continue
                             try:
-                                rendering[path_key] = Path(rendering[path_key]).resolve().relative_to(
+                                rendering[path_key] = Path(path_value).resolve().relative_to(
                                     paper_output.resolve()
                                 ).as_posix()
                             except (OSError, ValueError, TypeError):
@@ -1998,6 +2272,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "segmentation_provenance": panel.get("segmentation_provenance", "UNKNOWN"),
                 "segmentation_status": segmentation_status,
+                "plot_box": panel.get("plot_box"),
+                "plot_box_coordinate_space": panel.get(
+                    "plot_box_coordinate_space",
+                    "PANEL_IMAGE_PIXELS" if auto_panel_bbox else "SOURCE_IMAGE_PIXELS",
+                ),
+                "plot_frame_bbox_pixels": panel.get("plot_frame_bbox_pixels"),
+                "plot_frame_score": panel.get("plot_frame_score"),
                 "evidence_image_path": (
                     saved_crop.relative_to(paper_output).as_posix() if saved_crop else None
                 ),

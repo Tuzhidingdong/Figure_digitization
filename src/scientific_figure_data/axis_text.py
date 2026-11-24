@@ -85,11 +85,26 @@ def extract_numeric_axis_anchors(
             "text": text, "value": value, "pixel_x": cx, "pixel_y": cy,
             "confidence": confidence, "polygon": row.get("polygon"),
         }
-        if x0 <= cx <= x1 and y1 < cy <= y1 + margin_y:
+        # OCR tick-label boxes can straddle a plot boundary by a few pixels.
+        # Permit a small endpoint tolerance for X ticks, but do not use the
+        # much larger label-search margin: otherwise the first/last X tick can
+        # also be mistaken for a Y tick at a plot corner.
+        x_edge_tolerance = max(4.0, float(min_margin_pixels))
+        y_edge_tolerance = max(4.0, float(min_margin_pixels))
+        if (
+            x0 - x_edge_tolerance <= cx <= x1 + x_edge_tolerance
+            and y1 < cy <= y1 + margin_y
+        ):
             x_candidates.append({"pixel": cx, "value": value, "evidence": item})
-        elif x0 - margin_x <= cx <= x0 and y0 - margin_y <= cy <= y1 + margin_y:
+        elif (
+            x0 - margin_x <= cx < x0
+            and y0 - y_edge_tolerance <= cy <= y1 + y_edge_tolerance
+        ):
             y_left_candidates.append({"pixel": cy, "value": value, "evidence": item})
-        elif x1 <= cx <= x1 + margin_x and y0 - margin_y <= cy <= y1 + margin_y:
+        elif (
+            x1 < cx <= x1 + margin_x
+            and y0 - y_edge_tolerance <= cy <= y1 + y_edge_tolerance
+        ):
             y_right_candidates.append({"pixel": cy, "value": value, "evidence": item})
         else:
             continue

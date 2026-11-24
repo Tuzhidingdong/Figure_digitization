@@ -1483,6 +1483,37 @@ def test_plot_region_detector_finds_unique_rectangular_frame_and_rejects_borderl
     assert blank["status"] == "NEEDS_REVIEW"
 
 
+def test_plot_frame_scan_downsamples_before_rgb_conversion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_plot_box_candidates
+
+    # 5.72 MP grayscale source: conversion must occur only after the bounded
+    # analysis resize, rather than allocating a full-size RGB copy first.
+    image = Image.new("L", (2600, 2200), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((180, 160, 2420, 2040), outline=0, width=8)
+    image_path = tmp_path / "large-grayscale-plot.png"
+    image.save(image_path)
+
+    original_convert = Image.Image.convert
+    converted_sizes: list[tuple[int, int]] = []
+
+    def record_conversion(self, *args, **kwargs):
+        converted_sizes.append(self.size)
+        return original_convert(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", record_conversion)
+    result = detect_plot_box_candidates(image_path)
+
+    assert result["analysis_scale"] < 1.0
+    analysis_width, analysis_height = result["analysis_image_size"]
+    assert analysis_width * analysis_height <= 5_000_000
+    assert converted_sizes
+    assert all(width * height <= 5_000_000 for width, height in converted_sizes)
+
+
 def test_single_trace_color_detection_rejects_multicolor_plot(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.plot_region import detect_single_trace_color
@@ -1548,7 +1579,7 @@ def test_pipeline_auto_detects_simple_single_color_time_series_without_override(
     )
     assert len(records) == 1
     record = records[0]
-    assert record.extraction_method == "raster_color_column_median"
+    assert record.extraction_method == "raster_color_connected_path"
     assert record.extraction_status == "EXTRACTED_PROVISIONAL"
     assert len(record.points) >= 150
     assert record.metadata["plot_detection"]["status"] == "PROVISIONAL_PLOT_BOX"
@@ -1686,10 +1717,11 @@ def test_process_paper_pdf_crop_transform_uses_current_page_rotation_and_vector_
             "Figure1__a" / "panel_series.csv").is_file()
 
 
-def test_same_color_multiple_bands_are_rejected_by_raster_tracer(tmp_path: Path):
+def test_same_color_disconnected_paths_are_kept_as_separate_series(tmp_path: Path):
     from PIL import Image, ImageDraw
-    from scientific_figure_data.calibration import fit_linear_axis
-    from scientific_figure_data.raster import trace_monotonic_color
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
 
     image = Image.new("RGB", (120, 70), "white")
     draw = ImageDraw.Draw(image)
@@ -1697,14 +1729,140 @@ def test_same_color_multiple_bands_are_rejected_by_raster_tracer(tmp_path: Path)
     draw.line((5, 48, 115, 48), fill=(200, 30, 40), width=2)
     image_path = tmp_path / "same-color-two-curves.png"
     image.save(image_path)
-    x_cal = fit_linear_axis("x", [{"pixel": 0, "value": 0}, {"pixel": 120, "value": 12}], "s")
-    y_cal = fit_linear_axis("y", [{"pixel": 60, "value": 0}, {"pixel": 0, "value": 6}], "V")
-    points, qc = trace_monotonic_color(
-        str(image_path), (200, 30, 40), 5, x_cal, y_cal, plot_box=(0, 0, 120, 70)
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), (200, 30, 40), 5, plot_box=(0, 0, 120, 70)
     )
-    assert points == []
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 2, detected
+    for branch_index, expected_y in enumerate((15, 48)):
+        points, qc = trace_monotonic_color(
+            str(image_path), (200, 30, 40), 5, None, None,
+            plot_box=(0, 0, 120, 70), branch_index=branch_index, branch_count=2,
+        )
+        assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+        assert len(points) >= 100
+        assert all(abs(point.pixel_y - expected_y) <= 1 for point in points)
+        assert all(
+            right.pixel_x >= left.pixel_x - 1
+            for left, right in zip(points, points[1:])
+        )
+
+
+def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    color = (210, 25, 35)
+    image = Image.new("RGB", (190, 110), "white")
+    draw = ImageDraw.Draw(image)
+    waveform = [
+        (10, 25), (42, 25), (42, 76), (76, 76), (76, 25),
+        (110, 25), (110, 76), (144, 76), (144, 25), (180, 25),
+    ]
+    draw.line(waveform, fill=color, width=3)
+    # A closed callout box and short dashed annotation marks share the curve hue.
+    draw.rectangle((82, 8, 126, 18), outline=color, width=2)
+    for x in range(84, 124, 8):
+        draw.line((x, 4, min(x + 3, 124), 4), fill=color, width=2)
+    image_path = tmp_path / "waveform-with-callout.png"
+    image.save(image_path)
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), color, 6, plot_box=(4, 2, 186, 84)
+    )
+    assert detected["status"] == "SINGLE_MONOTONIC_COLOR_BAND", detected
+    assert detected["branch_count"] == 1, detected
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+    assert len(points) > 150
+    assert min(point.pixel_y for point in points) <= 26
+    assert max(point.pixel_y for point in points) >= 75
+    assert any(
+        max(point.pixel_x for point in points[index:index + 16])
+        - min(point.pixel_x for point in points[index:index + 16]) <= 1
+        and max(point.pixel_y for point in points[index:index + 16])
+        - min(point.pixel_y for point in points[index:index + 16]) >= 10
+        for index in range(max(0, len(points) - 15))
+    )
+    assert not any(8 <= point.pixel_y <= 18 for point in points)
+
+
+def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    color = (205, 25, 35)
+    image = Image.new("RGB", (120, 90), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((8, 12, 110, 76), fill=color, width=3)
+    draw.line((8, 76, 110, 12), fill=color, width=3)
+    image_path = tmp_path / "crossing-same-color-paths.png"
+    image.save(image_path)
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), color, 6, plot_box=(2, 2, 116, 86)
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 2, detected
+    slopes = []
+    for branch_index in range(2):
+        points, qc = trace_monotonic_color(
+            str(image_path), color, 6, None, None,
+            plot_box=(2, 2, 116, 86), branch_index=branch_index, branch_count=2,
+        )
+        assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+        assert len(points) >= 80
+        assert all(
+            right.pixel_x >= left.pixel_x - 1
+            for left, right in zip(points, points[1:])
+        )
+        slopes.append(points[-1].pixel_y - points[0].pixel_y)
+    assert slopes[0] * slopes[1] < 0, slopes
+
+
+def test_2d_path_tracer_rejects_unsupported_five_way_junction(tmp_path: Path):
+    from math import cos, pi, sin
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    color = (205, 25, 35)
+    image = Image.new("RGB", (140, 140), "white")
+    draw = ImageDraw.Draw(image)
+    center = (70, 70)
+    for index in range(5):
+        angle = -pi / 2 + index * (2 * pi / 5)
+        endpoint = (
+            int(round(center[0] + 58 * cos(angle))),
+            int(round(center[1] + 58 * sin(angle))),
+        )
+        draw.line((center, endpoint), fill=color, width=3)
+    draw.ellipse(
+        (center[0] - 6, center[1] - 6, center[0] + 6, center[1] + 6),
+        fill=color,
+    )
+    image_path = tmp_path / "unsupported-five-way-junction.png"
+    image.save(image_path)
+
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 6, None, None, plot_box=(2, 2, 138, 138)
+    )
+    assert points == [], qc
     assert qc["status"] == "NEEDS_REVIEW"
-    assert qc["reason"] == "MULTIPLE_SAME_COLOR_BANDS"
+    rejected = qc["component_detection"]["rejected_components"]
+    assert rejected
+    assert any(
+        item.get("rejection_reason") == "AMBIGUOUS_JUNCTION_CONTINUATION"
+        for item in rejected
+    )
 
 
 def test_cli_resume_processes_first_time_then_skips_unchanged_and_reprocesses_changed(
@@ -2022,7 +2180,7 @@ def test_hybrid_pipeline_falls_back_to_unique_raster_when_vector_candidates_are_
         {"crop_left_pdf": 0, "crop_top_pdf": 100, "render_scale": 1,
          "page_rotation_degrees": 0},
     )[0]
-    assert record.extraction_method == "raster_color_column_median"
+    assert record.extraction_method == "raster_color_connected_path"
     assert record.metadata["vector_fallback"] == "UNIQUE_RASTER_COLOR_FAMILY_AVAILABLE"
     assert record.metadata["vector_selection"]["reason"] == "MULTIPLE_VECTOR_CANDIDATES"
     assert len(record.points) > 0
@@ -2376,7 +2534,7 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
-    assert report["algorithm_version"] == "0.4.0"
+    assert report["algorithm_version"] == "0.6.0"
     assert len(report["algorithm_implementation_fingerprint"]) == 64
     assert len(report["profile_config_fingerprint"]) == 64
     assert len(report["qc_threshold_fingerprint"]) == 64
@@ -2474,6 +2632,10 @@ def test_root_paper_job_and_artifact_ids_match(tmp_path: Path):
     assert report["sfd_temp_bytes_before_cleanup"] >= 0
     assert report["sfd_temp_cleanup_succeeded"] is True
     assert report["sfd_worker_temp_isolation_verified"] is True
+    assert report["worker_log_directory"]
+    assert Path(report["worker_log_directory"]).is_dir()
+    assert report["worker_shutdown"]
+    assert all(item["status"] == "WORKERS_REAPED" for item in report["worker_shutdown"])
     assert not (output_root / report["sfd_temp_directory_relative"]).exists()
     paper_root = output_root / "papers" / "root-paper"
     assert (paper_root / "paper_manifest.json").is_file()
@@ -3203,3 +3365,175 @@ def test_scheduler_retries_broken_process_pool_submission_a_finite_number_of_tim
     assert report["retried_papers"] == 1
     assert report["permanently_failed_papers"] == 1
     ledger.close()
+
+
+def test_bounded_executor_shutdown_reaps_only_its_own_workers():
+    from scientific_figure_data.scheduler import _shutdown_executor_bounded
+
+    class FakeProcess:
+        def __init__(self, pid: int, terminate_exits: bool, kill_exits: bool):
+            self.pid = pid
+            self.exitcode = None
+            self.alive = True
+            self.terminate_exits = terminate_exits
+            self.kill_exits = kill_exits
+            self.terminate_calls = 0
+            self.kill_calls = 0
+
+        def join(self, timeout=None):
+            return None
+
+        def is_alive(self):
+            return self.alive
+
+        def terminate(self):
+            self.terminate_calls += 1
+            if self.terminate_exits:
+                self.alive = False
+                self.exitcode = -15
+
+        def kill(self):
+            self.kill_calls += 1
+            if self.kill_exits:
+                self.alive = False
+                self.exitcode = -9
+
+    class FakeExecutor:
+        def __init__(self, processes):
+            self._processes = {item.pid: item for item in processes}
+            self.shutdown_arguments = None
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdown_arguments = (wait, cancel_futures)
+            self._processes[111].alive = False
+            self._processes[111].exitcode = 0
+
+    graceful = FakeProcess(111, terminate_exits=False, kill_exits=False)
+    stubborn = FakeProcess(222, terminate_exits=False, kill_exits=True)
+    executor = FakeExecutor([graceful, stubborn])
+
+    report = _shutdown_executor_bounded(executor, grace_seconds=0)
+
+    assert executor.shutdown_arguments == (False, True)
+    assert report["status"] == "WORKERS_REAPED"
+    by_pid = {item["pid"]: item for item in report["workers"]}
+    assert by_pid[111]["action"] == "EXITED_GRACEFULLY"
+    assert by_pid[222]["action"] == "KILL_SENT"
+    assert graceful.terminate_calls == 0
+    assert graceful.kill_calls == 0
+    assert stubborn.kill_calls == 1
+    assert all(not item["still_alive"] for item in report["workers"])
+
+
+
+def _parent_exit_probe_worker(pid_file: str):
+    import os
+    import time
+    from pathlib import Path
+
+    Path(pid_file).write_text(str(os.getpid()), encoding="utf-8")
+    time.sleep(12)
+
+
+def _parent_exit_probe_pool_owner(root: str):
+    import os
+    import time
+    from concurrent.futures import ProcessPoolExecutor
+    from pathlib import Path
+    from scientific_figure_data.scheduler import _worker_initializer
+
+    root_path = Path(root)
+    temp_directory = root_path / "worker-temp"
+    log_directory = root_path / "worker-logs"
+    temp_directory.mkdir(parents=True, exist_ok=True)
+    log_directory.mkdir(parents=True, exist_ok=True)
+    pid_file = root_path / "worker.pid"
+    executor = ProcessPoolExecutor(
+        max_workers=1,
+        initializer=_worker_initializer,
+        initargs=(str(temp_directory), str(log_directory)),
+    )
+    executor.submit(_parent_exit_probe_worker, str(pid_file))
+    deadline = time.monotonic() + 12
+    while not pid_file.is_file() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if not pid_file.is_file():
+        os._exit(7)
+    # Simulate the precise failure mode: the executor owner vanishes while
+    # a worker is still inside a long-running task and without normal shutdown.
+    os._exit(0)
+
+
+def test_worker_exits_when_its_scheduler_parent_disappears(tmp_path: Path):
+    import multiprocessing
+    import os
+    import time
+
+    context = multiprocessing.get_context("spawn")
+    owner = context.Process(
+        target=_parent_exit_probe_pool_owner,
+        args=(str(tmp_path),),
+    )
+    owner.start()
+    owner.join(timeout=18)
+    if owner.is_alive():
+        owner.terminate()
+        owner.join(timeout=3)
+        raise AssertionError("test pool owner failed to exit within the bounded window")
+    assert owner.exitcode == 0, f"test pool owner exited with {owner.exitcode}"
+
+    pid_file = tmp_path / "worker.pid"
+    assert pid_file.is_file(), "worker did not report its PID before parent exit"
+    worker_pid = int(pid_file.read_text(encoding="utf-8").strip())
+
+    def is_process_alive(pid: int) -> bool:
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            open_process = kernel32.OpenProcess
+            open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            open_process.restype = wintypes.HANDLE
+            get_exit_code = kernel32.GetExitCodeProcess
+            get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+            get_exit_code.restype = wintypes.BOOL
+            close_handle = kernel32.CloseHandle
+            close_handle.argtypes = [wintypes.HANDLE]
+            close_handle.restype = wintypes.BOOL
+
+            handle = open_process(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                error = ctypes.get_last_error()
+                if error in {87, 1168}:  # ERROR_INVALID_PARAMETER / ERROR_NOT_FOUND
+                    return False
+                raise OSError(error, f"OpenProcess failed for PID {pid}")
+            try:
+                exit_code = wintypes.DWORD()
+                if not get_exit_code(handle, ctypes.byref(exit_code)):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                return exit_code.value == 259  # STILL_ACTIVE
+            finally:
+                close_handle(handle)
+
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline:
+        if not is_process_alive(worker_pid):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError(
+            f"orphan worker PID {worker_pid} remained alive after its parent exited"
+        )
+    assert not is_process_alive(worker_pid), (
+        f"orphan worker PID {worker_pid} remained alive after its parent exited"
+    )
+

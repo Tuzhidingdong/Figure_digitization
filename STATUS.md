@@ -1,12 +1,12 @@
 # STATUS — Figure_digitization
 
-Updated: 2026-11-20 (Asia/Singapore)
+Updated: 2026-11-23 (Asia/Singapore)
 
 ## Baseline and governance
 
 - Downstream repository: [Tuzhidingdong/Figure_digitization](https://github.com/Tuzhidingdong/Figure_digitization). It remains independent of the read-only upstream `Tuzhidingdong/chem-literature`.
 - Frozen plan: `TASK_PLAN_v1.4.1.md`; SHA256/blob SHA recorded by GitHub fetch: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`. The plan is unchanged.
-- Development changes are committed to `main`. No Release/tag or production-readiness claim has been made.
+- Current validation work is on `feat/real-image-regression-diagnostics` and open draft PR #22; this branch is not yet merged to `main`. No Release/tag or production-readiness claim has been made.
 - Default execution remains one spawned CPU worker, zero LLM tokens, no GPU requirement, and no paid-model fallback.
 
 ## Current milestone
@@ -162,13 +162,22 @@ After the previous status sync, the following software-level gaps were addressed
 
 These changes are code-complete in the current branch. Their final Windows CI result must be checked against the matching current HEAD before this follow-up is called regression-accepted. Real-paper scientific accuracy, target-PC resource measurement and manual browser review remain external acceptance items.
 
+## 2026-11-23 follow-up — real upstream-package integration and bounded image scan
+
+- The P3_02 end-to-end regression now enters through the Chem-Literature 1.1 package layout (`01_preprocessing/evidence_index.json`) rather than the simplified standalone `figure_inventory.json` path. It uses only the already committed real-image fixture and archived OCR JSON; it checks that the OCR fixture SHA256 matches the exact image bytes.
+- The integration fixture verifies the external MAIN-PDF reference hash contract, upstream package-version detection, source-asset provenance, and that every file in the input package plus the referenced external PDF remains byte-identical after downstream processing. It also confirms that absolute external PDF paths are not serialized into the snapshot.
+- Important boundary: the external PDF in this test is a minimal synthetic signature/hash fixture. This validates the upstream reference/integrity contract only; it is not a real-PDF backend test and does not replace the planned 3–5 user-approved PDF comparison.
+- The P3_02 pipeline assertions retain the scientific safety boundary: dual-Y-axis curve geometry can be persisted while the side remains `UNASSIGNED`; no candidate y-value is written as a final numeric value without a supported assignment.
+- Plot-frame candidate scanning now downsamples to at most 5,000,000 analysis pixels before RGB conversion, avoiding an additional full-resolution RGB conversion buffer for large grayscale/RGBA/CMYK inputs. A regression test checks that conversion is performed only on the bounded analysis image. This bounds the analysis image, not every decoder/native-library allocation.
+- Matching Windows CI [#45173075740](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/45173075740) passed the upstream-package integration on Python 3.11, 3.12 and 3.13. Latest code/performance run [#45173235199](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/45173235199) passed the same matrix and RapidOCR 3.10.0 compatibility check.
+
 ## Latest verification
 
 - AC-30 classification revision is implemented: manual family selection requires reviewer evidence; technique/axis-label edits trigger deterministic reclassification; history, panel summaries, SQLite, bundle hashes and rollback are covered. CI [#44744604564](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44744604564) passed on Python 3.11, 3.12 and 3.13. Human browser acceptance remains local.
 - AC-36 dependency inventory generation is automated. The Windows/Python 3.12 workflow installs all declared extras and uploads a CycloneDX 1.6 SBOM, resolved-package snapshot and package metadata report. Latest matching run: [#44747870960](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747870960); artifact ID `14634007008`.
 - AC-60 export schema 1.2 supports explicitly requested per-axis dimensional conversions. Only exact pairs in the deterministic factor table are converted; originals are preserved; unresolved axes remain empty and produce warnings; reference-electrode conversions remain separate. P1 scalar-observation ingestion is not included.
-- Latest source/test commit: `f597d01f4e14c728d09394c04875ca70164d169a`. Matching Windows CI [#44747871501](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/44747871501) passed test jobs on Python 3.11, 3.12 and 3.13, plus compileall, Ruff and the Windows harness syntax check.
-- Current test source count: **117 test functions / 121 pytest cases** (two parametrized functions add four cases).
+- Latest source/test commit: `501fa2c924f1bfedbd12aefff21359db8d3758e7`. Matching Windows CI [#45173235199](https://github.com/Tuzhidingdong/Figure_digitization/actions/runs/45173235199) passed the Python 3.11, 3.12 and 3.13 test jobs and RapidOCR 3.10.0 compatibility check.
+- Current test source count on this branch: **151 test functions across seven Python test modules**; parametrized functions expand the collected pytest case count.
 - Frozen Task Plan blob SHA: `80b02880a1485e1d8f6ad6ccaeac723ea2597ef3`; unchanged. The upstream repository remains untouched. No Release/tag was created.
 
 ## Current blockers / next acceptance actions

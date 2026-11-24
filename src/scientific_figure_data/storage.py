@@ -548,24 +548,89 @@ class Catalog:
 
 def append_panel_series_csv(paper_root: Path, figure_id: str, panel_id: str,
                             series: list[SeriesRecord]) -> Path | None:
-    """Persist one panel's point batch immediately and release its image/point buffers."""
+    """Persist point batches, including explicit candidate values for unresolved dual Y axes."""
     panel_series = [item for item in series if item.points]
     if not panel_series:
         return None
     path = paper_root / "series" / f"{figure_id}__{panel_id}" / "panel_series.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "series_id", "point_index", "x_value", "x_label", "y_value",
+        "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type",
+        "y_axis_side", "y_left_candidate", "y_right_candidate", "y_mapping_status",
+    ]
+
+    # Upgrade pre-existing panel CSVs in place before appending rows with the
+    # extended dual-axis schema. Existing values are retained; the new
+    # candidate columns stay blank for historical rows that cannot be
+    # reconstructed from their old pixel provenance.
+    if path.is_file():
+        with path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            previous_fields = list(reader.fieldnames or [])
+            previous_rows = list(reader)
+        if previous_fields != fieldnames:
+            # Preserve any forward-compatible columns already present while
+            # adding the current schema's dual-axis candidate fields.
+            fieldnames = list(dict.fromkeys(previous_fields + fieldnames))
+            temporary = path.with_name(f".{path.name}.tmp")
+            with temporary.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in previous_rows:
+                    writer.writerow({name: row.get(name, "") for name in fieldnames})
+            temporary.replace(path)
+
     exists = path.is_file()
     with path.open("a" if exists else "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
         if not exists:
-            writer.writerow(["series_id", "point_index", "x_value", "x_label", "y_value",
-                             "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type"])
+            writer.writeheader()
         for item in panel_series:
             item.metadata["points_count"] = len(item.points)
+            calibrations = item.metadata.get("y_axis_calibrations")
+            calibrations = calibrations if isinstance(calibrations, dict) else {}
+            left_calibration = calibrations.get("LEFT")
+            right_calibration = calibrations.get("RIGHT")
+            if item.y_axis_side == "LEFT":
+                right_calibration = None
+            elif item.y_axis_side == "RIGHT":
+                left_calibration = None
+            assignment = item.metadata.get("series_axis_assignment")
+            if not isinstance(assignment, dict):
+                trace_specification = item.metadata.get("trace_specification")
+                if not isinstance(trace_specification, dict):
+                    trace_specification = {}
+                assignment = trace_specification.get("series_axis_assignment", {})
+            mapping_status = (
+                assignment.get("status", "UNRESOLVED")
+                if isinstance(assignment, dict) else "UNRESOLVED"
+            )
+
+            def candidate_value(calibration: Any, pixel_y: float | None):
+                if not isinstance(calibration, dict) or pixel_y is None:
+                    return ""
+                slope = calibration.get("slope")
+                intercept = calibration.get("intercept")
+                if not isinstance(slope, (int, float)) or not isinstance(intercept, (int, float)):
+                    return ""
+                return float(slope) * float(pixel_y) + float(intercept)
+
             for point in item.points:
-                writer.writerow([item.series_id, point.point_index,
-                                 point.x if isinstance(point.x, (int, float)) else "",
-                                 point.x if isinstance(point.x, str) else "",
-                                 point.y, point.pixel_x, point.pixel_y,
-                                 point.y_err_low, point.y_err_high, point.err_type])
+                writer.writerow({
+                    "series_id": item.series_id,
+                    "point_index": point.point_index,
+                    "x_value": point.x if isinstance(point.x, (int, float)) else "",
+                    "x_label": point.x if isinstance(point.x, str) else "",
+                    "y_value": point.y if point.y is not None else "",
+                    "pixel_x": point.pixel_x if point.pixel_x is not None else "",
+                    "pixel_y": point.pixel_y if point.pixel_y is not None else "",
+                    "y_err_low": point.y_err_low if point.y_err_low is not None else "",
+                    "y_err_high": point.y_err_high if point.y_err_high is not None else "",
+                    "err_type": point.err_type,
+                    "y_axis_side": item.y_axis_side,
+                    "y_left_candidate": candidate_value(left_calibration, point.pixel_y),
+                    "y_right_candidate": candidate_value(right_calibration, point.pixel_y),
+                    "y_mapping_status": mapping_status,
+                })
     return path
