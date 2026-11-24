@@ -989,7 +989,7 @@ def _compact_rejected_review_candidates(
     sx0, sy0, sx1, sy1 = [int(value) for value in selected_bbox]
     selected_x_span = max(1, sx1 - sx0)
     selected_y_span = max(1, sy1 - sy0)
-    selected_pixels = max(1, int(selected.get("pixel_count", 0)))
+    selected_pixel_count = max(1, int(selected.get("pixel_count", 0)))
     output = []
     for item in rejected_components:
         path_qc = item.get("path_qc") or {}
@@ -1014,11 +1014,15 @@ def _compact_rejected_review_candidates(
             and max(y0, sy0) < min(y1, sy1)
         )
         pixel_count = int(item.get("pixel_count", 0))
+        # This is QC bookkeeping only, not geometric path admission. A
+        # thin waveform can have very few raster pixels while a spatially
+        # separate callout/text component has a larger pixel count. Do not use
+        # pixel-count ratios to suppress its exclusion record once the bbox
+        # size and non-overlap checks pass.
         compact_and_separate = (
             not overlaps_selected
             and x_span <= selected_x_span * 0.40
             and y_span <= selected_y_span * 0.50
-            and pixel_count <= selected_pixels * 0.30
         )
         if not compact_and_separate:
             continue
@@ -1036,7 +1040,9 @@ def _compact_rejected_review_candidates(
                 "spatially_separate": True,
                 "relative_x_span_max": 0.40,
                 "relative_y_span_max": 0.50,
-                "relative_pixel_count_max": 0.30,
+                "selected_path_pixel_count": selected_pixel_count,
+                "candidate_component_pixel_count": pixel_count,
+                "pixel_count_ratio_used_for_selection": False,
             },
         })
     return output
