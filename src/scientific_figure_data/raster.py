@@ -214,12 +214,13 @@ def _find_color_components(
             path_x = [point[1] for point in path]
             path_y = [point[0] for point in path]
             path_summary = {
-                "pixel_count": len(path),
+                "pixel_count": int(len(path)),
                 "bbox": [
-                    min(path_x), min(path_y), max(path_x) + 1, max(path_y) + 1
+                    int(min(path_x)), int(min(path_y)),
+                    int(max(path_x) + 1), int(max(path_y) + 1),
                 ],
-                "x_span": max(path_x) - min(path_x) + 1,
-                "y_span": max(path_y) - min(path_y) + 1,
+                "x_span": int(max(path_x) - min(path_x) + 1),
+                "y_span": int(max(path_y) - min(path_y) + 1),
             }
             components.append({
                 **path_summary,
@@ -373,10 +374,10 @@ def _ordered_skeleton_paths(
             margin = scored[1][0] - best
             if best > 0.65 or margin < 0.15:
                 ambiguous.append({
-                    "pixel": [center[1], center[0]],
+                    "pixel": [int(center[1]), int(center[0])],
                     "degree": degree,
-                    "best_straightness_cost": round(best, 4),
-                    "pairing_margin": round(margin, 4),
+                    "best_straightness_cost": float(round(best, 4)),
+                    "pairing_margin": float(round(margin, 4)),
                 })
                 continue
             continuation[center] = {first: second, second: first}
@@ -397,8 +398,8 @@ def _ordered_skeleton_paths(
                 ambiguous.append({
                     "pixel": [center[1], center[0]],
                     "degree": degree,
-                    "best_pairing_cost": round(best_total, 4),
-                    "pairing_margin": round(margin, 4),
+                    "best_pairing_cost": float(round(best_total, 4)),
+                    "pairing_margin": float(round(margin, 4)),
                 })
                 continue
             mapping = {}
@@ -504,12 +505,14 @@ def _ordered_skeleton_paths(
             1 for left, right in zip(xs, xs[1:]) if right < left - 1
         )
         summary = {
-            "path_index": path_index,
-            "path_points": len(path),
-            "bbox": [min(xs), min(ys), max(xs) + 1, max(ys) + 1],
-            "x_span": x_span,
-            "y_span": max(ys) - min(ys) + 1,
-            "backward_x_steps": backwards,
+            "path_index": int(path_index),
+            "path_points": int(len(path)),
+            "bbox": [
+                int(min(xs)), int(min(ys)), int(max(xs) + 1), int(max(ys) + 1)
+            ],
+            "x_span": int(x_span),
+            "y_span": int(max(ys) - min(ys) + 1),
+            "backward_x_steps": int(backwards),
         }
         if x_span < min_x_span:
             summary["rejection_reason"] = "PATH_X_SPAN_TOO_SHORT"
@@ -560,11 +563,13 @@ def detect_monotonic_color_branches(
     components = result.get("components", [])
     summaries = [
         {
-            "component_index": index,
-            "pixel_count": item["pixel_count"],
-            "bbox": item["bbox"],
-            "x_span": item["x_span"],
-            "y_span": item["y_span"],
+            "component_index": int(index),
+            "pixel_count": int(item["pixel_count"]),
+            "bbox": [int(value) for value in item["bbox"]],
+            "x_span": int(item["x_span"]),
+            "y_span": int(item["y_span"]),
+            "path_qc": item.get("path_qc", {}),
+            "source_component_pixel_count": int(item.get("source_component_pixel_count", item["pixel_count"])),
         }
         for index, item in enumerate(components)
     ]
@@ -664,10 +669,10 @@ def trace_monotonic_color(
             "component_count": len(components),
             "branches": [
                 {
-                    "component_index": index,
-                    "pixel_count": item["pixel_count"],
-                    "bbox": item["bbox"],
-                    "x_span": item["x_span"],
+                    "component_index": int(index),
+                    "pixel_count": int(item["pixel_count"]),
+                    "bbox": [int(value) for value in item["bbox"]],
+                    "x_span": int(item["x_span"]),
                 }
                 for index, item in enumerate(components)
             ],

@@ -93,6 +93,22 @@ def test_p8_real_figure_detects_two_red_branches_and_one_blue_band(
         str(crop_path), tuple(blue["color_rgb"]), int(blue["color_tolerance"]),
         plot_box=(53, 50, 383, 301), color_match=blue["color_match"],
     )
+    print("P8_D_RED_PATH_DIAGNOSTIC " + json.dumps({
+        "status": red_branches.get("status"),
+        "branch_count": red_branches.get("branch_count"),
+        "branches": red_branches.get("branches", []),
+        "rejected": [
+            {
+                "bbox": item.get("bbox"),
+                "pixel_count": item.get("pixel_count"),
+                "x_span": item.get("x_span"),
+                "reason": item.get("rejection_reason"),
+                "path_qc": item.get("path_qc"),
+            }
+            for item in red_branches.get("rejected_components", [])
+            if item.get("x_span", 0) >= 12 or item.get("pixel_count", 0) >= 30
+        ],
+    }, sort_keys=True))
     assert red_branches["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", red_branches
     assert red_branches["branch_count"] == 2, red_branches
     assert len(red_branches["branches"]) == 2, red_branches

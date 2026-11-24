@@ -1785,8 +1785,11 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert min(point.pixel_y for point in points) <= 26
     assert max(point.pixel_y for point in points) >= 75
     assert any(
-        abs(left.pixel_x - right.pixel_x) <= 1 and abs(left.pixel_y - right.pixel_y) > 10
-        for left, right in zip(points, points[1:])
+        max(point.pixel_x for point in points[index:index + 16])
+        - min(point.pixel_x for point in points[index:index + 16]) <= 1
+        and max(point.pixel_y for point in points[index:index + 16])
+        - min(point.pixel_y for point in points[index:index + 16]) >= 10
+        for index in range(max(0, len(points) - 15))
     )
     assert not any(8 <= point.pixel_y <= 18 for point in points)
 
@@ -1799,16 +1802,16 @@ def test_2d_path_tracer_rejects_ambiguous_same_color_crossing(tmp_path: Path):
     image = Image.new("RGB", (120, 90), "white")
     draw = ImageDraw.Draw(image)
     center = (60, 45)
-    draw.line((center[0], center[1], 8, 13), fill=color, width=3)
-    draw.line((center[0], center[1], 110, 13), fill=color, width=3)
-    draw.line((center[0], center[1], 60, 88), fill=color, width=3)
+    draw.line((center[0], center[1], 15, 19), fill=color, width=3)
+    draw.line((center[0], center[1], 105, 19), fill=color, width=3)
+    draw.line((center[0], center[1], 60, 97), fill=color, width=3)
     image_path = tmp_path / "ambiguous-same-color-junction.png"
     image.save(image_path)
 
     points, qc = trace_monotonic_color(
         str(image_path), color, 6, None, None, plot_box=(2, 2, 116, 86)
     )
-    assert points == []
+    assert points == [], qc
     assert qc["status"] == "NEEDS_REVIEW"
     rejected = qc["component_detection"]["rejected_components"]
     assert rejected
