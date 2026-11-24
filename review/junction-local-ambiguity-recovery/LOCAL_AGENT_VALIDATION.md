@@ -2,14 +2,14 @@
 
 Target repository: `Tuzhidingdong/Figure_digitization`
 Target branch: `fix/junction-local-ambiguity-recovery`
-Expected source HEAD at handoff: `fcd96f5b02652328e9346294f7ecc3e9675ba7c1`
+Expected source HEAD at handoff: `d8a20055ec3f9749a8fc7aa9994ced0fa6a4ea25`
 Base: `d7a53c624382865783dc821b546d6c46a746947e`
 
 ## Safety and sync
 
 1. In the existing project at `E:\\Zinc_batters_datas\\Figure_digitization`, inspect `git status` and current branch before fetching.
 2. Preserve all local uncommitted files, `.agents/`, `__pycache__/`, all existing `test_outputs/`, the existing `STATUS.md` backup and `stash@{0}`. Do not reset, clean, stash-pop/drop, or use `git add -A`.
-3. Fetch and fast-forward/switch to this branch only after confirming the worktree can be preserved. Do not touch `main`, `review/real-image-reconstruction-20261124`, frozen `TASK_PLAN_v1.4.1.md), or merge/publish PR #22.
+3. Fetch and fast-forward/switch to this branch only after confirming the worktree can be preserved. Do not touch `main`, `review/real-image-reconstruction-20261124`, frozen `TASK_PLAN_v1.4.1.md`, or merge/publish PR #22.
 4. Confirm HEAD exactly equals the expected source HEAD above before testing. If local uncommitted changes conflict, stop and report; do not overwrite them.
 
 ## What changed
