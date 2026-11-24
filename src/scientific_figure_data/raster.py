@@ -345,9 +345,30 @@ def _ordered_skeleton_paths(
     continuation: dict[tuple[int, int], dict[tuple[int, int], tuple[int, int]]] = {}
     ambiguous = []
 
+    tangent_depth = max(4, min(10, int(round(minimum_path_x_span * 0.25))))
+
+    def outward_tangent(center, first):
+        previous = center
+        current = first
+        for _ in range(tangent_depth - 1):
+            next_points = [
+                point for point in adjacency[current]
+                if point != previous
+            ]
+            if len(next_points) != 1:
+                break
+            previous, current = current, next_points[0]
+        return (
+            float(current[1] - center[1]),
+            float(current[0] - center[0]),
+        )
+
     def straightness(first, second, center):
-        v1 = (first[1] - center[1], first[0] - center[0])
-        v2 = (second[1] - center[1], second[0] - center[0])
+        # Estimate directions over several skeleton pixels instead of relying
+        # on one rasterized neighbour. This is materially more stable at thick,
+        # antialiased and marker-overlapped junctions.
+        v1 = outward_tangent(center, first)
+        v2 = outward_tangent(center, second)
         norm1 = math.hypot(*v1)
         norm2 = math.hypot(*v2)
         if not norm1 or not norm2:

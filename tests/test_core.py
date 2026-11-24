@@ -1794,31 +1794,64 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert not any(8 <= point.pixel_y <= 18 for point in points)
 
 
-def test_2d_path_tracer_rejects_ambiguous_same_color_crossing(tmp_path: Path):
+def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: Path):
     from PIL import Image, ImageDraw
-    from scientific_figure_data.raster import trace_monotonic_color
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
 
     color = (205, 25, 35)
     image = Image.new("RGB", (120, 90), "white")
     draw = ImageDraw.Draw(image)
-    center = (60, 45)
-    draw.line((center[0], center[1], 15, 19), fill=color, width=3)
-    draw.line((center[0], center[1], 105, 19), fill=color, width=3)
-    draw.line((center[0], center[1], 60, 97), fill=color, width=3)
+    draw.line((8, 12, 110, 76), fill=color, width=3)
+    draw.line((8, 76, 110, 12), fill=color, width=3)
+    image_path = tmp_path / "crossing-same-color-paths.png"
+    image.save(image_path)
+
+    detected = detect_monotonic_color_branches(
+        str(image_path), color, 6, plot_box=(2, 2, 116, 86)
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 2, detected
+    slopes = []
+    for branch_index in range(2):
+        points, qc = trace_monotonic_color(
+            str(image_path), color, 6, None, None,
+            plot_box=(2, 2, 116, 86), branch_index=branch_index, branch_count=2,
+        )
+        assert qc["status"] == "EXTRACTED_PROVISIONAL", qc
+        assert len(points) >= 80
+        assert all(
+            right.pixel_x >= left.pixel_x - 1
+            for left, right in zip(points, points[1:])
+        )
+        slopes.append(points[-1].pixel_y - points[0].pixel_y)
+    assert slopes[0] * slopes[1] < 0, slopes
+
+
+def test_2d_path_tracer_rejects_ambiguous_three_way_junction(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    color = (205, 25, 35)
+    image = Image.new("RGB", (120, 110), "white")
+    draw = ImageDraw.Draw(image)
+    center = (60, 48)
+    draw.line((center[0], center[1], 15, 22), fill=color, width=3)
+    draw.line((center[0], center[1], 105, 22), fill=color, width=3)
+    draw.line((center[0], center[1], 60, 100), fill=color, width=3)
     image_path = tmp_path / "ambiguous-same-color-junction.png"
     image.save(image_path)
 
     points, qc = trace_monotonic_color(
-        str(image_path), color, 6, None, None, plot_box=(2, 2, 116, 86)
+        str(image_path), color, 6, None, None, plot_box=(2, 2, 116, 106)
     )
     assert points == [], qc
     assert qc["status"] == "NEEDS_REVIEW"
     rejected = qc["component_detection"]["rejected_components"]
     assert rejected
     assert any(
-        item.get("rejection_reason") in {
-            "AMBIGUOUS_JUNCTION_CONTINUATION", "CLOSED_COMPONENT_OR_LOOP", "NO_UNAMBIGUOUS_ENDPOINT_PATH",
-        }
+        item.get("rejection_reason") == "AMBIGUOUS_JUNCTION_CONTINUATION"
         for item in rejected
     )
 

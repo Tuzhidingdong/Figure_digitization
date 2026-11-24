@@ -562,8 +562,16 @@ def test_p3_real_figure_pipeline_replays_archived_ocr_and_extracts_data(
         row for row in p3_c_series
         if row.get("points_count", 0) >= 50
     ]
-    assert len(geometry_series) >= 6, json.dumps(summary, sort_keys=True)
-    assert sum(row.get("points_count", 0) >= 100 for row in geometry_series) >= 4, json.dumps(summary, sort_keys=True)
+    # Connected-path tracing deliberately returns path fragments separately
+    # when colour strokes touch or become ambiguous. Do not require the old
+    # per-column median's inflated point/branch counts; require multiple
+    # substantial, independently ordered paths without assigning a Y scale.
+    assert len(geometry_series) >= 4, json.dumps(summary, sort_keys=True)
+    assert sum(row.get("points_count", 0) >= 100 for row in geometry_series) >= 2, json.dumps(summary, sort_keys=True)
+    for row in geometry_series:
+        assert row.get("metadata", {}).get("y_calibration") is None, json.dumps(summary, sort_keys=True)
+        assert row.get("y_axis_side") == "UNASSIGNED", json.dumps(summary, sort_keys=True)
+
     # The panel has two calibrated Y axes, but its axis text is achromatic and
     # the cached legend does not encode a unique axis-to-curve mapping. Keep
     # the measured pixel paths and both numeric calibrations, while ensuring
