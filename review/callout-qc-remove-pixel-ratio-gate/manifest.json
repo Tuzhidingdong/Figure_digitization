@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-24",
+  "repository": "Tuzhidingdong/Figure_digitization",
+  "branch": "fix/callout-qc-remove-pixel-ratio-gate",
+  "head": "dfb5a48a9e3fa5c61d0504e8233afad82baab7f9",
+  "parent": "946bff14994243ed88ea3391fe0fd273c48b780f",
+  "required_code_commit": "947141f82a18a6264872c91d7e26ae438144abc5",
+  "required_code_commit_is_ancestor": true,
+  "algorithm_version": "0.8.2",
+  "python": "3.13.9",
+  "tests": {
+    "collected": 159,
+    "passed": 158,
+    "failed": 1,
+    "skipped": 0,
+    "exit_code": 1,
+    "duration_seconds": 192.5,
+    "failed_nodes": [
+      "tests/test_core.py::test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations"
+    ],
+    "failure_detail": "excluded bbox [82,4,127,19] vs expected [82,8,126,18]; exclusion record itself emitted"
+  },
+  "callout_qc": {
+    "excluded_record_count": 1,
+    "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
+    "source_qc_rejection_reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+    "source_path_qc_reason": "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+    "cluster_reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+    "bbox": [
+      82,
+      4,
+      127,
+      19
+    ],
+    "pixel_count": 288,
+    "classification": "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC",
+    "pixel_count_ratio_used_for_selection": false,
+    "waveform_points": 366,
+    "callout_coordinates_in_curve": 0
+  },
+  "source_images": [
+    {
+      "case": "P3_02",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P3_02.png",
+      "bytes": 827536,
+      "sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e"
+    },
+    {
+      "case": "P8_06",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P8_06.png",
+      "bytes": 450356,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    }
+  ],
+  "run_outputs": {
+    "directory": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124",
+    "reconstruction_manifest": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\reconstruction_manifest.json",
+    "extraction_run_json": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\extraction_run.json",
+    "series_csv": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\series\\MAIN_FIG_P3_02__auto-03\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-01\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-02\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_qc_bbox_only_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-04\\panel_series.csv"
+    ]
+  },
+  "comparison_baselines": {
+    "original": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124",
+    "prior_validation": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_callout_exclusion_qc_20261124"
+  },
+  "summary": {
+    "P3_02": {
+      "series": 17,
+      "points": 1377,
+      "no_new_filter": true,
+      "ocr_associated_candidates_retained": 3
+    },
+    "P8_06": {
+      "panel_a_red_points": 22146,
+      "panel_a_red_segments": 178,
+      "panel_a_blue_points": 1835,
+      "panel_a_blue_segments": 26,
+      "panel_b_points": 1226,
+      "panel_c_points": 0,
+      "panel_d_series": 3,
+      "panel_d_points": 953,
+      "panel_d_second_red_points": 319
+    }
+  },
+  "verdict": {
+    "overall": "PARTIAL - not accepted (1 bbox assertion failure)",
+    "callout_exclusion_qc": "PASS (record + both reason fields + cluster detail)",
+    "p8_geometry": "PASS (unchanged)",
+    "p3_no_filter": "PASS",
+    "scientific_point_accuracy": "NOT_ASSESSED_NO_ANNOTATED_BENCHMARK"
+  },
+  "artifacts": [
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P3_02_reconstructed.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P3_02_reconstructed.png",
+      "bytes": 204367,
+      "sha256": "125d258ac69f3d22d33842643c91e6e152ddc64e7854725f9413a6019c747319"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P3_02_side_by_side.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P3_02_side_by_side.png",
+      "bytes": 988506,
+      "sha256": "104f7b41f4260dff0ead4564864ccec524ceed3382fb77206e1ad6e7a0f061aa"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P3_02_overlay.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P3_02_overlay.png",
+      "bytes": 807533,
+      "sha256": "a5533a351143e385950f71684f139276aa16658e98c36d6698cd18ea41f4c534"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P8_06_reconstructed.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P8_06_reconstructed.png",
+      "bytes": 254176,
+      "sha256": "e7c05fe9bf01d8909077e588f5c22866559ce9f17b48b1764db309317bb1fc28"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P8_06_side_by_side.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P8_06_side_by_side.png",
+      "bytes": 719259,
+      "sha256": "8ec50ab36046b90f6cc96b9eb5f2cad944853f3c87829999de3a47dd75f26ebc"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\P8_06_overlay.png",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/P8_06_overlay.png",
+      "bytes": 467545,
+      "sha256": "549256a018eb2db5a120db533a79579665b8fa1275cec826a4540cc92cbed399"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\callout-qc-remove-pixel-ratio-gate\\validation_report.md",
+      "repo_path": "review/callout-qc-remove-pixel-ratio-gate/validation_report.md",
+      "bytes": 14379,
+      "sha256": "f8bda64a8c2d273aaca42a5a3430f32cb1eea5c539f2eb82d2f151b8d8aaa940"
+    }
+  ],
+  "artifact_count": 7,
+  "total_artifact_bytes": 3455765,
+  "manifest_note": "Self-hash omitted (circular); all other uploaded files hashed."
+}
