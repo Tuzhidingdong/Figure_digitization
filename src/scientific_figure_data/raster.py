@@ -547,7 +547,7 @@ def _ordered_skeleton_paths(
             margin = scored[1][0] - best
             if best > 0.65 or margin < 0.15:
                 ambiguous_ports.update(ports)
-            ambiguous_clusters.append({
+                ambiguous_clusters.append({
                     "cluster_index": int(cluster_index),
                     "junction_pixels": int(len(cluster)),
                     "port_count": int(len(ports)),
@@ -585,7 +585,7 @@ def _ordered_skeleton_paths(
             margin = possible[1][0] - best_total
             if worst_pair > 0.75 or margin < 0.20:
                 ambiguous_ports.update(ports)
-            ambiguous_clusters.append({
+                ambiguous_clusters.append({
                     "cluster_index": int(cluster_index),
                     "junction_pixels": int(len(cluster)),
                     "port_count": int(len(ports)),
@@ -619,7 +619,7 @@ def _ordered_skeleton_paths(
             )
             if not bridge:
                 ambiguous_ports.update(ports)
-            ambiguous_clusters.append({
+                ambiguous_clusters.append({
                     **cluster_record,
                     "reason": "NO_JUNCTION_BRIDGE_PATH",
                 })
