@@ -1785,6 +1785,14 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
         == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
         for item in detected.get("rejected_components", [])
     ), detected
+    excluded_record = next(
+        item for item in detected["rejected_components"]
+        if item.get("rejection_reason")
+        == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
+    )
+    assert excluded_record.get("source_qc_rejection_reason") == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), excluded_record
     points, qc = trace_monotonic_color(
         str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
     )
@@ -1800,7 +1808,57 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
         for index in range(max(0, len(points) - 15))
     )
     assert not any(8 <= point.pixel_y <= 18 for point in points)
+    assert len(qc.get("excluded_partial_branches", [])) == 1, qc
+    assert qc["excluded_partial_branches"][0]["bbox"] == [82, 8, 126, 18], qc
 
+
+
+
+def test_full_span_partial_qc_branch_is_not_auto_excluded():
+    from scientific_figure_data.raster import _select_unique_full_span_group
+
+    complete = [{
+        "source_component_index": 1,
+        "path_kind": "FULL_X_SPAN_PATH",
+        "path_qc": {"status": "PATHS_EXTRACTED"},
+    }]
+    long_review_branch = [{
+        "source_component_index": 2,
+        "path_kind": "FULL_X_SPAN_PATH",
+        "path_qc": {
+            "status": "PARTIAL_PATHS_NEEDS_REVIEW",
+            "reason": "UNPAIRED_JUNCTION_PORTS_RETAINED",
+        },
+    }]
+    selected, excluded = _select_unique_full_span_group(
+        [complete, long_review_branch]
+    )
+    assert len(selected) == 2
+    assert excluded == []
+
+
+def test_compact_ring_is_not_retained_as_a_local_2d_trace_fragment(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    color = (130, 56, 131)
+    image = Image.new("RGB", (335, 180), "white")
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((120, 60, 135, 75), outline=color, width=2)
+    image_path = tmp_path / "compact-ring-glyph.png"
+    image.save(image_path)
+
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 6, None, None, plot_box=(0, 0, 335, 180)
+    )
+    assert points == [], qc
+    assert qc["status"] == "NEEDS_REVIEW", qc
+    detection = qc.get("component_detection", {})
+    rejected = detection.get("rejected_components", [])
+    assert any(
+        item.get("rejection_reason") == "COMPONENT_X_SPAN_TOO_SHORT"
+        for item in rejected
+    ), qc
 
 
 def test_2d_path_tracer_retains_long_vertical_segments_as_partial_geometry(tmp_path: Path):
@@ -2657,7 +2715,7 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
-    assert report["algorithm_version"] == "0.6.0"
+    assert report["algorithm_version"] == "0.8.0"
     assert len(report["algorithm_implementation_fingerprint"]) == 64
     assert len(report["profile_config_fingerprint"]) == 64
     assert len(report["qc_threshold_fingerprint"]) == 64
