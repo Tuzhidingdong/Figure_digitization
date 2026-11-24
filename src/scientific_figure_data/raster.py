@@ -7,6 +7,339 @@ from .calibration import map_pixel
 from .models import AxisCalibration, SeriesPoint
 
 
+def _resolve_plot_box(
+    width: int, height: int, plot_box: tuple[float, float, float, float]
+) -> tuple[int, int, int, int]:
+    bx0, by0, bx1, by1 = [float(value) for value in plot_box]
+    if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
+        bx0, bx1 = bx0 * width, bx1 * width
+        by0, by1 = by0 * height, by1 * height
+    x0, y0 = max(0, int(bx0)), max(0, int(by0))
+    x1, y1 = min(width, int(bx1)), min(height, int(by1))
+    return x0, y0, x1, y1
+
+
+def _build_color_mask(
+    region,
+    rgb: tuple[int, int, int],
+    tolerance: int,
+    color_match: dict | None,
+):
+    import numpy as np
+
+    if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
+        from .plot_region import _rgb_to_hsv_arrays
+
+        flat = region.reshape(-1, 3)
+        hues, saturations, values = _rgb_to_hsv_arrays(flat)
+        hue_center = float(color_match.get("hue_center_degrees", 0.0))
+        hue_tolerance = float(color_match.get("hue_tolerance_degrees", 12.0))
+        minimum_saturation = float(color_match.get("minimum_saturation", 0.14))
+        minimum_value = float(color_match.get("minimum_value", 0.20))
+        distance = np.abs((hues - hue_center + 180.0) % 360.0 - 180.0)
+        return (
+            (distance <= hue_tolerance)
+            & (saturations >= minimum_saturation)
+            & (values >= minimum_value)
+        ).reshape(region.shape[:2])
+    target = np.asarray(rgb, dtype=np.int16)
+    return np.max(np.abs(region.astype(np.int16) - target), axis=2) <= int(tolerance)
+
+
+def _find_color_components(
+    image_path: str,
+    rgb: tuple[int, int, int],
+    tolerance: int,
+    *,
+    plot_box: tuple[float, float, float, float],
+    color_match: dict | None = None,
+    min_span_fraction: float = 0.02,
+    max_color_pixels: int = 400_000,
+) -> dict:
+    """Find spatially connected trace candidates inside one plot crop.
+
+    Components are kept separate: pixels from two disconnected paths are never
+    joined merely because they share a colour. Small annotation dashes and
+    isolated legend-like marks are recorded as rejected components.
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+
+        raise OptionalDependencyError(
+            "Raster path tracing requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        width, height = source.size
+        x0, y0, x1, y1 = _resolve_plot_box(width, height, plot_box)
+        if x1 <= x0 or y1 <= y0:
+            return {
+                "status": "INVALID_PLOT_BOX",
+                "components": [],
+                "rejected_components": [],
+                "plot_box": [x0, y0, x1, y1],
+            }
+        region = np.asarray(source.convert("RGB").crop((x0, y0, x1, y1)), dtype=np.uint8)
+
+    mask = _build_color_mask(region, rgb, tolerance, color_match)
+    active_count = int(mask.sum())
+    if active_count > max_color_pixels:
+        return {
+            "status": "COLOR_MASK_TOO_DENSE",
+            "reason": "CONNECTED_COMPONENT_PIXEL_BUDGET_EXCEEDED",
+            "active_pixels": active_count,
+            "pixel_budget": max_color_pixels,
+            "components": [],
+            "rejected_components": [],
+            "plot_box": [x0, y0, x1, y1],
+        }
+    if active_count < 8:
+        return {
+            "status": "NO_COLOR_PIXELS",
+            "active_pixels": active_count,
+            "components": [],
+            "rejected_components": [],
+            "plot_box": [x0, y0, x1, y1],
+        }
+
+    height_local, width_local = mask.shape
+    visited = np.zeros(mask.shape, dtype=bool)
+    active = np.argwhere(mask)
+    min_x_span = max(6, int(round(width_local * min_span_fraction)))
+    min_pixels = max(12, int(round(width_local * 0.01)))
+    components = []
+    rejected = []
+
+    for start_y, start_x in active:
+        sy, sx = int(start_y), int(start_x)
+        if visited[sy, sx]:
+            continue
+        visited[sy, sx] = True
+        stack = [(sy, sx)]
+        pixels = []
+        while stack:
+            cy, cx = stack.pop()
+            pixels.append((cy, cx))
+            for dy in (-1, 0, 1):
+                ny = cy + dy
+                if ny < 0 or ny >= height_local:
+                    continue
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx = cx + dx
+                    if nx < 0 or nx >= width_local or visited[ny, nx] or not mask[ny, nx]:
+                        continue
+                    visited[ny, nx] = True
+                    stack.append((ny, nx))
+
+        ys = [point[0] for point in pixels]
+        xs = [point[1] for point in pixels]
+        bbox = [
+            min(xs) + x0,
+            min(ys) + y0,
+            max(xs) + x0 + 1,
+            max(ys) + y0 + 1,
+        ]
+        summary = {
+            "pixel_count": len(pixels),
+            "bbox": bbox,
+            "x_span": max(xs) - min(xs) + 1,
+            "y_span": max(ys) - min(ys) + 1,
+        }
+        if len(pixels) < min_pixels:
+            summary["rejection_reason"] = "COMPONENT_TOO_SMALL"
+            rejected.append(summary)
+            continue
+        if summary["x_span"] < min_x_span:
+            summary["rejection_reason"] = "COMPONENT_X_SPAN_TOO_SHORT"
+            rejected.append(summary)
+            continue
+        components.append({
+            **summary,
+            "coords": np.asarray(pixels, dtype=np.int32),
+        })
+
+    components.sort(key=lambda item: (
+        item["bbox"][0], item["bbox"][1], -item["pixel_count"]
+    ))
+    return {
+        "status": "CONNECTED_COMPONENTS_FOUND" if components else "NO_TRACE_COMPONENTS",
+        "active_pixels": active_count,
+        "component_count": len(components),
+        "components": components,
+        "rejected_components": rejected,
+        "min_component_pixels": min_pixels,
+        "min_component_x_span": min_x_span,
+        "plot_box": [x0, y0, x1, y1],
+        "connectivity": 8,
+    }
+
+
+def _thin_binary_component(mask, *, max_iterations: int = 64):
+    """Zhang-Suen thinning using NumPy only; preserve the original 8-connected path."""
+    import numpy as np
+
+    work = np.pad(mask.astype(bool), 1, mode="constant")
+    iterations = 0
+    changed = True
+    while changed and iterations < max_iterations:
+        changed = False
+        iterations += 1
+        for phase in (0, 1):
+            p2 = work[:-2, 1:-1]
+            p3 = work[:-2, 2:]
+            p4 = work[1:-1, 2:]
+            p5 = work[2:, 2:]
+            p6 = work[2:, 1:-1]
+            p7 = work[2:, :-2]
+            p8 = work[1:-1, :-2]
+            p9 = work[:-2, :-2]
+            neighbours = (p2, p3, p4, p5, p6, p7, p8, p9)
+            count = sum(item.astype(np.uint8) for item in neighbours)
+            transitions = np.zeros(count.shape, dtype=np.uint8)
+            for first, second in zip(neighbours, neighbours[1:] + neighbours[:1]):
+                transitions += (~first & second).astype(np.uint8)
+            remove = (
+                work[1:-1, 1:-1]
+                & (count >= 2)
+                & (count <= 6)
+                & (transitions == 1)
+            )
+            if phase == 0:
+                remove &= ~(p2 & p4 & p6)
+                remove &= ~(p4 & p6 & p8)
+            else:
+                remove &= ~(p2 & p4 & p8)
+                remove &= ~(p2 & p6 & p8)
+            if np.any(remove):
+                work[1:-1, 1:-1][remove] = False
+                changed = True
+    return work[1:-1, 1:-1], {
+        "thinning_iterations": iterations,
+        "thinning_converged": not changed,
+    }
+
+
+def _ordered_skeleton_path(component: dict) -> tuple[list[tuple[int, int]], dict]:
+    """Return a single unambiguous endpoint-to-endpoint path in source pixels."""
+    import numpy as np
+
+    coords = component["coords"]
+    x0, y0, x1, y1 = component["bbox"]
+    local = np.zeros((y1 - y0, x1 - x0), dtype=bool)
+    local[coords[:, 0] - y0, coords[:, 1] - x0] = True
+    skeleton, thinning = _thin_binary_component(local)
+    local_points = [tuple(map(int, pair)) for pair in np.argwhere(skeleton)]
+    points = {(y + y0, x + x0) for y, x in local_points}
+    if len(points) < 8:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "SKELETON_TOO_SHORT",
+            "skeleton_pixels": len(points),
+            **thinning,
+        }
+
+    adjacency: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    for y, x in points:
+        neighbours = []
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy == 0 and dx == 0:
+                    continue
+                candidate = (y + dy, x + dx)
+                if candidate not in points:
+                    continue
+                # Suppress redundant diagonal edges where an orthogonal route
+                # already connects the same two pixels.
+                if dy and dx and (
+                    (y, x + dx) in points or (y + dy, x) in points
+                ):
+                    continue
+                neighbours.append(candidate)
+        adjacency[(y, x)] = neighbours
+
+    endpoints = [point for point, neighbours in adjacency.items() if len(neighbours) == 1]
+    junctions = [point for point, neighbours in adjacency.items() if len(neighbours) > 2]
+    if len(endpoints) != 2 or junctions:
+        reason = "CLOSED_COMPONENT_OR_LOOP" if not endpoints else "BRANCHED_PIXEL_GRAPH"
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": reason,
+            "endpoint_count": len(endpoints),
+            "junction_count": len(junctions),
+            "skeleton_pixels": len(points),
+            **thinning,
+        }
+
+    start = min(endpoints, key=lambda point: (point[1], point[0]))
+    path = [start]
+    previous = None
+    current = start
+    while True:
+        next_points = [
+            point for point in adjacency[current]
+            if point != previous
+        ]
+        if not next_points:
+            break
+        if len(next_points) != 1:
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "BRANCH_DURING_PATH_WALK",
+                "endpoint_count": len(endpoints),
+                "junction_count": len(junctions),
+                "skeleton_pixels": len(points),
+                **thinning,
+            }
+        previous, current = current, next_points[0]
+        if current in path:
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "PIXEL_PATH_CYCLE",
+                "endpoint_count": len(endpoints),
+                "junction_count": len(junctions),
+                "skeleton_pixels": len(points),
+                **thinning,
+            }
+        path.append(current)
+
+    if len(path) != len(points):
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "DISCONNECTED_SKELETON_SUBPATHS",
+            "traced_pixels": len(path),
+            "skeleton_pixels": len(points),
+            **thinning,
+        }
+    if path[-1][1] < path[0][1]:
+        path.reverse()
+    x_values = np.asarray([point[1] for point in path], dtype=np.int32)
+    backward_steps = int(np.count_nonzero(np.diff(x_values) < -1))
+    if backward_steps:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "PATH_BACKTRACKS_IN_X",
+            "backward_x_steps": backward_steps,
+            "endpoint_count": len(endpoints),
+            "junction_count": len(junctions),
+            "skeleton_pixels": len(points),
+            **thinning,
+        }
+    return path, {
+        "status": "PATH_EXTRACTED",
+        "endpoint_count": len(endpoints),
+        "junction_count": len(junctions),
+        "skeleton_pixels": len(points),
+        "path_points": len(path),
+        "backward_x_steps": backward_steps,
+        **thinning,
+    }
+
+
 def detect_monotonic_color_branches(
     image_path: str,
     rgb: tuple[int, int, int],
@@ -16,172 +349,66 @@ def detect_monotonic_color_branches(
     color_match: dict | None = None,
     min_column_support: float = 0.65,
     min_branch_presence_fraction: float = 0.15,
-    max_branches: int = 4,
+    max_branches: int = 24,
 ) -> dict:
-    """Detect persistent vertically separated same-color X-monotonic branches.
+    """Inventory disconnected 2-D trace paths; do not rank row bands by column.
 
-    The central plot width is used so a legend at the left edge cannot create
-    a false extra branch. This inventories candidate bands only; each branch
-    still goes through independent continuity and calibration checks.
+    Kept under the historical function name for API compatibility. Branches
+    are now spatial path components and are validated again by the tracer.
     """
-    try:
-        from PIL import Image
-        import numpy as np
-    except ImportError as exc:
-        from .errors import OptionalDependencyError
-        raise OptionalDependencyError(
-            "Raster branch detection requires Pillow and NumPy: pip install '.[images]'"
-        ) from exc
-
-    with Image.open(image_path) as source:
-        image = np.asarray(source.convert("RGB"), dtype=np.uint8)
-    height, width = image.shape[:2]
-    bx0, by0, bx1, by1 = [float(value) for value in plot_box]
-    if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
-        bx0, bx1 = bx0 * width, bx1 * width
-        by0, by1 = by0 * height, by1 * height
-    x0, y0 = max(0, int(bx0)), max(0, int(by0))
-    x1, y1 = min(width, int(bx1)), min(height, int(by1))
-    if x1 <= x0 or y1 <= y0:
-        return {"status": "INVALID_PLOT_BOX", "branches": [], "plot_box": [x0, y0, x1, y1]}
-
-    if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
-        from .plot_region import _rgb_to_hsv_arrays
-        hues, saturations, values = _rgb_to_hsv_arrays(image.reshape(-1, 3))
-        hue_center = float(color_match.get("hue_center_degrees", 0.0))
-        hue_tolerance = float(color_match.get("hue_tolerance_degrees", 12.0))
-        minimum_saturation = float(color_match.get("minimum_saturation", 0.14))
-        minimum_value = float(color_match.get("minimum_value", 0.20))
-        distance = np.abs((hues - hue_center + 180.0) % 360.0 - 180.0)
-        mask = (
-            (distance <= hue_tolerance)
-            & (saturations >= minimum_saturation)
-            & (values >= minimum_value)
-        ).reshape(height, width)
-    else:
-        target = np.asarray(rgb, dtype=np.int16)
-        mask = np.max(
-            np.abs(image.astype(np.int16) - target), axis=2
-        ) <= int(tolerance)
-
-    # Ignore legend samples and frame-edge artifacts when estimating the
-    # persistent number of data branches.
-    x_start = x0 + max(1, int(round((x1 - x0) * 0.12)))
-    x_stop = x1 - max(1, int(round((x1 - x0) * 0.12)))
-    branch_counts: list[int] = []
-    centers_by_count: dict[int, list[list[float]]] = {}
-    for x in range(x_start, x_stop):
-        ys = np.flatnonzero(mask[y0:y1, x]) + y0
-        if len(ys) < 2:
-            continue
-        clusters: list[list[int]] = []
-        current = [int(ys[0])]
-        for y_value in ys[1:]:
-            value = int(y_value)
-            if value - current[-1] <= 3:
-                current.append(value)
-            else:
-                clusters.append(current)
-                current = [value]
-        clusters.append(current)
-        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
-        if not substantial:
-            continue
-        count = min(len(substantial), max_branches + 1)
-        branch_counts.append(count)
-        if count <= max_branches:
-            centers_by_count.setdefault(count, []).append(
-                [float(np.mean(cluster)) for cluster in substantial]
-            )
-
-    if len(branch_counts) < 20:
-        return {
-            "status": "INSUFFICIENT_BRANCH_COLUMNS",
-            "branches": [],
-            "supported_columns": len(branch_counts),
-            "plot_box": [x0, y0, x1, y1],
+    result = _find_color_components(
+        image_path, rgb, tolerance, plot_box=plot_box, color_match=color_match
+    )
+    components = result.get("components", [])
+    summaries = [
+        {
+            "component_index": index,
+            "pixel_count": item["pixel_count"],
+            "bbox": item["bbox"],
+            "x_span": item["x_span"],
+            "y_span": item["y_span"],
         }
-    histogram = {
-        count: branch_counts.count(count)
-        for count in sorted(set(branch_counts))
-    }
-    dominant_count = max(histogram, key=lambda count: (histogram[count], -count))
-    support = histogram[dominant_count] / len(branch_counts)
-    branch_presence = {
-        count: sum(observed >= count for observed in branch_counts)
-        for count in range(1, max_branches + 1)
-    }
-
-    # The modal band count can be one even when a second trace is visibly
-    # present over a substantial part of the X range. Prefer the highest
-    # branch count that recurs across enough columns; each emitted branch is
-    # still subject to its own gap and raster-QC checks.
-    persistent_counts = [
-        count for count in range(2, max_branches + 1)
-        if branch_presence[count] / len(branch_counts) >= min_branch_presence_fraction
+        for index, item in enumerate(components)
     ]
-    selected_count = max(persistent_counts) if persistent_counts else None
-    if selected_count is not None:
-        centers = [
-            column[:selected_count]
-            for count, grouped in centers_by_count.items()
-            if count >= selected_count
-            for column in grouped
-            if len(column) >= selected_count
-        ]
-        median_centers = []
-        for branch_index in range(selected_count):
-            values = [column[branch_index] for column in centers]
-            if values:
-                median_centers.append(float(np.median(values)))
-        branch_support = branch_presence[selected_count] / len(branch_counts)
+    if result.get("status") not in {"CONNECTED_COMPONENTS_FOUND", "NO_TRACE_COMPONENTS"}:
         return {
-            "status": "MULTIPLE_MONOTONIC_COLOR_BRANCHES",
-            "branch_count": selected_count,
-            "branch_centers_y": median_centers,
-            "supported_columns": len(branch_counts),
-            "branch_presence_columns": branch_presence[selected_count],
-            "support_fraction": round(branch_support, 4),
-            "branch_presence_fraction": round(branch_support, 4),
-            "branch_count_histogram": histogram,
-            "branch_count_presence": branch_presence,
-            "modal_branch_count": dominant_count,
-            "modal_support_fraction": round(support, 4),
-            "plot_box": [x0, y0, x1, y1],
-            "provisional": True,
+            "status": "NEEDS_REVIEW",
+            "reason": result.get("reason") or result.get("status"),
+            "branches": summaries,
+            "branch_count": len(components),
+            "rejected_components": result.get("rejected_components", []),
+            "plot_box": result.get("plot_box"),
         }
-    if dominant_count == 1:
+    if not components:
         return {
-            "status": "SINGLE_MONOTONIC_COLOR_BAND",
-            "branch_count": 1,
-            "supported_columns": len(branch_counts),
-            "support_fraction": round(support, 4),
-            "branch_count_histogram": histogram,
-            "branch_count_presence": branch_presence,
-            "plot_box": [x0, y0, x1, y1],
-            "provisional": True,
+            "status": "NO_CONTINUOUS_PATH_COMPONENTS",
+            "branch_count": 0,
+            "branches": [],
+            "rejected_components": result.get("rejected_components", []),
+            "plot_box": result.get("plot_box"),
         }
-    if dominant_count >= 2 and support >= min_column_support:
+    if len(components) > max_branches:
         return {
-            "status": "MULTIPLE_MONOTONIC_COLOR_BRANCHES",
-            "branch_count": min(dominant_count, max_branches),
-            "branch_centers_y": [],
-            "supported_columns": len(branch_counts),
-            "dominant_count_columns": histogram[dominant_count],
-            "support_fraction": round(support, 4),
-            "branch_count_histogram": histogram,
-            "branch_count_presence": branch_presence,
-            "plot_box": [x0, y0, x1, y1],
-            "provisional": True,
+            "status": "TOO_MANY_PATH_COMPONENTS",
+            "reason": "COMPONENT_COUNT_EXCEEDS_REVIEW_LIMIT",
+            "branch_count": len(components),
+            "branches": summaries,
+            "max_branches": max_branches,
+            "rejected_components": result.get("rejected_components", []),
+            "plot_box": result.get("plot_box"),
         }
     return {
-        "status": "AMBIGUOUS_COLOR_BAND_COUNT",
-        "branch_count": dominant_count,
-        "supported_columns": len(branch_counts),
-        "support_fraction": round(support, 4),
-        "branch_count_histogram": histogram,
-        "branch_count_presence": branch_presence,
-        "plot_box": [x0, y0, x1, y1],
+        "status": (
+            "MULTIPLE_MONOTONIC_COLOR_BRANCHES" if len(components) > 1
+            else "SINGLE_MONOTONIC_COLOR_BAND"
+        ),
+        "branch_count": len(components),
+        "branches": summaries,
+        "supported_columns": result.get("active_pixels"),
+        "support_fraction": 1.0,
+        "rejected_components": result.get("rejected_components", []),
+        "plot_box": result.get("plot_box"),
+        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
         "provisional": True,
     }
 
@@ -200,175 +427,99 @@ def trace_monotonic_color(
     branch_index: int | None = None,
     branch_count: int | None = None,
 ) -> tuple[list[SeriesPoint], dict]:
-    """Conservative monotonic raster tracer for one explicitly selected color.
+    """Trace one connected 2-D colour path without collapsing vertical segments.
 
-    It uses per-column robust medians and therefore must not be used for CV/EIS,
-    loops, or curves that are not single-valued in X.
+    Disconnected components remain separate series candidates. Components with
+    loops, junctions, ambiguous skeletons or backward-X motion are rejected
+    rather than joined or assigned an arbitrary median path.
     """
-    try:
-        from PIL import Image
-        import numpy as np
-    except ImportError as exc:
-        from .errors import OptionalDependencyError
-        raise OptionalDependencyError("Raster extraction requires Pillow and NumPy: pip install '.[images]'") from exc
-
-    with Image.open(image_path) as source:
-        image = np.asarray(source.convert("RGB"), dtype=np.int16)
-    target = np.asarray(rgb, dtype=np.int16)
-    if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
-        from .plot_region import _rgb_to_hsv_arrays
-
-        height, width = image.shape[:2]
-        flat = image.reshape(-1, 3)
-        hues, saturations, values = _rgb_to_hsv_arrays(flat)
-        hue_center = float(color_match.get("hue_center_degrees", 0.0))
-        hue_tolerance = float(color_match.get("hue_tolerance_degrees", 12.0))
-        minimum_saturation = float(color_match.get("minimum_saturation", 0.14))
-        minimum_value = float(color_match.get("minimum_value", 0.20))
-        hue_distance = np.abs((hues - hue_center + 180.0) % 360.0 - 180.0)
-        mask = (
-            (hue_distance <= hue_tolerance)
-            & (saturations >= minimum_saturation)
-            & (values >= minimum_value)
-        ).reshape(height, width)
-    else:
-        mask = np.max(np.abs(image - target), axis=2) <= int(tolerance)
-    height, width = mask.shape
     if plot_box is None:
-        x0, y0, x1, y1 = 0, 0, width, height
-    else:
-        bx0, by0, bx1, by1 = [float(v) for v in plot_box]
-        if max(abs(bx0), abs(by0), abs(bx1), abs(by1)) <= 1.01:
-            bx0, bx1 = bx0 * width, bx1 * width
-            by0, by1 = by0 * height, by1 * height
-        x0, y0 = max(0, int(bx0)), max(0, int(by0))
-        x1, y1 = min(width, int(bx1)), min(height, int(by1))
-        if x1 <= x0 or y1 <= y0:
-            return [], {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX"}
+        return [], {"status": "NEEDS_REVIEW", "reason": "PLOT_REGION_REQUIRED"}
+    result = _find_color_components(
+        image_path, rgb, tolerance, plot_box=plot_box, color_match=color_match
+    )
+    if result.get("status") not in {"CONNECTED_COMPONENTS_FOUND", "NO_TRACE_COMPONENTS"}:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": result.get("reason") or result.get("status"),
+            "component_detection": {
+                key: value for key, value in result.items() if key != "components"
+            },
+            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        }
+    components = result.get("components", [])
+    if not components:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "NO_CONTINUOUS_PATH_COMPONENTS",
+            "component_detection": {
+                key: value for key, value in result.items() if key != "components"
+            },
+            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        }
+    if branch_index is None and len(components) > 1:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "MULTIPLE_DISCONNECTED_PATHS_REQUIRE_SEPARATE_SERIES",
+            "component_count": len(components),
+            "branches": [
+                {
+                    "component_index": index,
+                    "pixel_count": item["pixel_count"],
+                    "bbox": item["bbox"],
+                    "x_span": item["x_span"],
+                }
+                for index, item in enumerate(components)
+            ],
+            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        }
+    selected_index = 0 if branch_index is None else int(branch_index)
+    if selected_index < 0 or selected_index >= len(components):
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": "PATH_COMPONENT_INDEX_OUT_OF_RANGE",
+            "component_count": len(components),
+            "requested_component_index": selected_index,
+        }
 
-    # A color-coded Y-axis spine can share the curve hue. It must not be
-    # interpreted as a second, vertically separated data branch at the first
-    # or last X column. Remove only boundary columns with strong long-run
-    # vertical evidence; ordinary curve endpoints/ticks do not meet this test.
-    edge_axis_columns_removed = []
-    if plot_box is not None:
-        edge_width = min(4, max(2, int(round((x1 - x0) * 0.012))))
-        edge_columns = (
-            list(range(x0, min(x1, x0 + edge_width)))
-            + list(range(max(x0, x1 - edge_width), x1))
-        )
-        for x in sorted(set(edge_columns)):
-            present_rows = np.flatnonzero(mask[y0:y1, x])
-            if len(present_rows) < max(8, int(round((y1 - y0) * 0.15))):
-                continue
-            longest_run = 0
-            current_run = 0
-            previous_row = None
-            for row in present_rows:
-                row = int(row)
-                if previous_row is None or row - previous_row > 3:
-                    current_run = 1
-                else:
-                    current_run += row - previous_row
-                longest_run = max(longest_run, current_run)
-                previous_row = row
-            if longest_run / max(1, y1 - y0) >= 0.25:
-                mask[y0:y1, x] = False
-                edge_axis_columns_removed.append(int(x))
+    path, path_qc = _ordered_skeleton_path(components[selected_index])
+    if not path:
+        return [], {
+            "status": "NEEDS_REVIEW",
+            "reason": path_qc.get("reason", "PATH_EXTRACTION_FAILED"),
+            "component_index": selected_index,
+            "component": {
+                key: value for key, value in components[selected_index].items()
+                if key != "coords"
+            },
+            "path_qc": path_qc,
+            "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        }
 
-    columns: list[tuple[int, float, int]] = []
-    for x in range(x0, x1):
-        ys = np.flatnonzero(mask[y0:y1, x]) + y0
-        if branch_index is None:
-            if len(ys) >= min_pixels_per_column:
-                columns.append((x, float(np.median(ys)), len(ys)))
-            continue
-        clusters: list[list[int]] = []
-        if len(ys):
-            current = [int(ys[0])]
-            for y_value in ys[1:]:
-                value = int(y_value)
-                if value - current[-1] <= 3:
-                    current.append(value)
-                else:
-                    clusters.append(current)
-                    current = [value]
-            clusters.append(current)
-        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
-        if 0 <= branch_index < len(substantial):
-            selected = substantial[branch_index]
-            columns.append((x, float(np.median(selected)), len(selected)))
-    if len(columns) < 8:
-        return [], {"status": "NEEDS_REVIEW", "reason": "INSUFFICIENT_TRACE_PIXELS",
-                    "matched_columns": len(columns),
-                    "edge_axis_columns_removed": edge_axis_columns_removed}
-    gaps = [b[0] - a[0] - 1 for a, b in zip(columns, columns[1:])]
-    max_gap = max(gaps, default=0)
-    if max_gap > max_gap_columns:
-        return [], {"status": "NEEDS_REVIEW", "reason": "DISCONTINUOUS_OR_DASHED_TRACE",
-                    "matched_columns": len(columns), "max_gap_columns": max_gap}
-    # Detect multiple vertically separated bands in a column. Same-color traces
-    # must not be collapsed to a median when two branches/curves occupy one X column.
-    for x in range(x0, x1):
-        if branch_index is not None:
-            continue
-        ys = np.flatnonzero(mask[y0:y1, x]) + y0
-        if len(ys) < 4:
-            continue
-        clusters = []
-        current = [int(ys[0])]
-        for y_value in ys[1:]:
-            y_integer = int(y_value)
-            if y_integer - current[-1] <= 3:
-                current.append(y_integer)
-            else:
-                clusters.append(current)
-                current = [y_integer]
-        clusters.append(current)
-        substantial = [cluster for cluster in clusters if len(cluster) >= 2]
-        if len(substantial) >= 2:
-            return [], {
-                "status": "NEEDS_REVIEW",
-                "reason": "MULTIPLE_SAME_COLOR_BANDS",
-                "ambiguous_column": x,
-                "band_centers": [float(np.mean(cluster)) for cluster in substantial],
-            }
-        maximum_single_band_thickness = max(
-            16, int(round((y1 - y0) * 0.08))
-        )
-        if (
-            len(clusters) == 1
-            and len(ys) > 12
-            and (int(ys.max()) - int(ys.min())) > maximum_single_band_thickness
-        ):
-            return [], {
-                "status": "NEEDS_REVIEW",
-                "reason": "THICK_OR_AMBIGUOUS_TRACE",
-                "ambiguous_column": x,
-                "matched_pixel_count": int(len(ys)),
-                "vertical_span_pixels": int(ys.max() - ys.min()),
-                "cluster_count": len(clusters),
-                "maximum_single_band_thickness": maximum_single_band_thickness,
-            }
-    points = []
-    for index, (x, py, _) in enumerate(columns):
-        points.append(SeriesPoint(
+    points = [
+        SeriesPoint(
             point_index=index,
-            x=map_pixel(x_calibration, x) if x_calibration else None,
-            y=map_pixel(y_calibration, py) if y_calibration else None,
-            pixel_x=float(x), pixel_y=float(py),
-        ))
+            x=map_pixel(x_calibration, float(px)) if x_calibration else None,
+            y=map_pixel(y_calibration, float(py)) if y_calibration else None,
+            pixel_x=float(px),
+            pixel_y=float(py),
+        )
+        for index, (py, px) in enumerate(path)
+    ]
+    component = components[selected_index]
     return points, {
         "status": "EXTRACTED_PROVISIONAL",
-        "method": "raster_color_column_median",
-        "matched_columns": len(columns),
-        "matched_pixel_fraction": len(columns) / max(1, x1 - x0),
-        "plot_box": [x0, y0, x1, y1],
-        "edge_axis_columns_removed": edge_axis_columns_removed,
-        "branch_index": branch_index,
-        "branch_count": branch_count,
-        "max_gap_columns": max_gap,
-        "path_constraint": "X_MONOTONIC_ONLY",
+        "method": "raster_color_connected_path",
+        "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
+        "path_order": "CONNECTED_PIXEL_GRAPH_LEFT_TO_RIGHT",
+        "component_index": selected_index,
+        "component_count": len(components),
+        "component_bbox": component["bbox"],
+        "component_pixel_count": component["pixel_count"],
+        "component_x_span": component["x_span"],
+        "component_y_span": component["y_span"],
+        "path_points": len(points),
+        "plot_box": result.get("plot_box"),
         "qc_status": "PROVISIONAL_UNCALIBRATED",
         "geometry_only": x_calibration is None or y_calibration is None,
         "numeric_mapping_status": (
@@ -379,6 +530,18 @@ def trace_monotonic_color(
         "color_matching_space": (
             color_match.get("space") if isinstance(color_match, dict) else "RGB_DISTANCE"
         ),
+        "max_gap_columns_not_used": max_gap_columns,
+        "legacy_min_pixels_per_column_not_used": min_pixels_per_column,
+        "component_detection": {
+            "active_pixels": result.get("active_pixels"),
+            "rejected_components": result.get("rejected_components", []),
+            "min_component_pixels": result.get("min_component_pixels"),
+            "min_component_x_span": result.get("min_component_x_span"),
+            "connectivity": result.get("connectivity"),
+        },
+        "path_qc": path_qc,
+        "branch_index": branch_index,
+        "branch_count": branch_count or len(components),
     }
 
 
