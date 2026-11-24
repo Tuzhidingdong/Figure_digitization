@@ -200,7 +200,9 @@ def _find_color_components(
             summary["x_span"] >= max(6, int(round(min_x_span * 0.25)))
             and summary["y_span"] >= max(2, int(round(min_x_span * 0.08)))
             and summary["y_span"] <= max(24, int(round(min_x_span * 0.25)))
-            and summary["pixel_count"] >= max(20, int(round(min_x_span * 0.80)))
+            # Local 2-D fragments must be line-like, not compact rings/glyphs.
+            and summary["x_span"] >= int(round(summary["y_span"] * 2.5))
+            and summary["pixel_count"] >= max(24, int(round(min_x_span * 0.80)))
         )
         source_component_index = int(sy * width_local + sx)
         if summary["x_span"] < min_x_span and not (
@@ -929,13 +931,110 @@ def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
     return groups
 
 
-def _branch_group_is_complete(group: list[dict]) -> bool:
-    """True only for one fully validated path with no partial-fragment marker."""
+def _branch_group_has_full_span_path(group: list[dict]) -> bool:
+    """A full-span geometric candidate, independent of its separate QC status."""
     return (
         len(group) == 1
-        and (group[0].get("path_qc") or {}).get("status") == "PATHS_EXTRACTED"
         and group[0].get("path_kind", "FULL_X_SPAN_PATH") == "FULL_X_SPAN_PATH"
     )
+
+
+def _branch_group_is_local_review(group: list[dict]) -> bool:
+    """Only explicit LOCAL_* geometry may be auto-excluded beside a unique full path."""
+    return bool(group) and all(
+        str(item.get("path_kind", "")).startswith("LOCAL_")
+        and (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+        for item in group
+    )
+
+
+def _select_unique_full_span_group(groups: list[list[dict]]) -> tuple[list[list[dict]], list[dict]]:
+    """Suppress only local-review groups, never long full-span paths with QC warnings."""
+    if len(groups) <= 1:
+        return groups, []
+    full_span_indices = [
+        index for index, group in enumerate(groups)
+        if _branch_group_has_full_span_path(group)
+    ]
+    if len(full_span_indices) != 1:
+        return groups, []
+    selected_index = full_span_indices[0]
+    if not all(
+        index == selected_index or _branch_group_is_local_review(group)
+        for index, group in enumerate(groups)
+    ):
+        return groups, []
+    excluded = [
+        _branch_group_summary(index, group)
+        for index, group in enumerate(groups)
+        if index != selected_index
+    ]
+    return [groups[selected_index]], excluded
+
+
+def _compact_rejected_review_candidates(
+    rejected_components: list[dict], selected_group: list[dict],
+) -> list[dict]:
+    """Record small, spatially separate unsupported junction components beside a unique path.
+
+    These are review-only exclusions, not assertions that a component is definitely
+    an annotation. The original rejection cause and geometry are kept verbatim.
+    """
+    if not _branch_group_has_full_span_path(selected_group):
+        return []
+    selected = selected_group[0]
+    selected_bbox = selected.get("bbox", [])
+    if len(selected_bbox) != 4:
+        return []
+    sx0, sy0, sx1, sy1 = [int(value) for value in selected_bbox]
+    selected_x_span = max(1, sx1 - sx0)
+    selected_y_span = max(1, sy1 - sy0)
+    selected_pixels = max(1, int(selected.get("pixel_count", 0)))
+    output = []
+    for item in rejected_components:
+        path_qc = item.get("path_qc") or {}
+        source_reason = (
+            path_qc.get("reason")
+            or item.get("rejection_reason")
+        )
+        if source_reason != "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW":
+            continue
+        bbox = item.get("bbox", [])
+        if len(bbox) != 4:
+            continue
+        x0, y0, x1, y1 = [int(value) for value in bbox]
+        x_span = max(0, x1 - x0)
+        y_span = max(0, y1 - y0)
+        overlaps_selected = (
+            max(x0, sx0) < min(x1, sx1)
+            and max(y0, sy0) < min(y1, sy1)
+        )
+        pixel_count = int(item.get("pixel_count", 0))
+        compact_and_separate = (
+            not overlaps_selected
+            and x_span <= selected_x_span * 0.40
+            and y_span <= selected_y_span * 0.50
+            and pixel_count <= selected_pixels * 0.30
+        )
+        if not compact_and_separate:
+            continue
+        output.append({
+            **item,
+            "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
+            "source_qc_rejection_reason": source_reason,
+            "classification": "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC",
+            "bbox": [x0, y0, x1, y1],
+            "x_span": x_span,
+            "y_span": y_span,
+            "decision_basis": {
+                "unique_full_span_path_bbox": [sx0, sy0, sx1, sy1],
+                "spatially_separate": True,
+                "relative_x_span_max": 0.40,
+                "relative_y_span_max": 0.50,
+                "relative_pixel_count_max": 0.30,
+            },
+        })
+    return output
 
 
 def _branch_group_summary(index: int, group: list[dict]) -> dict:
@@ -1012,29 +1111,17 @@ def detect_monotonic_color_branches(
             "plot_box": result.get("plot_box"),
         }
 
-    excluded_partial_branches = []
-    complete_indices = [
-        index for index, group in enumerate(groups)
-        if _branch_group_is_complete(group)
+    groups, excluded_partial_branches = _select_unique_full_span_group(groups)
+    summaries = [
+        _branch_group_summary(index, group)
+        for index, group in enumerate(groups)
     ]
-    if len(groups) > 1 and len(complete_indices) == 1:
-        selected = complete_indices[0]
-        other_groups_are_partial = all(
-            index == selected
-            or all(
-                (item.get("path_qc") or {}).get("status")
-                == "PARTIAL_PATHS_NEEDS_REVIEW"
-                for item in group
+    if len(groups) == 1:
+        excluded_partial_branches.extend(
+            _compact_rejected_review_candidates(
+                result.get("rejected_components", []), groups[0]
             )
-            for index, group in enumerate(groups)
         )
-        if other_groups_are_partial:
-            excluded_partial_branches = [
-                summary for index, summary in enumerate(summaries)
-                if index != selected
-            ]
-            groups = [groups[selected]]
-            summaries = [_branch_group_summary(0, groups[0])]
     if len(groups) > max_branches:
         return {
             "status": "TOO_MANY_PATH_COMPONENTS",
@@ -1049,13 +1136,16 @@ def detect_monotonic_color_branches(
 
     rejected_components = list(result.get("rejected_components", []))
     for item in excluded_partial_branches:
-        rejected_components.append({
-            "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
-            "bbox": item.get("bbox"),
-            "pixel_count": item.get("pixel_count"),
-            "path_count": item.get("path_count"),
-            "source_component_index": item.get("source_component_index"),
-        })
+        if item not in rejected_components:
+            rejected_components.append({
+                "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
+                "source_qc_rejection_reason": item.get("source_qc_rejection_reason"),
+                "classification": item.get("classification", "LOCAL_REVIEW_PATH_EXCLUDED"),
+                "bbox": item.get("bbox"),
+                "pixel_count": item.get("pixel_count"),
+                "path_count": item.get("path_count"),
+                "source_component_index": item.get("source_component_index"),
+            })
     return {
         "status": (
             "MULTIPLE_MONOTONIC_COLOR_BRANCHES" if len(groups) > 1
@@ -1120,27 +1210,12 @@ def trace_monotonic_color(
         }
 
     auto_excluded = []
-    if branch_index is None and len(groups) > 1:
-        complete_indices = [
-            index for index, group in enumerate(groups)
-            if _branch_group_is_complete(group)
-        ]
-        if len(complete_indices) == 1 and all(
-            index == complete_indices[0]
-            or all(
-                (item.get("path_qc") or {}).get("status")
-                == "PARTIAL_PATHS_NEEDS_REVIEW"
-                for item in group
-            )
-            for index, group in enumerate(groups)
-        ):
-            selected_index = complete_indices[0]
-            auto_excluded = [
-                _branch_group_summary(index, group)
-                for index, group in enumerate(groups)
-                if index != selected_index
-            ]
-        else:
+    if branch_index is None:
+        selected_groups, auto_excluded = _select_unique_full_span_group(groups)
+        if len(selected_groups) == 1 and len(groups) > 1:
+            groups = selected_groups
+            selected_index = 0
+        elif len(groups) > 1:
             return [], {
                 "status": "NEEDS_REVIEW",
                 "reason": "MULTIPLE_DISCONNECTED_PATHS_REQUIRE_SEPARATE_SERIES",
@@ -1151,8 +1226,10 @@ def trace_monotonic_color(
                 ],
                 "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
             }
+        else:
+            selected_index = 0
     else:
-        selected_index = 0 if branch_index is None else int(branch_index)
+        selected_index = int(branch_index)
 
     if selected_index < 0 or selected_index >= len(groups):
         return [], {
@@ -1271,7 +1348,12 @@ def trace_monotonic_color(
         },
         "path_qc": path_qc,
         "review_required": partial_review_required,
-        "excluded_partial_branches": auto_excluded,
+        "excluded_partial_branches": (
+            auto_excluded
+            + _compact_rejected_review_candidates(
+                result.get("rejected_components", []), selected_group
+            )
+        ),
         "branch_index": selected_index,
         "branch_count": branch_count or len(groups),
     }
