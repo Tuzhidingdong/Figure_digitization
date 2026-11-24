@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable
 
 from .calibration import map_pixel
@@ -45,6 +46,23 @@ def _build_color_mask(
     return np.max(np.abs(region.astype(np.int16) - target), axis=2) <= int(tolerance)
 
 
+def _close_binary_mask(mask):
+    """Bridge one-pixel rasterization gaps without joining visibly separate paths."""
+    import numpy as np
+
+    padded = np.pad(mask.astype(bool), 1, mode="constant")
+    dilated = np.zeros(mask.shape, dtype=bool)
+    for dy in range(3):
+        for dx in range(3):
+            dilated |= padded[dy:dy + mask.shape[0], dx:dx + mask.shape[1]]
+    padded_dilated = np.pad(dilated, 1, mode="constant")
+    closed = np.ones(mask.shape, dtype=bool)
+    for dy in range(3):
+        for dx in range(3):
+            closed &= padded_dilated[dy:dy + mask.shape[0], dx:dx + mask.shape[1]]
+    return closed
+
+
 def _find_color_components(
     image_path: str,
     rgb: tuple[int, int, int],
@@ -84,6 +102,22 @@ def _find_color_components(
         region = np.asarray(source.convert("RGB").crop((x0, y0, x1, y1)), dtype=np.uint8)
 
     mask = _build_color_mask(region, rgb, tolerance, color_match)
+    from .plot_region import detect_colored_y_axis_spines
+
+    spine_evidence = detect_colored_y_axis_spines(
+        Path(image_path), (x0, y0, x1, y1)
+    )
+    edge_width = max(2, min(14, int(round((x1 - x0) * 0.012))))
+    edge_axis_columns_removed = []
+    sides = spine_evidence.get("sides", {})
+    if sides.get("LEFT", {}).get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED":
+        mask[:, :min(edge_width, mask.shape[1])] = False
+        edge_axis_columns_removed.extend(range(x0, min(x1, x0 + edge_width)))
+    if sides.get("RIGHT", {}).get("status") == "CHROMATIC_Y_AXIS_SPINE_DETECTED":
+        start = max(0, mask.shape[1] - edge_width)
+        mask[:, start:] = False
+        edge_axis_columns_removed.extend(range(x0 + start, x1))
+    mask = _close_binary_mask(mask)
     active_count = int(mask.sum())
     if active_count > max_color_pixels:
         return {
@@ -91,6 +125,8 @@ def _find_color_components(
             "reason": "CONNECTED_COMPONENT_PIXEL_BUDGET_EXCEEDED",
             "active_pixels": active_count,
             "pixel_budget": max_color_pixels,
+            "edge_axis_columns_removed": edge_axis_columns_removed,
+            "axis_spine_exclusion": spine_evidence,
             "components": [],
             "rejected_components": [],
             "plot_box": [x0, y0, x1, y1],
@@ -101,6 +137,8 @@ def _find_color_components(
             "active_pixels": active_count,
             "components": [],
             "rejected_components": [],
+            "edge_axis_columns_removed": edge_axis_columns_removed,
+            "axis_spine_exclusion": spine_evidence,
             "plot_box": [x0, y0, x1, y1],
         }
 
@@ -187,6 +225,8 @@ def _find_color_components(
         "min_component_x_span": min_x_span,
         "plot_box": [x0, y0, x1, y1],
         "connectivity": 8,
+        "edge_axis_columns_removed": edge_axis_columns_removed,
+        "axis_spine_exclusion": spine_evidence,
     }
 
 
@@ -388,6 +428,8 @@ def detect_monotonic_color_branches(
             "branches": summaries,
             "branch_count": len(components),
             "rejected_components": result.get("rejected_components", []),
+            "edge_axis_columns_removed": result.get("edge_axis_columns_removed", []),
+            "axis_spine_exclusion": result.get("axis_spine_exclusion", {}),
             "plot_box": result.get("plot_box"),
         }
     if not components:
@@ -531,6 +573,8 @@ def trace_monotonic_color(
         ),
         "max_gap_columns_not_used": max_gap_columns,
         "legacy_min_pixels_per_column_not_used": min_pixels_per_column,
+        "edge_axis_columns_removed": result.get("edge_axis_columns_removed", []),
+        "axis_spine_exclusion": result.get("axis_spine_exclusion", {}),
         "component_detection": {
             "active_pixels": result.get("active_pixels"),
             "rejected_components": result.get("rejected_components", []),

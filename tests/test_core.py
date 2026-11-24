@@ -1785,7 +1785,7 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert min(point.pixel_y for point in points) <= 26
     assert max(point.pixel_y for point in points) >= 75
     assert any(
-        left.pixel_x == right.pixel_x and abs(left.pixel_y - right.pixel_y) > 10
+        abs(left.pixel_x - right.pixel_x) <= 1 and abs(left.pixel_y - right.pixel_y) > 10
         for left, right in zip(points, points[1:])
     )
     assert not any(8 <= point.pixel_y <= 18 for point in points)
