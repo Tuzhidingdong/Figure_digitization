@@ -3,7 +3,7 @@
 Repository: `Tuzhidingdong/Figure_digitization`
 Target branch: `fix/partial-raster-fragment-preservation`
 Validation baseline commit: `43d1b6c5aca07b9ee22977f0eae360154912a7fe`
-Current branch HEAD at handoff: `97bdba4ae0953c4e4d5edfe7b75313fe043fb487`
+Current branch HEAD at handoff: `eaeed9bf6c07fff07b4282f559534bd9338c8876`
 Algorithm version: `0.7.0`
 
 This is a candidate implementation. It has **not** been executed in the local Windows environment and is not yet accepted.
@@ -37,7 +37,7 @@ The code changes are limited to:
 
 Expected behavior:
 1. Long local vertical segments and selected short 2-D fragments may be retained as **partial-review geometry**, even when their individual X span is below the full-curve threshold.
-2. Partial paths from one ambiguous source component are returned as one grouped result with explicit independent segment ranges. No bridge or connecting line is invented.
+2. Partial paths from one ambiguous source component are returned as one grouped result with explicit independent segment ranges. If all surviving branches are partial-review fragments (including disconnected dashed/stroke fragments), they are collected into one review-only segment collection. No bridge or connecting line is invented.
 3. A unique complete path may be selected when the only competing branches are explicitly partial-review candidates. Those excluded candidates remain in QC. Multiple complete branches or unknown competing branches still require explicit selection.
 4. Compact unsupported 3–7-port junctions remain whole-component review failures; a five-way junction must not become guessed output paths.
 5. Pipeline state propagation must preserve `EXTRACTED_PROVISIONAL_NEEDS_REVIEW` / `NEEDS_REVIEW_PARTIAL_PATH`.
