@@ -1568,10 +1568,18 @@ def _extract_panel(
             if definition.get("_auto_trace_branch_detection"):
                 qc["branch_detection"] = definition["_auto_trace_branch_detection"]
             record.extraction_method = qc.get("method", "RASTER_COLOR")
-            record.extraction_status = (
-                "EXTRACTED_PROVISIONAL" if record.points and x_cal and y_cal
-                else "GEOMETRY_ONLY_NEEDS_REVIEW" if record.points else "NEEDS_REVIEW"
-            )
+            if record.points and (
+                qc.get("review_required")
+                or qc.get("status") == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+            ):
+                record.extraction_status = "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+                record.qc_status = qc.get("qc_status", "NEEDS_REVIEW_PARTIAL_PATH")
+                record.review_state = "NEEDS_REVIEW"
+            else:
+                record.extraction_status = (
+                    "EXTRACTED_PROVISIONAL" if record.points and x_cal and y_cal
+                    else "GEOMETRY_ONLY_NEEDS_REVIEW" if record.points else "NEEDS_REVIEW"
+                )
             record.metadata = {"x_calibration": calibration_to_dict(x_cal) if x_cal else None,
                                "y_calibration": calibration_to_dict(y_cal) if y_cal else None,
                         "y_axis_calibrations": {
@@ -1620,8 +1628,21 @@ def _extract_panel(
                 "calibration_errors": calibration_errors,
             }
         if record.points:
-            record.qc_status = "PROVISIONAL_UNCALIBRATED"
-            record.review_state = "NEEDS_REVIEW"
+            raster_qc = record.metadata.get("raster_qc", {})
+            if (
+                raster_qc.get("review_required")
+                or raster_qc.get("status") == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+            ):
+                # Never downgrade an explicitly partial raster trace to a
+                # successful/provisional-unreviewed state in the pipeline tail.
+                record.extraction_status = "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+                record.qc_status = raster_qc.get(
+                    "qc_status", "NEEDS_REVIEW_PARTIAL_PATH"
+                )
+                record.review_state = "NEEDS_REVIEW"
+            else:
+                record.qc_status = "PROVISIONAL_UNCALIBRATED"
+                record.review_state = "NEEDS_REVIEW"
         _attach_standardization_request(record, definition)
         results.append(record)
     return results
