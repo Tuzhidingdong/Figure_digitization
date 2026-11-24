@@ -85,7 +85,7 @@ def test_trace_specification_requires_ordered_x_axis_and_numeric_axes(tmp_path: 
         image, (10, 10, 90, 90), color, x_cal, y_cal, "UNCLASSIFIED", "Cycle number"
     )
     assert accepted["status"] == "READY"
-    assert accepted["specification"]["path_order"] == "X_MONOTONIC"
+    assert accepted["specification"]["path_order"] == "CONNECTED_2D_PIXEL_PATH_LEFT_TO_RIGHT"
 
     cv = generate_trace_specification(
         image, (10, 10, 90, 90), color, x_cal, y_cal, "CV", "Potential (V)"

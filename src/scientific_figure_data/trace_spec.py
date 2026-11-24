@@ -36,7 +36,7 @@ def generate_trace_specification(
     allow_unlabelled_manual_override: bool = False,
     allow_geometry_only: bool = False,
 ) -> dict[str, Any]:
-    """Create a trace contract only from observed image/color/axis evidence.
+    """Create a connected-path trace contract from observed image/color/axis evidence.
 
     Unknown chart families are allowed only when the OCR-derived X-axis label
     explicitly identifies an ordered independent variable. Known non-monotonic
@@ -104,7 +104,7 @@ def generate_trace_specification(
         "status": "READY",
         "specification": {
             "schema_version": "1.0",
-            "specification_type": "SINGLE_COLOR_X_MONOTONIC_RASTER_TRACE",
+            "specification_type": "SINGLE_COLOR_CONNECTED_2D_RASTER_PATH",
             "numeric_mapping_status": (
                 "CALIBRATED_NUMERIC" if x_is_calibrated and y_is_calibrated
                 else "PARTIALLY_CALIBRATED" if x_is_calibrated or y_is_calibrated
@@ -120,7 +120,7 @@ def generate_trace_specification(
             "y_calibration": calibration_to_dict(y_calibration) if y_calibration else None,
             "chart_family": family,
             "x_axis_label": x_axis_label,
-            "path_order": "X_MONOTONIC",
+            "path_order": "CONNECTED_2D_PIXEL_PATH_LEFT_TO_RIGHT",
             "generated_from": [
                 "AUTOMATIC_PLOT_REGION_CANDIDATE",
                 "AUTOMATIC_SINGLE_COLOR_DETECTION",
