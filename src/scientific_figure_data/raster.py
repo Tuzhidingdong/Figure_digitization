@@ -376,7 +376,7 @@ def _ordered_skeleton_paths(
     # skeleton bridge before estimating their external arms.
     from collections import deque
 
-    merge_distance = max(3, min(10, int(round(minimum_path_x_span * 0.25))))
+    merge_distance = max(6, min(12, int(round(minimum_path_x_span * 0.60))))
 
     def find_short_junction_bridge(first_cluster, second_cluster):
         queue = deque()
