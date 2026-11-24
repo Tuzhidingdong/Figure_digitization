@@ -3,7 +3,7 @@
 Repository: `Tuzhidingdong/Figure_digitization`
 Target branch: `fix/partial-branch-qc-preservation`
 Validation baseline / parent: `804c0931f0d9ed4e632680b61fcbdc214399eb5c`
-Current branch HEAD at handoff: `aa3618cfa01cf31d512f8778c1dfbcb508d886fc`
+Minimum required code commit (must be an ancestor of local HEAD): `aa3618cfa01cf31d512f8778c1dfbcb508d886fc`
 Algorithm version: `0.8.0`
 
 This is a candidate corrective patch. It has **not** been run in the local Windows environment and is not accepted yet.
@@ -67,7 +67,7 @@ New/updated regression protections:
 
 ## 3. Sync and one-pass tests
 
-After safely syncing the target branch, confirm the working HEAD is `aa3618cfa01cf31d512f8778c1dfbcb508d886fc` or a descendant containing it. The required parent is `804c0931f0d9ed4e632680b61fcbdc214399eb5c`.
+After safely syncing the target branch, confirm the local HEAD contains the required code commit `aa3618cfa01cf31d512f8778c1dfbcb508d886fc` in its ancestry. The required parent is `804c0931f0d9ed4e632680b61fcbdc214399eb5c`.
 
 Use the existing Python 3.13.9 environment. Run syntax/import checks, then execute the four relevant files **once**:
 
