@@ -1822,6 +1822,81 @@ def test_2d_path_tracer_retains_long_vertical_segments_as_partial_geometry(tmp_p
     ) >= 80
 
 
+
+def test_reconstruction_keeps_explicit_path_segment_breaks(tmp_path: Path):
+    from types import SimpleNamespace
+    from PIL import Image
+    from scientific_figure_data.reconstruction import render_series_artifacts
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "white").save(source)
+    points = [
+        SimpleNamespace(point_index=0, pixel_x=10.0, pixel_y=10.0, x=None, y=None),
+        SimpleNamespace(point_index=1, pixel_x=20.0, pixel_y=10.0, x=None, y=None),
+        SimpleNamespace(point_index=2, pixel_x=40.0, pixel_y=40.0, x=None, y=None),
+        SimpleNamespace(point_index=3, pixel_x=50.0, pixel_y=40.0, x=None, y=None),
+    ]
+    series = SimpleNamespace(
+        series_id="two-local-fragments",
+        points=points,
+        metadata={
+            "raster_qc": {
+                "path_segments": [
+                    {"segment_index": 0, "start_point_index": 0, "end_point_index": 1},
+                    {"segment_index": 1, "start_point_index": 2, "end_point_index": 3},
+                ]
+            }
+        },
+        evidence=[],
+        x_label=None,
+        y_label=None,
+        x_unit=None,
+        y_unit=None,
+        label=None,
+    )
+    result = render_series_artifacts(series, source, tmp_path / "rendered")
+    assert result["status"] == "GEOMETRY_ONLY_OVERLAY", result
+    with Image.open(tmp_path / "rendered" / "two-local-fragments_overlay.png") as overlay:
+        assert overlay.convert("RGB").getpixel((30, 25)) == (255, 255, 255)
+
+
+def test_panel_series_csv_preserves_path_segment_indices(tmp_path: Path):
+    import csv
+    from types import SimpleNamespace
+    from scientific_figure_data.storage import append_panel_series_csv
+
+    points = [
+        SimpleNamespace(
+            point_index=index,
+            x=None,
+            y=None,
+            pixel_x=float(x),
+            pixel_y=float(y),
+            y_err_low=None,
+            y_err_high=None,
+            err_type="UNKNOWN",
+        )
+        for index, (x, y) in enumerate(((10, 10), (20, 10), (40, 40), (50, 40)))
+    ]
+    series = SimpleNamespace(
+        series_id="two-local-fragments",
+        points=points,
+        y_axis_side="UNASSIGNED",
+        metadata={
+            "raster_qc": {
+                "path_segments": [
+                    {"segment_index": 0, "start_point_index": 0, "end_point_index": 1},
+                    {"segment_index": 1, "start_point_index": 2, "end_point_index": 3},
+                ]
+            }
+        },
+    )
+    csv_path = append_panel_series_csv(tmp_path, "Figure1", "a", [series])
+    with csv_path.open("r", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["path_segment_index"] for row in rows] == ["0", "0", "1", "1"]
+
+
 def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.raster import (
