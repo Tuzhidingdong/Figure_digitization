@@ -1779,7 +1779,9 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert detected["branch_count"] == 1, detected
     assert len(detected.get("excluded_partial_branches", [])) == 1, detected
     excluded = detected["excluded_partial_branches"][0]
-    assert excluded["bbox"] == [82, 8, 126, 18], excluded
+    # QC stores the full rejected connected component, not only the rectangle
+    # primitive: the upper dashed marks are part of this component's bbox.
+    assert excluded["bbox"] == [82, 4, 127, 19], excluded
     assert any(
         item.get("rejection_reason")
         == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
@@ -1812,7 +1814,8 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     )
     assert not any(8 <= point.pixel_y <= 18 for point in points)
     assert len(qc.get("excluded_partial_branches", [])) == 1, qc
-    assert qc["excluded_partial_branches"][0]["bbox"] == [82, 8, 126, 18], qc
+    # The trace QC carries the same full connected-component bbox.
+    assert qc["excluded_partial_branches"][0]["bbox"] == [82, 4, 127, 19], qc
 
 
 
