@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-24",
+  "repository": "Tuzhidingdong/Figure_digitization",
+  "branch": "fix/junction-local-ambiguity-recovery",
+  "head": "41cf3d44aacb6fa6a2c3b2ad91a71863d8055ec0",
+  "base": "d7a53c624382865783dc821b546d6c46a746947e",
+  "required_fix_commit": "de0bc4f59402cce4d6e6d484984feda020202614",
+  "required_fix_commit_is_ancestor": true,
+  "python": "3.13.9",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "environment": "existing Python 3.13.9, cached OCR only, no new optional dependency",
+  "tests": {
+    "command": "python -m pytest tests/test_core.py tests/test_automatic_digitization.py tests/test_real_image_regressions.py tests/test_upstream_compat.py -o addopts=\"\" -q --durations=0",
+    "collected": 153,
+    "passed": 151,
+    "failed": 2,
+    "skipped": 0,
+    "exit_code": 1,
+    "duration_seconds": 166.86,
+    "failed_tests": [
+      "tests/test_core.py::test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations",
+      "tests/test_core.py::test_2d_path_tracer_rejects_unsupported_five_way_junction"
+    ],
+    "focused_recheck": {
+      "note": "two stale baseline expectations adjusted locally to the new partial-path contract and re-run once; test file restored afterwards, not committed",
+      "passed": 2,
+      "failed": 0,
+      "exit_code": 0,
+      "duration_seconds": 0.89
+    }
+  },
+  "source_images": [
+    {
+      "case": "P3_02",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P3_02.png",
+      "repo_path": "tests/fixtures/real_figures/P3_02.png",
+      "bytes": 827536,
+      "sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e"
+    },
+    {
+      "case": "P8_06",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P8_06.png",
+      "repo_path": "tests/fixtures/real_figures/P8_06.png",
+      "bytes": 450356,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    }
+  ],
+  "run_outputs": {
+    "directory": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124",
+    "extract_script": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extract_only.py",
+    "render_script": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\render_reconstructions.py",
+    "manifest": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\reconstruction_manifest.json",
+    "extraction_run_json": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction_run.json",
+    "series_csv": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\series\\MAIN_FIG_P3_02__auto-03\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-02\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-04\\panel_series.csv"
+    ],
+    "digitization_json": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\digitization.json",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\digitization.json"
+    ],
+    "panel_layout_json": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\panel_layout.json",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\panel_layout.json"
+    ],
+    "extract_status": {
+      "P3_02": "COMPLETED_WITH_REVIEW",
+      "P8_06": "COMPLETED_WITH_REVIEW"
+    }
+  },
+  "comparison_baselines": {
+    "original_review": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124",
+    "after_2d_trace": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_after_2d_trace_20261124"
+  },
+  "summary": {
+    "P3_02": {
+      "series_with_points": 16,
+      "points": 1248,
+      "orange_columns": 325,
+      "red_columns": 324,
+      "purple_columns": 76,
+      "pink_columns": 36,
+      "max_adjacent_pixel_y_jump": 1
+    },
+    "P8_06": {
+      "panel_a_points": 0,
+      "panel_b_red_points": 424,
+      "panel_b_blue_points": 362,
+      "panel_c_points": 0,
+      "panel_d_points": 953,
+      "series_with_points": 11,
+      "points": 1739
+    }
+  },
+  "verdict": {
+    "P3_02": "PARTIAL: orange/red continuity recovered, purple still truncated, dual Y still UNASSIGNED",
+    "P8_06": "FAIL: panel-a red and blue still 0 plotted points; partial QC paths are NEEDS_REVIEW and were not counted as success",
+    "scientific_point_accuracy": "NOT_ASSESSED_NO_ANNOTATED_BENCHMARK"
+  },
+  "artifacts": [
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P3_02_reconstructed.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P3_02_reconstructed.png",
+      "bytes": 266671,
+      "sha256": "95a42bfcaf9cc2db7074d92369a35ea88c71eca3e0e1ef1a50128eb2e4215d56"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P3_02_side_by_side.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P3_02_side_by_side.png",
+      "bytes": 1107189,
+      "sha256": "b69631e679f2293420c0e6d7e0d153927acaab5a1a3bd46ff61f16947059ff41"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P3_02_overlay.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P3_02_overlay.png",
+      "bytes": 813515,
+      "sha256": "a15dac18faf3f38d042f6159897d3a32088b38f06f45e052aa5b14acc7ee3afc"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P8_06_reconstructed.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P8_06_reconstructed.png",
+      "bytes": 351373,
+      "sha256": "ec3564d7735fae521a39ad04e2ae4dc652d75092463de3f3b5a3041da11e6e02"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P8_06_side_by_side.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P8_06_side_by_side.png",
+      "bytes": 827403,
+      "sha256": "87ab5ef0ea0b4ea23f616d5660cc655c54db9a8f4c12bf8a777d0f2dc6dbdc8e"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\P8_06_overlay.png",
+      "repo_path": "review/junction-local-ambiguity-recovery/P8_06_overlay.png",
+      "bytes": 442745,
+      "sha256": "d55d1301320f27e1850f00ea4958394274078d2783471d89683a9c3099609169"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\junction-local-ambiguity-recovery\\validation_report.md",
+      "repo_path": "review/junction-local-ambiguity-recovery/validation_report.md",
+      "bytes": 10432,
+      "sha256": "baf4cb08130d0e891c9f54132af748d30204425556005ebfc78d9f94fbbd450a"
+    }
+  ],
+  "artifact_count": 7,
+  "total_artifact_bytes": 3819328,
+  "manifest_note": "manifest.json hashes every artifact except itself (self-hash is circular)."
+}
