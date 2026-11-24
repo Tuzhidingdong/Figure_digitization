@@ -70,7 +70,7 @@ def _find_color_components(
     *,
     plot_box: tuple[float, float, float, float],
     color_match: dict | None = None,
-    min_span_fraction: float = 0.02,
+    min_span_fraction: float = 0.08,
     max_color_pixels: int = 400_000,
 ) -> dict:
     """Find spatially connected trace candidates inside one plot crop.
@@ -202,7 +202,9 @@ def _find_color_components(
                 + np.asarray([y0, x0], dtype=np.int32)
             ),
         }
-        paths, path_qc = _ordered_skeleton_paths(candidate)
+        paths, path_qc = _ordered_skeleton_paths(
+            candidate, minimum_path_x_span=min_x_span
+        )
         if not paths:
             summary["rejection_reason"] = path_qc.get("reason", "PATH_VALIDATION_FAILED")
             summary["path_qc"] = path_qc
@@ -292,7 +294,9 @@ def _thin_binary_component(mask, *, max_iterations: int = 64):
     }
 
 
-def _ordered_skeleton_paths(component: dict) -> tuple[list[list[tuple[int, int]]], dict]:
+def _ordered_skeleton_paths(
+    component: dict, *, minimum_path_x_span: int
+) -> tuple[list[list[tuple[int, int]]], dict]:
     """Decompose a skeleton into paths using tangent-continuity at junctions.
 
     Degree-3/4 junctions are only traversed when the straight-through pairing is
@@ -452,6 +456,11 @@ def _ordered_skeleton_paths(component: dict) -> tuple[list[list[tuple[int, int]]
         if len(path) >= 8:
             if (path[-1][1], path[-1][0]) < (path[0][1], path[0][0]):
                 path.reverse()
+            # Do not turn an unpaired branch ending at a junction into a
+            # separate series. It is a spur/annotation candidate, not a
+            # uniquely traceable endpoint-to-endpoint curve.
+            if len(adjacency[path[0]]) != 1 or len(adjacency[path[-1]]) != 1:
+                continue
             paths.append(path)
 
     # Endpoint-origin paths include both the main trajectory and any unpaired
