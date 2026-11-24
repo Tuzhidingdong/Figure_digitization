@@ -42,6 +42,35 @@ def _geometry_points(points):
     return sorted(output, key=lambda item: item[0])
 
 
+
+def _split_point_segments(points, path_segments):
+    """Split flattened points by explicit inclusive point-index ranges."""
+    if not isinstance(path_segments, list) or not path_segments:
+        return [points]
+    output = []
+    for segment in path_segments:
+        if not isinstance(segment, dict):
+            continue
+        try:
+            start = int(segment["start_point_index"])
+            end = int(segment["end_point_index"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        selected = [item for item in points if start <= int(item[0]) <= end]
+        if selected:
+            output.append(selected)
+    return output or [points]
+
+
+def _series_path_segments(series):
+    metadata = getattr(series, "metadata", {})
+    raster_qc = metadata.get("raster_qc", {}) if isinstance(metadata, dict) else {}
+    if not isinstance(raster_qc, dict):
+        return None
+    segments = raster_qc.get("path_segments")
+    return segments if isinstance(segments, list) and segments else None
+
+
 def render_series_artifacts(
     series,
     source_image: Path,
@@ -64,11 +93,16 @@ def render_series_artifacts(
     output_root.mkdir(parents=True, exist_ok=True)
     safe = "".join(char if char.isalnum() or char in "-_." else "_" for char in series.series_id)
     overlay = output_root / f"{safe}_overlay.png"
+    path_segments = _series_path_segments(series)
+    geometry_segments = _split_point_segments(geometry, path_segments)
     with Image.open(source_image) as source:
         original = source.convert("RGB")
         overlay_draw = ImageDraw.Draw(original)
         pixel_coords = [(item[1], item[2]) for item in geometry]
-        overlay_draw.line(pixel_coords, fill=(0, 190, 80), width=2)
+        for segment in geometry_segments:
+            segment_coords = [(item[1], item[2]) for item in segment]
+            if len(segment_coords) >= 2:
+                overlay_draw.line(segment_coords, fill=(0, 190, 80), width=2)
         radius = 3
         for px, py in pixel_coords:
             overlay_draw.ellipse((px - radius, py - radius, px + radius, py + radius),
@@ -142,9 +176,14 @@ def render_series_artifacts(
     def map_y(value):
         return y1 - (value - ymin) / (ymax - ymin) * plot_height
 
-    coords = [(map_x(item[1]), map_y(item[2])) for item in points]
+    numeric_segments = _split_point_segments(points, path_segments)
     color = (205, 45, 65)
-    draw.line(coords, fill=color, width=3, joint="curve")
+    coords = []
+    for segment in numeric_segments:
+        segment_coords = [(map_x(item[1]), map_y(item[2])) for item in segment]
+        coords.extend(segment_coords)
+        if len(segment_coords) >= 2:
+            draw.line(segment_coords, fill=color, width=3, joint="curve")
     for px, py in coords:
         draw.ellipse((px - 3, py - 3, px + 3, py + 3), fill=color)
 
