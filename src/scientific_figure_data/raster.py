@@ -495,7 +495,7 @@ def _ordered_skeleton_paths(
 
     summaries = []
     accepted = []
-    min_x_span = max(6, int(round((x1 - x0) * 0.08)))
+    min_x_span = max(6, int(minimum_path_x_span))
     for path_index, path in enumerate(unique_paths):
         xs = [point[1] for point in path]
         ys = [point[0] for point in path]
