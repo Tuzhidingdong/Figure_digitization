@@ -159,7 +159,10 @@ def _find_color_components(
             continue
         candidate = {
             **summary,
-            "coords": np.asarray(pixels, dtype=np.int32),
+            "coords": (
+                np.asarray(pixels, dtype=np.int32)
+                + np.asarray([y0, x0], dtype=np.int32)
+            ),
         }
         path, path_qc = _ordered_skeleton_path(candidate)
         if not path:
