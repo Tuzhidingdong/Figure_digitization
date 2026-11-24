@@ -1145,6 +1145,7 @@ def detect_monotonic_color_branches(
             rejected_components.append({
                 "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
                 "source_qc_rejection_reason": item.get("source_qc_rejection_reason"),
+                "source_path_qc_reason": item.get("source_path_qc_reason"),
                 "classification": item.get("classification", "LOCAL_REVIEW_PATH_EXCLUDED"),
                 "bbox": item.get("bbox"),
                 "pixel_count": item.get("pixel_count"),
