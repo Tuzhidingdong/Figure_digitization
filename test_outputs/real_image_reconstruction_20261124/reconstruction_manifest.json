@@ -1,0 +1,200 @@
+{
+  "P3_02": {
+    "source_image": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P3_02.png",
+    "source_sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e",
+    "reconstruction": {
+      "panel": "auto-03",
+      "series_plotted": {
+        "LEFT": 6,
+        "RIGHT": 6,
+        "GEOMETRY": 6
+      },
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P3_02_reconstructed.png"
+    },
+    "overlay": {
+      "markers": 768,
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P3_02_overlay.png"
+    },
+    "side_by_side": {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P3_02_side_by_side.png",
+      "size": [
+        3411,
+        893
+      ]
+    },
+    "plotted_series": [
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_01_branch_01",
+        "panel_id": "auto-03",
+        "points": 333,
+        "color_rgb": [
+          242,
+          132,
+          64
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 333,
+        "right_candidate_points": 333
+      },
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_01_branch_02",
+        "panel_id": "auto-03",
+        "points": 133,
+        "color_rgb": [
+          242,
+          132,
+          64
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 133,
+        "right_candidate_points": 133
+      },
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_01_branch_03",
+        "panel_id": "auto-03",
+        "points": 62,
+        "color_rgb": [
+          242,
+          132,
+          64
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 62,
+        "right_candidate_points": 62
+      },
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_02_branch_01",
+        "panel_id": "auto-03",
+        "points": 332,
+        "color_rgb": [
+          231,
+          46,
+          47
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 332,
+        "right_candidate_points": 332
+      },
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_02_branch_02",
+        "panel_id": "auto-03",
+        "points": 60,
+        "color_rgb": [
+          231,
+          46,
+          47
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 60,
+        "right_candidate_points": 60
+      },
+      {
+        "series_id": "paper-p3-real__01_preprocessing__MAIN_FIG_P3_02_auto-03_unassigned_auto_color_03",
+        "panel_id": "auto-03",
+        "points": 180,
+        "color_rgb": [
+          130,
+          56,
+          131
+        ],
+        "y_axis_side": "UNASSIGNED",
+        "y_mapping_status": "AMBIGUOUS_DUAL_Y_AXIS",
+        "physical_points": 0,
+        "left_candidate_points": 180,
+        "right_candidate_points": 180
+      }
+    ]
+  },
+  "P8_06": {
+    "source_image": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P8_06.png",
+    "source_sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549",
+    "reconstruction": {
+      "panel_01_series": 1,
+      "panel_04_series": 3,
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P8_06_reconstructed.png"
+    },
+    "overlay": {
+      "markers": 632,
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P8_06_overlay.png"
+    },
+    "side_by_side": {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124\\P8_06_side_by_side.png",
+      "size": [
+        3686,
+        1003
+      ]
+    },
+    "plotted_series": [
+      {
+        "series_id": "paper-p8-real__P8_06_auto-frame-01_unassigned_auto_color_01_branch_01",
+        "panel_id": "auto-frame-01",
+        "points": 1237,
+        "color_rgb": [
+          238,
+          63,
+          70
+        ],
+        "y_axis_side": "LEFT",
+        "y_mapping_status": "ASSIGNED",
+        "physical_points": 1237,
+        "left_candidate_points": 1237,
+        "right_candidate_points": 0
+      },
+      {
+        "series_id": "paper-p8-real__P8_06_auto-frame-04_unassigned_auto_color_01_branch_01",
+        "panel_id": "auto-frame-04",
+        "points": 329,
+        "color_rgb": [
+          245,
+          167,
+          172
+        ],
+        "y_axis_side": "LEFT",
+        "y_mapping_status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        "physical_points": 329,
+        "left_candidate_points": 329,
+        "right_candidate_points": 0
+      },
+      {
+        "series_id": "paper-p8-real__P8_06_auto-frame-04_unassigned_auto_color_01_branch_02",
+        "panel_id": "auto-frame-04",
+        "points": 328,
+        "color_rgb": [
+          245,
+          167,
+          172
+        ],
+        "y_axis_side": "LEFT",
+        "y_mapping_status": "ASSIGNED_BY_DUAL_AXIS_EXCLUSION",
+        "physical_points": 328,
+        "left_candidate_points": 328,
+        "right_candidate_points": 0
+      },
+      {
+        "series_id": "paper-p8-real__P8_06_auto-frame-04_unassigned_auto_color_02",
+        "panel_id": "auto-frame-04",
+        "points": 329,
+        "color_rgb": [
+          17,
+          100,
+          172
+        ],
+        "y_axis_side": "RIGHT",
+        "y_mapping_status": "COLOR_MATCHED_TO_Y_AXIS_TEXT",
+        "physical_points": 329,
+        "left_candidate_points": 0,
+        "right_candidate_points": 329
+      }
+    ]
+  }
+}

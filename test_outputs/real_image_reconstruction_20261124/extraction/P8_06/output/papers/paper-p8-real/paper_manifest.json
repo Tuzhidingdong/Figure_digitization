@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "paper_id": "paper-p8-real",
+  "source_dir": "paper-p8-real",
+  "input_fingerprint": "c883a5996763f77529b91ae469d0e5bc2617b9064af209249006911c8800ca55",
+  "upstream_version": null,
+  "adapter_version": "0.2.0",
+  "created_at": "2026-11-24T01:11:04+00:00",
+  "artifacts": [
+    {
+      "path": "paper-p8-real/P8_06.png",
+      "role": "figure_image",
+      "size_bytes": 450356,
+      "mtime_ns": 1795444692306653400,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    },
+    {
+      "path": "paper-p8-real/figure_inventory.json",
+      "role": "figure_inventory",
+      "size_bytes": 78,
+      "mtime_ns": 1795482664729114700,
+      "sha256": "02aa3a9c7418835b0627ab05a461b4e4957dc1f7d1c1cfa4d6b8a357a41a1abf"
+    }
+  ],
+  "missing_roles": [
+    "main_pdf"
+  ],
+  "warnings": [
+    "Upstream version marker not detected; artifact discovery adapter used."
+  ],
+  "processing_status": "COMPLETED_WITH_REVIEW"
+}
