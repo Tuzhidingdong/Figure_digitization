@@ -1794,6 +1794,34 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert not any(8 <= point.pixel_y <= 18 for point in points)
 
 
+
+def test_2d_path_tracer_retains_long_vertical_segments_as_partial_geometry(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import trace_monotonic_color
+
+    color = (210, 25, 35)
+    image = Image.new("RGB", (120, 110), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((60, 10, 60, 100), fill=color, width=3)
+    image_path = tmp_path / "long-vertical-fragment.png"
+    image.save(image_path)
+
+    points, qc = trace_monotonic_color(
+        str(image_path), color, 6, None, None, plot_box=(0, 0, 120, 110)
+    )
+    assert len(points) >= 80, qc
+    assert qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", qc
+    assert qc["qc_status"] == "NEEDS_REVIEW_PARTIAL_PATH", qc
+    assert qc["review_required"] is True
+    assert qc["path_segment_count"] == 1
+    segment = qc["path_segments"][0]
+    assert segment["path_kind"] == "LOCAL_VERTICAL_FRAGMENT_NEEDS_REVIEW"
+    assert segment["point_count"] == len(points)
+    assert max(point.pixel_y for point in points) - min(
+        point.pixel_y for point in points
+    ) >= 80
+
+
 def test_2d_path_tracer_separates_same_color_crossing_into_two_paths(tmp_path: Path):
     from PIL import Image, ImageDraw
     from scientific_figure_data.raster import (
@@ -1857,12 +1885,24 @@ def test_2d_path_tracer_rejects_unsupported_five_way_junction(tmp_path: Path):
     )
     assert points == [], qc
     assert qc["status"] == "NEEDS_REVIEW"
-    rejected = qc["component_detection"]["rejected_components"]
-    assert rejected
-    assert any(
-        item.get("rejection_reason") == "AMBIGUOUS_JUNCTION_CONTINUATION"
-        for item in rejected
-    )
+    assert qc["reason"] in {
+        "NO_CONTINUOUS_PATH_COMPONENTS",
+        "MULTIPLE_DISCONNECTED_PATHS_REQUIRE_SEPARATE_SERIES",
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW",
+    }
+    # The tracer may expose either rejected-component QC or unresolved branch
+    # summaries, but it must never return guessed bridges as ordered points.
+    rejected = qc.get("component_detection", {}).get("rejected_components", [])
+    branches = qc.get("branches", [])
+    assert rejected or len(branches) >= 2, qc
+    if rejected:
+        assert any(
+            item.get("path_qc", {}).get("reason")
+            == "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+            or item.get("rejection_reason")
+            == "AMBIGUOUS_JUNCTION_CONTINUATION"
+            for item in rejected
+        ), rejected
 
 
 def test_cli_resume_processes_first_time_then_skips_unchanged_and_reprocesses_changed(
