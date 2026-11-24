@@ -997,12 +997,22 @@ def detect_monotonic_color_branches(
     ]
     if len(groups) > 1 and len(complete_indices) == 1:
         selected = complete_indices[0]
-        excluded_partial_branches = [
-            summary for index, summary in enumerate(summaries)
-            if index != selected
-        ]
-        groups = [groups[selected]]
-        summaries = [_branch_group_summary(0, groups[0])]
+        other_groups_are_partial = all(
+            index == selected
+            or all(
+                (item.get("path_qc") or {}).get("status")
+                == "PARTIAL_PATHS_NEEDS_REVIEW"
+                for item in group
+            )
+            for index, group in enumerate(groups)
+        )
+        if other_groups_are_partial:
+            excluded_partial_branches = [
+                summary for index, summary in enumerate(summaries)
+                if index != selected
+            ]
+            groups = [groups[selected]]
+            summaries = [_branch_group_summary(0, groups[0])]
     if len(groups) > max_branches:
         return {
             "status": "TOO_MANY_PATH_COMPONENTS",
