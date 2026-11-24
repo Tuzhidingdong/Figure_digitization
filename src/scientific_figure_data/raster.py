@@ -993,12 +993,16 @@ def _compact_rejected_review_candidates(
     output = []
     for item in rejected_components:
         path_qc = item.get("path_qc") or {}
-        source_reason = (
-            path_qc.get("reason")
-            or item.get("rejection_reason")
-        )
-        if source_reason != "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW":
+        top_level_reason = item.get("rejection_reason")
+        nested_reason = path_qc.get("reason")
+        required_source_reason = "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+        # Component-level rejection may wrap a more specific path-level reason
+        # (for example UNSUPPORTED_JUNCTION_PORT_COUNT). Check both fields:
+        # preferring the nested detail must not hide the public rejection reason.
+        if required_source_reason not in {top_level_reason, nested_reason}:
             continue
+        source_reason = required_source_reason
+
         bbox = item.get("bbox", [])
         if len(bbox) != 4:
             continue
@@ -1022,6 +1026,7 @@ def _compact_rejected_review_candidates(
             **item,
             "rejection_reason": "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS",
             "source_qc_rejection_reason": source_reason,
+            "source_path_qc_reason": nested_reason,
             "classification": "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC",
             "bbox": [x0, y0, x1, y1],
             "x_span": x_span,
