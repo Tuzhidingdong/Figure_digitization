@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-11-24",
+  "repository": "Tuzhidingdong/Figure_digitization",
+  "branch": "fix/partial-raster-fragment-preservation",
+  "head": "3f23ff22649d5754dc997a6ce57c47810dbaf1e1",
+  "baseline": "43d1b6c5aca07b9ee22977f0eae360154912a7fe",
+  "required_code_commit": "97bdba4ae0953c4e4d5edfe7b75313fe043fb487",
+  "required_code_commit_is_ancestor": true,
+  "algorithm_version": "0.7.0",
+  "python": "3.13.9",
+  "tests": {
+    "command": "python -m pytest tests/test_core.py tests/test_automatic_digitization.py tests/test_real_image_regressions.py tests/test_upstream_compat.py -o addopts=\"\" -q --durations=0",
+    "collected": 156,
+    "passed": 152,
+    "failed": 4,
+    "skipped": 0,
+    "exit_code": 1,
+    "duration_seconds": 169.12,
+    "focused_rerun": "not performed: no code or test correction was authorized; failures independently reproduced by probes/fresh extraction",
+    "failed_tests": [
+      "tests/test_core.py::test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_annotations",
+      "tests/test_core.py::test_run_report_distinguishes_selected_cached_and_filtered_papers",
+      "tests/test_real_image_regressions.py::test_p8_real_figure_detects_two_red_branches_and_one_blue_band",
+      "tests/test_real_image_regressions.py::test_p8_real_figure_pipeline_uses_panel_local_ocr_and_dual_y_mapping"
+    ]
+  },
+  "source_images": [
+    {
+      "case": "P3_02",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P3_02.png",
+      "repo_path": "tests/fixtures/real_figures/P3_02.png",
+      "bytes": 827536,
+      "sha256": "9d52d73df2c49604d7179e241154f0bb6b269bb822bc7708e005aa43f35a2f7e"
+    },
+    {
+      "case": "P8_06",
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\tests\\fixtures\\real_figures\\P8_06.png",
+      "repo_path": "tests/fixtures/real_figures/P8_06.png",
+      "bytes": 450356,
+      "sha256": "581d8e7c36d1b6ceae4f49cb866670fa06478bb9ac13d252ade1d2c9696bf549"
+    }
+  ],
+  "run_outputs": {
+    "directory": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124",
+    "reconstruction_manifest": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\reconstruction_manifest.json",
+    "extraction_run_json": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\extraction_run.json",
+    "series_csv": [
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\extraction\\P3_02\\output\\papers\\paper-p3-real__01_preprocessing\\series\\MAIN_FIG_P3_02__auto-03\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-01\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-02\\panel_series.csv",
+      "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_partial_raster_fragments_20261124\\extraction\\P8_06\\output\\papers\\paper-p8-real\\series\\P8_06__auto-frame-04\\panel_series.csv"
+    ]
+  },
+  "comparison_baselines": {
+    "original": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\real_image_reconstruction_20261124",
+    "prior_diagnostic": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\reconstruction_junction_local_20261124"
+  },
+  "summary": {
+    "P3_02": {
+      "series": 19,
+      "points": 1417,
+      "purple_new_fragment_points": 14,
+      "purple_new_bbox": [
+        267,
+        125,
+        281,
+        127
+      ]
+    },
+    "P8_06": {
+      "panel_a_red_points": 22146,
+      "panel_a_red_segments": 178,
+      "panel_a_blue_points": 1835,
+      "panel_a_blue_segments": 26,
+      "panel_b_points": 1226,
+      "panel_c_points": 0,
+      "panel_d_series": 2,
+      "panel_d_points": 634,
+      "panel_d_qc_only_red_points": 319
+    }
+  },
+  "verdict": {
+    "overall": "PARTIAL - not accepted",
+    "P8_panel_a": "PASS for ordered segment geometry; all results NEEDS_REVIEW",
+    "P8_panel_d": "REGRESSION - one red branch QC-only, not plotted",
+    "P3": "PARTIAL - one new purple fragment plus ring-like artefacts",
+    "synthetic_callout_qc": "FAIL - exclusion not recorded in required QC field",
+    "scientific_point_accuracy": "NOT_ASSESSED_NO_ANNOTATED_BENCHMARK"
+  },
+  "artifacts": [
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P3_02_reconstructed.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P3_02_reconstructed.png",
+      "bytes": 208595,
+      "sha256": "3be2a04135ad9510f5bd665427a653cd0d972bda247453870fa639710a251291"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P3_02_side_by_side.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P3_02_side_by_side.png",
+      "bytes": 995457,
+      "sha256": "154bec22055c6bd29e744e80d09982bf5635c8ff6ac9f05dcdbdf86c0e7329ba"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P3_02_overlay.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P3_02_overlay.png",
+      "bytes": 816298,
+      "sha256": "c68b4a7efb3da0bf4037a02bfa3c89b9369966dc0fee971c425f762f2b8dd550"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P8_06_reconstructed.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P8_06_reconstructed.png",
+      "bytes": 264288,
+      "sha256": "470cef4544c78bd2a1823f12760c9a54f4881b2049ec28a290c6f5d6dda2edfa"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P8_06_side_by_side.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P8_06_side_by_side.png",
+      "bytes": 730855,
+      "sha256": "df35322d0ea729fc9e12225c0ffab862c1c140739b6bda0f82dd54feb383b1bc"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\P8_06_overlay.png",
+      "repo_path": "review/partial-raster-fragment-preservation/P8_06_overlay.png",
+      "bytes": 463661,
+      "sha256": "1522324cc31b52ce5fb123e92ca321ccb9c3d05d095b5d0f9c16c3195c8df956"
+    },
+    {
+      "path": "E:\\Zinc_batters_datas\\Figure_digitization\\review\\partial-raster-fragment-preservation\\validation_report.md",
+      "repo_path": "review/partial-raster-fragment-preservation/validation_report.md",
+      "bytes": 16342,
+      "sha256": "ac1e38425aeba787f5c84602eeb76ebacef82704f977a1dcedb82027cbe9aa52"
+    }
+  ],
+  "artifact_count": 7,
+  "total_artifact_bytes": 3495496,
+  "manifest_note": "Self-hash omitted (circular); all other artifacts hashed."
+}
