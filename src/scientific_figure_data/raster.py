@@ -340,111 +340,266 @@ def _ordered_skeleton_paths(
                 neighbours.append(candidate)
         adjacency[(y, x)] = neighbours
 
-    endpoints = [point for point, neighbours in adjacency.items() if len(neighbours) == 1]
-    junctions = [point for point, neighbours in adjacency.items() if len(neighbours) > 2]
-    continuation: dict[tuple[int, int], dict[tuple[int, int], tuple[int, int]]] = {}
-    ambiguous = []
+    original_endpoints = [
+        point for point, neighbours in adjacency.items() if len(neighbours) == 1
+    ]
+    junctions = [
+        point for point, neighbours in adjacency.items() if len(neighbours) > 2
+    ]
+    junction_set = set(junctions)
+    tangent_depth = max(4, min(12, int(round(minimum_path_x_span * 0.25))))
 
-    tangent_depth = max(4, min(10, int(round(minimum_path_x_span * 0.25))))
+    def edge_key(left, right):
+        return (left, right) if left <= right else (right, left)
 
-    def outward_tangent(center, first):
-        previous = center
-        current = first
+    # Adjacent high-degree skeleton pixels are one physical junction region,
+    # not several independent junctions. Compress each region to a virtual
+    # node and match its external arms using longer-range tangents.
+    junction_clusters = []
+    unseen = set(junction_set)
+    while unseen:
+        seed = min(unseen, key=lambda point: (point[1], point[0]))
+        unseen.remove(seed)
+        cluster = {seed}
+        stack = [seed]
+        while stack:
+            current = stack.pop()
+            for neighbour in adjacency[current]:
+                if neighbour in unseen:
+                    unseen.remove(neighbour)
+                    cluster.add(neighbour)
+                    stack.append(neighbour)
+        junction_clusters.append(cluster)
+
+    compressed_adjacency = {
+        point: [neighbour for neighbour in neighbours if neighbour not in junction_set]
+        for point, neighbours in adjacency.items()
+        if point not in junction_set
+    }
+    bridge_expansions: dict[
+        tuple[tuple[int, int], tuple[int, int]], list[tuple[int, int]]
+    ] = {}
+    junction_pairings = []
+    ambiguous_clusters = []
+    unpaired_ports = []
+
+    def shortest_cluster_bridge(cluster, start_nodes, end_nodes):
+        """Find the shortest real skeleton route through one junction cluster."""
+        from collections import deque
+
+        end_set = set(end_nodes)
+        queue = deque()
+        parent = {}
+        for node in sorted(start_nodes, key=lambda point: (point[1], point[0])):
+            queue.append(node)
+            parent[node] = None
+        found = None
+        while queue:
+            current = queue.popleft()
+            if current in end_set:
+                found = current
+                break
+            for neighbour in sorted(adjacency[current], key=lambda point: (point[1], point[0])):
+                if neighbour in cluster and neighbour not in parent:
+                    parent[neighbour] = current
+                    queue.append(neighbour)
+        if found is None:
+            return []
+        path = []
+        current = found
+        while current is not None:
+            path.append(current)
+            current = parent[current]
+        path.reverse()
+        return path
+
+    def cluster_port_tangent(cluster_center, port, contact_nodes, cluster):
+        outside = [
+            point for point in adjacency[port]
+            if point not in cluster
+        ]
+        if len(outside) != 1:
+            return (
+                float(port[1] - cluster_center[1]),
+                float(port[0] - cluster_center[0]),
+            )
+        previous = port
+        current = outside[0]
         for _ in range(tangent_depth - 1):
             next_points = [
                 point for point in adjacency[current]
-                if point != previous
+                if point != previous and point not in junction_set
             ]
             if len(next_points) != 1:
                 break
             previous, current = current, next_points[0]
         return (
-            float(current[1] - center[1]),
-            float(current[0] - center[0]),
+            float(current[1] - cluster_center[1]),
+            float(current[0] - cluster_center[0]),
         )
 
-    def straightness(first, second, center):
-        # Estimate directions over several skeleton pixels instead of relying
-        # on one rasterized neighbour. This is materially more stable at thick,
-        # antialiased and marker-overlapped junctions.
-        v1 = outward_tangent(center, first)
-        v2 = outward_tangent(center, second)
-        norm1 = math.hypot(*v1)
-        norm2 = math.hypot(*v2)
-        if not norm1 or not norm2:
-            return 2.0
-        cosine = (v1[0] * v2[0] + v1[1] * v2[1]) / (norm1 * norm2)
-        return 1.0 + cosine  # 0 is perfectly straight-through
-
-    for center in junctions:
-        neighbours = adjacency[center]
-        degree = len(neighbours)
-        if degree not in (3, 4):
-            ambiguous.append({
-                "pixel": [center[1], center[0]],
-                "degree": degree,
-                "reason": "UNSUPPORTED_JUNCTION_DEGREE",
+    for cluster_index, cluster in enumerate(junction_clusters):
+        contacts: dict[tuple[int, int], set[tuple[int, int]]] = {}
+        for node in cluster:
+            for neighbour in adjacency[node]:
+                if neighbour not in cluster:
+                    contacts.setdefault(neighbour, set()).add(node)
+        ports = sorted(contacts, key=lambda point: (point[1], point[0]))
+        if len(ports) < 2:
+            ambiguous_clusters.append({
+                "cluster_index": int(cluster_index),
+                "junction_pixels": int(len(cluster)),
+                "port_count": int(len(ports)),
+                "reason": "INSUFFICIENT_JUNCTION_PORTS",
             })
             continue
-        if degree == 3:
+
+        center_y = sum(point[0] for point in cluster) / len(cluster)
+        center_x = sum(point[1] for point in cluster) / len(cluster)
+        cluster_center = (center_y, center_x)
+        tangents = {
+            port: cluster_port_tangent(
+                cluster_center, port, contacts[port], cluster
+            )
+            for port in ports
+        }
+
+        def port_straightness(first, second):
+            v1, v2 = tangents[first], tangents[second]
+            norm1, norm2 = math.hypot(*v1), math.hypot(*v2)
+            if not norm1 or not norm2:
+                return 2.0
+            cosine = (v1[0] * v2[0] + v1[1] * v2[1]) / (norm1 * norm2)
+            return 1.0 + cosine
+
+        pairs = []
+        if len(ports) == 2:
+            pairs = [(ports[0], ports[1])]
+        elif len(ports) == 3:
             scored = sorted(
-                (straightness(a, b, center), a, b)
-                for a, b in itertools.combinations(neighbours, 2)
+                (port_straightness(left, right), left, right)
+                for left, right in itertools.combinations(ports, 2)
             )
             best, first, second = scored[0]
             margin = scored[1][0] - best
             if best > 0.65 or margin < 0.15:
-                ambiguous.append({
-                    "pixel": [int(center[1]), int(center[0])],
-                    "degree": degree,
+                ambiguous_clusters.append({
+                    "cluster_index": int(cluster_index),
+                    "junction_pixels": int(len(cluster)),
+                    "port_count": int(len(ports)),
                     "best_straightness_cost": float(round(best, 4)),
                     "pairing_margin": float(round(margin, 4)),
+                    "ports": [[int(port[1]), int(port[0])] for port in ports],
+                    "reason": "AMBIGUOUS_THREE_WAY_JUNCTION",
                 })
                 continue
-            continuation[center] = {first: second, second: first}
-        else:
+            pairs = [(first, second)]
+            unpaired = next(port for port in ports if port not in {first, second})
+            unpaired_ports.append({
+                "cluster_index": int(cluster_index),
+                "pixel": [int(unpaired[1]), int(unpaired[0])],
+                "reason": "UNPAIRED_SPUR_OR_AMBIGUOUS_BRANCH",
+            })
+        elif len(ports) == 4:
+            a, b, c, d = ports
             possible = []
-            a, b, c, d = neighbours
-            for pairs in (
+            for candidate_pairs in (
                 ((a, b), (c, d)),
                 ((a, c), (b, d)),
                 ((a, d), (b, c)),
             ):
-                costs = [straightness(left, right, center) for left, right in pairs]
-                possible.append((sum(costs), max(costs), pairs, costs))
+                costs = [
+                    port_straightness(left, right)
+                    for left, right in candidate_pairs
+                ]
+                possible.append((
+                    sum(costs), max(costs), candidate_pairs, costs
+                ))
             possible.sort(key=lambda item: item[0])
-            best_total, worst_pair, pairs, costs = possible[0]
+            best_total, worst_pair, selected_pairs, _ = possible[0]
             margin = possible[1][0] - best_total
             if worst_pair > 0.75 or margin < 0.20:
-                ambiguous.append({
-                    "pixel": [center[1], center[0]],
-                    "degree": degree,
+                ambiguous_clusters.append({
+                    "cluster_index": int(cluster_index),
+                    "junction_pixels": int(len(cluster)),
+                    "port_count": int(len(ports)),
                     "best_pairing_cost": float(round(best_total, 4)),
                     "pairing_margin": float(round(margin, 4)),
+                    "ports": [[int(port[1]), int(port[0])] for port in ports],
+                    "reason": "AMBIGUOUS_FOUR_WAY_JUNCTION",
                 })
                 continue
-            mapping = {}
-            for left, right in pairs:
-                mapping[left] = right
-                mapping[right] = left
-            continuation[center] = mapping
+            pairs = list(selected_pairs)
+        else:
+            ambiguous_clusters.append({
+                "cluster_index": int(cluster_index),
+                "junction_pixels": int(len(cluster)),
+                "port_count": int(len(ports)),
+                "ports": [[int(port[1]), int(port[0])] for port in ports],
+                "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+            })
+            continue
 
-    if ambiguous:
+        cluster_record = {
+            "cluster_index": int(cluster_index),
+            "junction_pixels": int(len(cluster)),
+            "port_count": int(len(ports)),
+            "pairings": [],
+        }
+        for left, right in pairs:
+            bridge = shortest_cluster_bridge(
+                cluster, contacts[left], contacts[right]
+            )
+            if not bridge:
+                ambiguous_clusters.append({
+                    **cluster_record,
+                    "reason": "NO_JUNCTION_BRIDGE_PATH",
+                })
+                continue
+            compressed_adjacency[left].append(right)
+            compressed_adjacency[right].append(left)
+            bridge_expansions[(left, right)] = bridge
+            bridge_expansions[(right, left)] = list(reversed(bridge))
+            cluster_record["pairings"].append({
+                "ports": [
+                    [int(left[1]), int(left[0])],
+                    [int(right[1]), int(right[0])],
+                ],
+                "straightness_cost": float(round(port_straightness(left, right), 4)),
+            })
+        junction_pairings.append(cluster_record)
+
+    if ambiguous_clusters:
         return [], {
             "status": "NEEDS_REVIEW",
             "reason": "AMBIGUOUS_JUNCTION_CONTINUATION",
-            "endpoint_count": len(endpoints),
-            "junction_count": len(junctions),
-            "ambiguous_junctions": ambiguous,
-            "skeleton_pixels": len(points),
+            "endpoint_count": int(len(original_endpoints)),
+            "junction_count": int(len(junctions)),
+            "junction_cluster_count": int(len(junction_clusters)),
+            "junction_pairings": junction_pairings,
+            "ambiguous_junction_clusters": ambiguous_clusters,
+            "unpaired_ports": unpaired_ports,
+            "skeleton_pixels": int(len(points)),
             **thinning,
         }
 
+    for point, neighbours in compressed_adjacency.items():
+        if len(neighbours) > 2:
+            return [], {
+                "status": "NEEDS_REVIEW",
+                "reason": "COMPRESSED_GRAPH_STILL_BRANCHES",
+                "pixel": [int(point[1]), int(point[0])],
+                "degree": int(len(neighbours)),
+                "junction_pairings": junction_pairings,
+                "skeleton_pixels": int(len(points)),
+                **thinning,
+            }
+
+    endpoints = [
+        point for point, neighbours in compressed_adjacency.items()
+        if len(neighbours) == 1 and len(adjacency[point]) == 1
+    ]
     used_edges: set[tuple[tuple[int, int], tuple[int, int]]] = set()
-
-    def edge_key(left, right):
-        return (left, right) if left <= right else (right, left)
-
     paths = []
 
     def walk(start, initial_next):
@@ -456,17 +611,17 @@ def _ordered_skeleton_paths(
             return
         used_edges.add(first_edge)
         path.append(current)
+        path.extend(bridge_expansions.get((previous, current), []))
         guard = 0
         while guard <= len(points):
             guard += 1
-            neighbours = adjacency[current]
-            next_point = None
+            neighbours = compressed_adjacency[current]
             if len(neighbours) == 1:
                 next_point = neighbours[0] if neighbours[0] != previous else None
             elif len(neighbours) == 2:
                 next_point = neighbours[0] if neighbours[1] == previous else neighbours[1]
-            elif current in continuation:
-                next_point = continuation[current].get(previous)
+            else:
+                next_point = None
             if next_point is None:
                 break
             key = edge_key(current, next_point)
@@ -474,24 +629,26 @@ def _ordered_skeleton_paths(
                 break
             used_edges.add(key)
             previous, current = current, next_point
+            path.extend(bridge_expansions.get((previous, current), []))
             path.append(current)
         if len(path) >= 8:
             if (path[-1][1], path[-1][0]) < (path[0][1], path[0][0]):
                 path.reverse()
-            # Do not turn an unpaired branch ending at a junction into a
-            # separate series. It is a spur/annotation candidate, not a
-            # uniquely traceable endpoint-to-endpoint curve.
-            if len(adjacency[path[0]]) != 1 or len(adjacency[path[-1]]) != 1:
+            # A path must terminate at genuine raster endpoints, not at an
+            # unpaired junction port. Such a spur is retained only in QC.
+            if (
+                len(adjacency[path[0]]) != 1
+                or len(adjacency[path[-1]]) != 1
+            ):
                 return
             paths.append(path)
 
-    # Endpoint-origin paths must terminate at endpoints on both sides. A short
-    # spur ending at a junction and a marker loop are deliberately not traced.
     for endpoint in sorted(endpoints, key=lambda point: (point[1], point[0])):
-        neighbour = adjacency[endpoint][0]
+        neighbour = compressed_adjacency[endpoint][0]
         if edge_key(endpoint, neighbour) not in used_edges:
             walk(endpoint, neighbour)
 
+    # Isolated graph fragments inside the same original component are reported
     # Isolated graph fragments inside the same original component are reported
     # but not connected by invented straight lines.
     unique_paths = []
