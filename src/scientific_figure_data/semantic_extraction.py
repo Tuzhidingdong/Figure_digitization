@@ -740,6 +740,10 @@ def build_semantic_package(
             "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
             "status": link["link_status"],
             "evidence_ids": link["evidence_ids"],
+        }, {
+            "check": "SERIES_TO_MEASUREMENT",
+            "status": measurement_link["link_status"],
+            "evidence_ids": measurement_link["evidence_ids"],
         }]
         if technique and caption_techniques:
             checks.append({
@@ -752,13 +756,18 @@ def build_semantic_package(
             "series_id": record.series_id,
             "status": "CONFLICT" if technique_conflict else
             "CONSISTENT_WITH_AVAILABLE_EVIDENCE"
-            if link["link_status"] == "MATCHED_EXACT_ALIAS"
-            else "UNRESOLVED",
+            if (
+                link["link_status"] == "MATCHED_EXACT_ALIAS"
+                and measurement_link["link_status"] == "CANDIDATE_TECHNIQUE_MATCH"
+            ) else "UNRESOLVED",
             "checks": checks,
             "unresolved_fields": (
-                ["technique"] if technique_conflict else
-                [] if link["link_status"] == "MATCHED_EXACT_ALIAS"
-                else ["subject_entity_id"]
+                ["technique"] if technique_conflict else [
+                    field for field, resolved in (
+                        ("subject_entity_id", link["link_status"] == "MATCHED_EXACT_ALIAS"),
+                        ("measurement_id", measurement_link["link_status"] == "CANDIDATE_TECHNIQUE_MATCH"),
+                    ) if not resolved
+                ]
             ),
         })
 
