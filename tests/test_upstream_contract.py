@@ -100,6 +100,17 @@ def test_csv_paths_resolve_from_workflow_cwd_and_paper_id_is_authoritative(tmp_p
     cwd = tmp_path / "upstream_workdir"
     input_root = cwd / "runs" / "preprocessed"
     package = _package(input_root)
+    pdf_path = cwd / "papers_pdf" / "example.pdf"
+    pdf_path.parent.mkdir(parents=True)
+    pdf_bytes = b"%PDF-1.7\\ncorpus fixture\\n"
+    pdf_path.write_bytes(pdf_bytes)
+    evidence_path = package / "evidence_index.json"
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    payload["inventory"]["main_pdf"].update({
+        "path": "papers_pdf/example.pdf", "sha256": _sha(pdf_bytes),
+        "size_bytes": len(pdf_bytes),
+    })
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
     csv_path = cwd / "research_corpus_paired.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=[
