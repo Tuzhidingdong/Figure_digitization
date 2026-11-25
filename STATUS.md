@@ -253,3 +253,13 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - Added a neutral chroma/luminance candidate-pool detector, a separate achromatic mask path, conservative multi-path inventory, and reciprocal-unique geometric grouping of dashed fragments. Original dashes remain separate segments; the tracker inserts zero bridge pixels.
 - Added a review gate for long near-horizontal achromatic paths that may be interior grid lines. This flag is not proof of a gridline and does not automatically discard the pixels.
 - Added synthetic tests for neutral solid + dashed curves, gridline-like review routing, and no-neutral-pixel refusal. Windows CI and real F04-P01 rerun are pending; no scientific accuracy or production-support claim is made.
+
+
+## 2026-11-25 — crossing-occlusion diagnosis and conservative fragment association
+
+- Windows CI's mixed-panel integration test produced four records rather than the expected three. Per-series geometry diagnostics identified the extra record: one red curve was split into two disjoint full-span raster components where a gray curve overwrote its pixels at the intersection. The Pipeline had incorrectly promoted the two red fragments to two independent series.
+- Added optional geometry-based association for full-span components when X-ranges are sequential with a short gap and reciprocal endpoint/tangent continuity is unique. The two source paths remain separate segments; no bridge pixels or interpolated samples are inserted.
+- A combined multi-segment trace is always review-required. Ambiguous crossings and overlapping same-colour paths remain unresolved.
+- The fragment matcher now uses a sorted X-window index instead of comparing every pair, and fails closed with explicit NEEDS_REVIEW diagnostics when fragment or pair limits are exceeded.
+- Added focused crossing-occlusion tests and strengthened the mixed red/gray solid/dashed Pipeline integration test to require 3 series, with the red crossing curve stored as 2 review-required source segments and the gray dashed curve preserved as 12 separate source segments.
+- Synthetic validation and latest Windows CI rerun are pending; real F04-P01 local Skill acceptance remains pending and no production-support claim is made.
