@@ -1795,7 +1795,13 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     assert excluded_record.get("source_qc_rejection_reason") == (
         "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
     ), excluded_record
+    # source_path_qc_reason mirrors the enclosing path_qc.reason. The
+    # specific port-count diagnosis is nested one level deeper in the
+    # ambiguous junction cluster record.
     assert excluded_record.get("source_path_qc_reason") == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), excluded_record
+    assert excluded_record["path_qc"]["ambiguous_junction_clusters"][0]["reason"] == (
         "UNSUPPORTED_JUNCTION_PORT_COUNT"
     ), excluded_record
     points, qc = trace_monotonic_color(
