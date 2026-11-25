@@ -968,8 +968,22 @@ class Catalog:
             with self.con:
                 self.con.execute("DELETE FROM series_subject_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
                                  (snapshot.paper_id,))
+                self.con.execute("DELETE FROM series_measurement_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                                 (snapshot.paper_id,))
                 self.con.execute("DELETE FROM series_points WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
                                  (snapshot.paper_id,))
+                self.con.execute("DELETE FROM cross_validation_results WHERE paper_id=?", (snapshot.paper_id,))
+                self.con.execute("DELETE FROM evidence_items WHERE paper_id=?", (snapshot.paper_id,))
+                self.con.execute(
+                    "DELETE FROM sample_process_steps WHERE sample_id IN (SELECT subject_entity_id FROM subject_entities WHERE paper_id=?)",
+                    (snapshot.paper_id,),
+                )
+                self.con.execute(
+                    "DELETE FROM subject_entity_aliases WHERE subject_entity_id IN (SELECT subject_entity_id FROM subject_entities WHERE paper_id=?)",
+                    (snapshot.paper_id,),
+                )
+                self.con.execute("DELETE FROM subject_entities WHERE paper_id=?", (snapshot.paper_id,))
+                self.con.execute("DELETE FROM synthesis_processes WHERE paper_id=?", (snapshot.paper_id,))
                 self.con.execute("DELETE FROM series WHERE paper_id=?", (snapshot.paper_id,))
                 self.con.execute("DELETE FROM panels WHERE paper_id=?", (snapshot.paper_id,))
                 self.con.execute("DELETE FROM figures WHERE paper_id=?", (snapshot.paper_id,))
@@ -999,11 +1013,16 @@ class Catalog:
                         qc_status=item.get("qc_status", "PROVISIONAL_UNCALIBRATED"),
                         review_state=item.get("review_state", "NEEDS_REVIEW"),
                         subject_links=item.get("subject_links", []),
+                        scale_type=item.get("scale_type", "UNKNOWN"),
+                        baseline_comparable=item.get("baseline_comparable"),
+                        offset_value=item.get("offset_value"),
+                        normalization_provenance=item.get("normalization_provenance"),
                         conditions=item.get("conditions", []),
                         evidence=item.get("evidence", []), metadata=item.get("metadata", {}),
                     )
                     self._insert_series(series_record)
                 self._index_panel_csv_points(paper_root, set(series_by_id))
+                self._index_semantic_artifacts(paper_root, snapshot.paper_id)
             count += 1
         return {"papers_indexed": count}
 
