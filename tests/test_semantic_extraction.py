@@ -118,6 +118,7 @@ def test_explicit_offset_stacked_spectrum_forces_non_comparable_baseline():
     )
     assert record.scale_type == "ARBITRARY_OFFSET_STACKED"
     assert record.baseline_comparable is False
+    assert record.metadata["cross_series_y_comparison_allowed"] is False
     assert result["cross_validation"]["status"] in {
         "COMPLETED_WITH_UNRESOLVED", "CONSISTENT_WITH_AVAILABLE_EVIDENCE",
     }
