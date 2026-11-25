@@ -1379,6 +1379,7 @@ def detect_monotonic_color_branches(
     min_branch_presence_fraction: float = 0.15,
     max_branches: int = 24,
     preserve_partial_fragments: bool = False,
+    associate_full_span_fragments: bool = False,
 ) -> dict:
     """Inventory independent paths and grouped local fragments without joining them.
 
@@ -1395,11 +1396,12 @@ def detect_monotonic_color_branches(
     )
     fragment_review = []
     fragment_tracking = None
-    if preserve_partial_fragments:
+    if preserve_partial_fragments or associate_full_span_fragments:
         x0, y0, x1, y1 = result.get("plot_box") or [0, 0, 0, 0]
         groups, fragment_review, fragment_tracking = _group_achromatic_fragment_tracks(
             groups, plot_width=max(1, int(x1) - int(x0)),
             plot_height=max(1, int(y1) - int(y0)),
+            include_full_span_fragments=associate_full_span_fragments,
         )
     summaries = [
         _branch_group_summary(index, group)
@@ -1496,6 +1498,7 @@ def trace_monotonic_color(
     branch_index: int | None = None,
     branch_count: int | None = None,
     preserve_partial_fragments: bool = False,
+    associate_full_span_fragments: bool = False,
 ) -> tuple[list[SeriesPoint], dict]:
     """Trace ordered paths while retaining ambiguous local fragments as segments.
 
@@ -1523,12 +1526,13 @@ def trace_monotonic_color(
     )
     partial_fragment_review = []
     partial_fragment_tracking = None
-    if preserve_partial_fragments:
+    if preserve_partial_fragments or associate_full_span_fragments:
         x0, y0, x1, y1 = result.get("plot_box") or [0, 0, 0, 0]
         groups, partial_fragment_review, partial_fragment_tracking = (
             _group_achromatic_fragment_tracks(
                 groups, plot_width=max(1, int(x1) - int(x0)),
                 plot_height=max(1, int(y1) - int(y0)),
+                include_full_span_fragments=associate_full_span_fragments,
             )
         )
     if not groups:
