@@ -1022,19 +1022,67 @@ def _group_achromatic_fragment_tracks(
     max_gap = max(8, int(round(plot_width * 0.05)))
     residual_limit = max(4.0, plot_height * 0.02)
     slope_limit = 0.70
+
+    def unassigned_rows() -> list[dict]:
+        return [
+            {
+                "bbox": [int(value) for value in item.get("bbox", [])],
+                "point_count": int(item.get("pixel_count", 0)),
+                "path_kind": item.get("path_kind"),
+                "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_DASH_TRACK",
+            }
+            for item in descriptions
+        ]
+
+    # A dense neutral pool can contain text, ticks and annotations. Fail closed
+    # rather than doing unbounded fragment matching or guessing their identities.
+    max_partial_fragments = 512
+    if len(descriptions) > max_partial_fragments:
+        return full_groups, unassigned_rows(), {
+            "status": "FRAGMENT_COUNT_LIMIT_REACHED_NEEDS_REVIEW",
+            "partial_component_count": len(partial_items),
+            "described_fragment_count": len(descriptions),
+            "fragment_limit": max_partial_fragments,
+            "track_count": 0,
+            "unassigned_fragment_count": len(descriptions),
+            "inter_fragment_pixels_inserted": 0,
+        }
+
+    # Index fragments by their left edge. Only components whose left edge falls
+    # inside the admissible endpoint window can be a successor; this avoids an
+    # all-pairs scan of every neutral annotation and local raster fragment.
+    descriptions.sort(key=lambda item: (item["x0"], item["x1"], item["y0"]))
+    x_starts = [item["x0"] for item in descriptions]
     successor_candidates: dict[int, list[tuple[float, int]]] = {}
     predecessor_candidates: dict[int, list[tuple[float, int]]] = {}
+    candidate_pair_count = 0
+    max_candidate_pairs = 50000
+
+    from bisect import bisect_left, bisect_right
 
     for first_index, first in enumerate(descriptions):
+        lower = bisect_left(
+            x_starts, first["x1"] - 1, lo=first_index + 1
+        )
+        upper = bisect_right(
+            x_starts, first["x1"] + max_gap, lo=lower
+        )
         candidates = []
-        for second_index, second in enumerate(descriptions):
-            if first_index == second_index:
-                continue
-            if second["x0"] < first["x1"] - 1:
-                continue
+        for second_index in range(lower, upper):
+            candidate_pair_count += 1
+            if candidate_pair_count > max_candidate_pairs:
+                return full_groups, unassigned_rows(), {
+                    "status": "FRAGMENT_MATCH_LIMIT_REACHED_NEEDS_REVIEW",
+                    "partial_component_count": len(partial_items),
+                    "described_fragment_count": len(descriptions),
+                    "candidate_pair_count": candidate_pair_count,
+                    "candidate_pair_limit": max_candidate_pairs,
+                    "track_count": 0,
+                    "unassigned_fragment_count": len(descriptions),
+                    "inter_fragment_pixels_inserted": 0,
+                }
+            second = descriptions[second_index]
             gap = max(0.0, second["x0"] - first["x1"])
-            if gap > max_gap:
-                continue
             predicted_y = first["y1"] + first["slope_end"] * (
                 second["x0"] - first["x1"]
             )
@@ -1118,13 +1166,7 @@ def _group_achromatic_fragment_tracks(
             for index in chain["component_indexes"]
         ])
     unassigned = [
-        {
-            "bbox": [int(value) for value in item.get("bbox", [])],
-            "point_count": int(item.get("pixel_count", 0)),
-            "path_kind": item.get("path_kind"),
-            "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_DASH_TRACK",
-        }
-        for index, item in enumerate(descriptions)
+        row for index, row in enumerate(unassigned_rows())
         if index not in tracked_indexes
     ]
     result_groups = full_groups + tracks
@@ -1136,6 +1178,9 @@ def _group_achromatic_fragment_tracks(
     diagnostics = {
         "status": "TRACKS_FOUND" if tracks else "NO_UNIQUE_DASH_TRACK",
         "partial_component_count": len(partial_items),
+        "described_fragment_count": len(descriptions),
+        "candidate_pair_count": candidate_pair_count,
+        "candidate_pair_limit": max_candidate_pairs,
         "track_count": len(tracks),
         "tracks": chains,
         "unassigned_fragment_count": len(unassigned),
