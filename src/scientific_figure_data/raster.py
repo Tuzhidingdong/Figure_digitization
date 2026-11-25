@@ -959,6 +959,7 @@ def _path_branch_groups(
 def _group_achromatic_fragment_tracks(
     groups: list[list[dict]], *, plot_width: int, plot_height: int,
     include_full_span_fragments: bool = False,
+    include_partial_fragments: bool = True,
 ) -> tuple[list[list[dict]], list[dict], dict]:
     """Associate disconnected raster fragments only when local geometry is unique.
 
@@ -982,7 +983,10 @@ def _group_achromatic_fragment_tracks(
             or (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
         )
     ]
-    candidate_items = [(item, False) for item in partial_items]
+    candidate_items = (
+        [(item, False) for item in partial_items]
+        if include_partial_fragments else []
+    )
     if include_full_span_fragments:
         candidate_items.extend((group[0], True) for group in full_groups)
 
@@ -1206,6 +1210,7 @@ def _group_achromatic_fragment_tracks(
     diagnostics = {
         "status": "TRACKS_FOUND" if tracks else "NO_UNIQUE_DASH_TRACK",
         "partial_component_count": len(partial_items),
+        "partial_fragments_considered": bool(include_partial_fragments),
         "full_span_fragment_count": sum(
             1 for item in descriptions if item["full_span_fragment"]
         ),
@@ -1402,6 +1407,7 @@ def detect_monotonic_color_branches(
             groups, plot_width=max(1, int(x1) - int(x0)),
             plot_height=max(1, int(y1) - int(y0)),
             include_full_span_fragments=associate_full_span_fragments,
+            include_partial_fragments=preserve_partial_fragments,
         )
     summaries = [
         _branch_group_summary(index, group)
