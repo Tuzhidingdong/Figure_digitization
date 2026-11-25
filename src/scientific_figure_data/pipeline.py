@@ -551,6 +551,68 @@ def _bounded_render_scale(
     )
 
 
+def _detect_offset_stacked_spectra(
+    series_records: list[Any], plot_box_pixels: tuple[int, int, int, int] | None,
+) -> dict[str, Any]:
+    """Conservatively detect vertically separated, X-overlapping relative spectra."""
+    if not plot_box_pixels or len(series_records) < 2:
+        return {"detected": False, "reason": "INSUFFICIENT_SERIES_OR_PLOT_GEOMETRY"}
+    plot_height = max(1.0, float(plot_box_pixels[3] - plot_box_pixels[1]))
+    traces = []
+    for record in series_records:
+        points = getattr(record, "points", [])
+        xs = [
+            float(point.pixel_x) for point in points
+            if getattr(point, "pixel_x", None) is not None
+        ]
+        ys = [
+            float(point.pixel_y) for point in points
+            if getattr(point, "pixel_y", None) is not None
+        ]
+        if len(xs) < 3 or len(ys) < 3:
+            return {"detected": False, "reason": "INSUFFICIENT_PIXEL_TRACE_POINTS"}
+        traces.append({
+            "series_id": getattr(record, "series_id", None),
+            "x_min": min(xs), "x_max": max(xs),
+            "y_min": min(ys), "y_max": max(ys),
+            "y_median": sorted(ys)[len(ys) // 2],
+        })
+    traces.sort(key=lambda item: item["y_median"])
+    minimum_gap = max(3.0, plot_height * 0.04)
+    pair_checks = []
+    for upper, lower in zip(traces, traces[1:]):
+        if upper["y_max"] < lower["y_min"]:
+            gap = lower["y_min"] - upper["y_max"]
+        elif lower["y_max"] < upper["y_min"]:
+            gap = upper["y_min"] - lower["y_max"]
+        else:
+            gap = 0.0
+        overlap = max(0.0, min(upper["x_max"], lower["x_max"]) - max(
+            upper["x_min"], lower["x_min"]
+        ))
+        smaller_width = max(1.0, min(
+            upper["x_max"] - upper["x_min"], lower["x_max"] - lower["x_min"]
+        ))
+        overlap_ratio = overlap / smaller_width
+        pair_checks.append({
+            "series_ids": [upper["series_id"], lower["series_id"]],
+            "vertical_gap_pixels": gap,
+            "x_overlap_ratio": overlap_ratio,
+            "passes": gap >= minimum_gap and overlap_ratio >= 0.80,
+        })
+    detected = bool(pair_checks) and all(item["passes"] for item in pair_checks)
+    return {
+        "detected": detected,
+        "reason": "DISJOINT_VERTICAL_BANDS_WITH_SHARED_X_DOMAIN"
+        if detected else "STACKING_NOT_PROVEN",
+        "method": "relative_spectrum_disjoint_pixel_bands_v1",
+        "minimum_vertical_gap_pixels": minimum_gap,
+        "minimum_x_overlap_ratio": 0.80,
+        "traces": traces,
+        "pair_checks": pair_checks,
+    }
+
+
 def _plot_box_pixels(image_path: Path | None, plot_box: Any) -> tuple[int, int, int, int] | None:
     if image_path is None or not plot_box or len(plot_box) != 4:
         return None
@@ -2299,6 +2361,15 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "reason": failure_reason,
             })
+            stacked_offset_evidence = (
+                _detect_offset_stacked_spectra(extracted, plot_box_pixels)
+                if family == "SPECTRUM" and relative_signal
+                else {"detected": False, "reason": "NOT_A_RELATIVE_SPECTRUM"}
+            )
+            if stacked_offset_evidence.get("detected"):
+                for extracted_record in extracted:
+                    extracted_record.metadata["vertical_offset_stacked_detected"] = True
+                    extracted_record.metadata["stacked_offset_evidence"] = stacked_offset_evidence
             visual_legend_candidates = []
             ignored_visual_labels = {
                 "potential", "voltage", "current", "intensity", "wavenumber",
