@@ -12,6 +12,7 @@ on:
   pull_request:
     branches:
       - main
+      - baseline/v2.1-phase1
       - fix/p0-classification-qc-contract
       - feat/p1-automatic-monotonic-digitization
       - fix/p1-rapidocr-310-compatibility
