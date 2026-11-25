@@ -865,6 +865,16 @@ def build_semantic_package(
         record.normalization_provenance = provenance if isinstance(provenance, dict) else None
         record.metadata["scale_type"] = record.scale_type
         record.metadata["baseline_comparable"] = record.baseline_comparable
+        if record.scale_type in {"ARBITRARY_OFFSET_STACKED", "ARBITRARY_RELATIVE"}:
+            record.metadata["cross_series_y_comparison_allowed"] = False
+            record.metadata["scale_comparison_warning"] = (
+                "Do not compare raw inter-series Y positions or peak heights without "
+                "shared baseline/normalization evidence."
+            )
+        elif record.baseline_comparable is True:
+            record.metadata["cross_series_y_comparison_allowed"] = True
+        else:
+            record.metadata["cross_series_y_comparison_allowed"] = None
 
     return {
         "schema_version": "2.1", "paper_id": paper_id,
