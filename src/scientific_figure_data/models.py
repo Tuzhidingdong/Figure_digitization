@@ -158,6 +158,9 @@ class Measurement:
     metadata: dict[str, Any] = field(default_factory=dict)
     subject_roles: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
+    measurement_role: str = "UNKNOWN"
+    scope_status: str = "UNRESOLVED"
+    condition_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -169,6 +172,7 @@ class SynthesisProcess:
     condition_ids: list[str] = field(default_factory=list)
     input_materials: list[dict[str, Any]] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
+    process_type: str | None = None
 
 
 @dataclass(slots=True)
