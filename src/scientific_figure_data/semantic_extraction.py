@@ -315,7 +315,7 @@ def build_semantic_package(
     for record in series_records:
         metadata = getattr(record, "metadata", {})
         raw_candidates = metadata.get("visual_legend_candidates", []) if isinstance(metadata, dict) else []
-        for item in raw_candidates if isinstance(raw_candidates, list) else []:
+        for item in (raw_candidates if isinstance(raw_candidates, list) else []):
             if not isinstance(item, dict):
                 continue
             label = " ".join(str(item.get("label") or "").split())
