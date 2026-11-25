@@ -153,3 +153,28 @@ def test_sentence_scoping_does_not_attach_following_experiment_to_sample_synthes
         "temperature", "duration",
     }
     assert all(item["condition_scope"] == "SYNTHESIS" for item in result["conditions"])
+
+
+
+def test_mixed_scope_statement_preserves_quantities_as_unresolved_candidates():
+    context = _Context()
+    context.statements = [{
+        "value": "Sample A",
+        "source_path": "main_analysis.md",
+        "line_number": 41,
+        "snippet": "Sample A was heated at 200 °C and measured at 1 A g−1.",
+    }]
+    record = SimpleNamespace(
+        series_id="series-a", paper_id="paper-a", figure_id="Figure1",
+        panel_id="a", label="Sample A", technique="CV",
+        subject_links=[], conditions=[], metadata={}, measurement_id=None,
+        y_unit="mA",
+    )
+    result = build_semantic_package(
+        "paper-a", "fingerprint-unresolved-scope",
+        [{"figure_id": "Figure1", "caption": "CV curves of Sample A."}],
+        [], [record], context,
+    )
+    assert result["conditions"]
+    assert all(item["condition_scope"] == "UNRESOLVED" for item in result["conditions"])
+    assert all(item["scope_entity_id"] is None for item in result["conditions"])
