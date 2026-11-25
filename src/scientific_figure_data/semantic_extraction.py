@@ -279,7 +279,7 @@ def build_semantic_package(
         })
         for segment in segments:
             for match in SAMPLE_MENTION_RE.finditer(segment["raw_text"]):
-                name = match.group(1)
+                name = match.group(0)
                 evidence = {
                     "evidence_id": _evidence_id(
                         paper_id, f"caption:{figure.get('figure_id')}",
@@ -376,12 +376,25 @@ def build_semantic_package(
             )
             techniques = _techniques(snippet)
             for technique in techniques:
-                measurement_id = stable_id("measurement", f"{paper_id}|{technique}|{row.get('source_path')}|{row.get('line_number')}")
-                measurements.setdefault(measurement_id, {
-                    "measurement_id": measurement_id, "paper_id": paper_id,
-                    "technique": technique, "scope_status": "CANDIDATE",
-                    "evidence_ids": [evidence_id], "condition_ids": [],
-                })
+                figure_candidates = [
+                    item for item in measurements.values()
+                    if item.get("technique") == technique and item.get("figure_id")
+                ]
+                if len(figure_candidates) == 1:
+                    measurement_id = figure_candidates[0]["measurement_id"]
+                    if evidence_id not in figure_candidates[0]["evidence_ids"]:
+                        figure_candidates[0]["evidence_ids"].append(evidence_id)
+                else:
+                    measurement_id = stable_id(
+                        "measurement",
+                        f"{paper_id}|{technique}|{row.get('source_path')}|{row.get('line_number')}",
+                    )
+                    measurements.setdefault(measurement_id, {
+                        "measurement_id": measurement_id, "paper_id": paper_id,
+                        "figure_id": None, "technique": technique,
+                        "scope_status": "TEXT_CANDIDATE",
+                        "evidence_ids": [evidence_id], "condition_ids": [],
+                    })
             process_id = None
             if scope == "SYNTHESIS":
                 process_id = stable_id("process", f"{paper_id}|{entity['subject_entity_id']}|{evidence_id}")
@@ -389,7 +402,7 @@ def build_semantic_package(
                 synthesis_processes.append({
                     "process_id": process_id, "paper_id": paper_id,
                     "method_text": snippet, "evidence_ids": [evidence_id],
-                    "process_status": "CANDIDATE",
+                    "process_status": "CANDIDATE", "condition_ids": [],
                 })
                 sample_steps.append({
                     "sample_id": entity["subject_entity_id"], "process_id": process_id,
@@ -418,6 +431,17 @@ def build_semantic_package(
                         "raw_text": quantity["raw_text"], "value": quantity["value"],
                         "evidence_ids": [evidence_id], "parse_status": quantity["value"]["parse_status"],
                     })
+                    if scope == "SYNTHESIS" and process_id:
+                        process_record = next(
+                            (item for item in synthesis_processes if item["process_id"] == process_id),
+                            None,
+                        )
+                        if process_record is not None:
+                            process_record["condition_ids"].append(condition_id)
+                    elif scope == "EXPERIMENT" and scope_entity_id:
+                        measurement_record = measurements.get(scope_entity_id)
+                        if measurement_record is not None:
+                            measurement_record["condition_ids"].append(condition_id)
 
     # Caption and series association uses exact normalized aliases only.
     aliases_to_entity = {}
@@ -455,6 +479,7 @@ def build_semantic_package(
         matching_measurements = [
             item for item in measurements.values()
             if technique and str(item.get("technique", "")).upper() == technique
+            and item.get("figure_id") in (None, record.figure_id)
         ]
         if len(matching_measurements) == 1:
             series_measurement_links.append({
@@ -511,9 +536,6 @@ def build_semantic_package(
         )
         if measurement_link:
             record.measurement_id = measurement_link["measurement_id"]
-        related_scope_ids = {
-            item.get("scope_entity_id") for item in conditions if item.get("scope_entity_id")
-        }
         related_ids = {
             subject.get("subject_entity_id") if subject else None,
             measurement_link.get("measurement_id") if measurement_link else None,
