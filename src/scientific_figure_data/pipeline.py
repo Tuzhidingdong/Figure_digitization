@@ -509,8 +509,11 @@ def _check_memory_budget(soft_limit_mb: int, hard_limit_mb: int) -> dict[str, An
         return {"status": "PSUTIL_UNAVAILABLE", "rss_bytes": None, "soft_limit_exceeded": False}
     process = psutil.Process()
     rss_before = process.memory_info().rss
+    soft_limit_triggered = bool(
+        soft_limit_mb > 0 and rss_before > soft_limit_mb * 1024 * 1024
+    )
     collected = 0
-    if soft_limit_mb > 0 and rss_before > soft_limit_mb * 1024 * 1024:
+    if soft_limit_triggered:
         import gc
         collected = gc.collect()
     rss_after = process.memory_info().rss
@@ -519,14 +522,33 @@ def _check_memory_budget(soft_limit_mb: int, hard_limit_mb: int) -> dict[str, An
             f"Worker RSS {rss_after // (1024 * 1024)} MiB exceeds hard limit {hard_limit_mb} MiB"
         )
     return {
-        "status": "SOFT_LIMIT_EXCEEDED" if soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024 else "WITHIN_SOFT_LIMIT",
+        "status": "SOFT_LIMIT_TRIGGERED" if soft_limit_triggered else "WITHIN_SOFT_LIMIT",
         "rss_before_gc_bytes": rss_before,
         "rss_bytes": rss_after,
-        "soft_limit_exceeded": bool(soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024),
+        "soft_limit_triggered": soft_limit_triggered,
+        "soft_limit_exceeded_after_gc": bool(
+            soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024
+        ),
+        "soft_limit_exceeded": soft_limit_triggered,
         "soft_limit_mb": soft_limit_mb,
         "hard_limit_mb": hard_limit_mb,
         "gc_collected": collected,
     }
+
+
+def _bounded_render_scale(
+    render_scale: float, page_width: float, page_height: float,
+    max_render_pixels: int, max_render_long_edge: int,
+) -> float:
+    if render_scale <= 0 or page_width <= 0 or page_height <= 0:
+        raise ValueError("Render scale and page dimensions must be positive")
+    if max_render_pixels <= 0 or max_render_long_edge <= 0:
+        raise ValueError("Render pixel and long-edge limits must be positive")
+    return min(
+        render_scale,
+        (max_render_pixels / max(1.0, page_width * page_height)) ** 0.5,
+        max_render_long_edge / max(1.0, page_width, page_height),
+    )
 
 
 def _plot_box_pixels(image_path: Path | None, plot_box: Any) -> tuple[int, int, int, int] | None:
@@ -2069,10 +2091,9 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 with backend.open(pdf_path) as doc:
                     with doc.page(int(figure["page"])) as pdf_page:
                         page_width, page_height = pdf_page.size
-                        safe_scale = min(
-                            render_scale,
-                            (max_render_pixels / max(1, page_width * page_height)) ** 0.5,
-                            max_render_long_edge / max(1.0, page_width, page_height),
+                        safe_scale = _bounded_render_scale(
+                            render_scale, page_width, page_height,
+                            max_render_pixels, max_render_long_edge,
                         )
                         safe_scale = max(0.25, safe_scale)
                         rendered = pdf_page.render(scale=safe_scale)
