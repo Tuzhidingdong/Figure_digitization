@@ -994,6 +994,18 @@ class Catalog:
                 ).fetchall()
                 process["conditions"] = [dict(item) for item in rows]
             synthesis_processes.append(process)
+        paper_row = self.con.execute(
+            "SELECT paper_id FROM series WHERE series_id=?", (series_id,)
+        ).fetchone()
+        unresolved_rows = []
+        if paper_row:
+            unresolved_rows = self.con.execute(
+                """SELECT condition_id,name,value_json,evidence_json,condition_scope,
+                          scope_entity_id,parse_status
+                   FROM conditions WHERE paper_id=? AND condition_scope='UNRESOLVED'
+                   ORDER BY name""",
+                (paper_row["paper_id"],),
+            ).fetchall()
         measurement_rows = self.con.execute(
             """SELECT measurement_id,measurement_role,link_status,evidence_json
                FROM series_measurement_links WHERE series_id=?""",
@@ -1014,6 +1026,7 @@ class Catalog:
         return {
             "subject_links": [dict(row) for row in entity_rows],
             "conditions": [dict(row) for row in condition_rows],
+            "unresolved_paper_conditions": [dict(row) for row in unresolved_rows],
             "synthesis_processes": synthesis_processes,
             "measurement_links": [dict(row) for row in measurement_rows],
             "cross_validation": cross_validation,
