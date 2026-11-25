@@ -134,6 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--output-root", type=Path, required=True)
     validate.add_argument("--input-root", type=Path)
 
+    benchmark = sub.add_parser("benchmark", help="evaluate frozen V2.1 Gold Benchmark metrics")
+    benchmark.add_argument("--manifest", type=Path, required=True)
+    benchmark.add_argument("--predictions", type=Path, required=True)
+    benchmark.add_argument("--output", type=Path, required=True)
+
     probe = sub.add_parser("backend-probe", help="run PDF backend measurements on supplied PDFs")
     probe.add_argument("pdfs", nargs="*", type=Path)
     probe.add_argument("--out", type=Path, default=Path("backend_probe_report.json"))
@@ -644,6 +649,17 @@ def _validate(args) -> int:
     return 0 if not errors else 1
 
 
+def _benchmark(args) -> int:
+    from .benchmark import evaluate_gold_benchmark
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
+    predictions = json.loads(args.predictions.read_text(encoding="utf-8-sig"))
+    report = evaluate_gold_benchmark(manifest, predictions)
+    atomic_write_json(args.output, report)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return {"PASS": 0, "FAIL": 1, "NOT_EVALUATED": 2}.get(report.get("status"), 2)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -663,6 +679,8 @@ def main(argv=None) -> int:
             return _rebuild(args)
         if args.command == "validate":
             return _validate(args)
+        if args.command == "benchmark":
+            return _benchmark(args)
         if args.command == "backend-probe":
             from .backend_probe import main as probe_main
             return probe_main([*(str(p) for p in args.pdfs), "--out", str(args.out),
