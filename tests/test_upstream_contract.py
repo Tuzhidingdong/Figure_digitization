@@ -5,6 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from scientific_figure_data.adapter import snapshot_paper
+from scientific_figure_data.manifest import storage_paper_id
 from scientific_figure_data.upstream_contract import (
     SUPPORTED_PACKAGE_VERSION,
     load_corpus_packages,
@@ -140,3 +142,49 @@ def test_failed_csv_rows_are_reported_not_treated_as_packages(tmp_path: Path):
     assert skipped == [{
         "row": 2, "doi": "10.1000/failed", "reason": "UPSTREAM_PREPROCESSING_FAILED",
     }]
+
+
+
+def test_snapshot_uses_upstream_paper_id_and_resolves_main_pdf_from_workflow_cwd(
+    tmp_path: Path,
+):
+    cwd = tmp_path / "upstream_workdir"
+    input_root = cwd / "runs" / "preprocessed"
+    package = _package(input_root)
+    pdf_path = cwd / "papers_pdf" / "example.pdf"
+    pdf_path.parent.mkdir(parents=True)
+    pdf_bytes = b"%PDF-1.7\\ncontract fixture\\n"
+    pdf_path.write_bytes(pdf_bytes)
+
+    evidence_path = package / "evidence_index.json"
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    payload["inventory"]["main_pdf"].update({
+        "path": "papers_pdf/example.pdf",
+        "sha256": _sha(pdf_bytes),
+        "size_bytes": len(pdf_bytes),
+    })
+    evidence_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    snapshot = snapshot_paper(
+        package, input_root, paper_id=payload["paper_id"], external_path_root=cwd,
+    )
+
+    assert snapshot.paper_id == storage_paper_id(payload["paper_id"])
+    assert snapshot.external_sources[0]["status"] == "HASH_VERIFIED"
+    assert snapshot.external_sources[0]["sha256"] == _sha(pdf_bytes)
+    assert str(pdf_path.resolve()) not in json.dumps(snapshot.to_dict())
+
+
+def test_run_cli_accepts_authoritative_csv_handoff():
+    from scientific_figure_data.cli import build_parser
+
+    args = build_parser().parse_args([
+        "run", "--all",
+        "--input-root", "E:/upstream/runs/preprocessed",
+        "--corpus-csv", "E:/upstream/research_corpus_paired.csv",
+        "--corpus-root", "E:/upstream",
+        "--output-root", "E:/sfd-output",
+    ])
+
+    assert args.corpus_csv.name == "research_corpus_paired.csv"
+    assert args.corpus_root == Path("E:/upstream")
