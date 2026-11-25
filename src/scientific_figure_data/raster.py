@@ -27,6 +27,19 @@ def _build_color_mask(
 ):
     import numpy as np
 
+    if isinstance(color_match, dict) and color_match.get("space") == "ACHROMATIC_LUMINANCE_RANGE":
+        values = region.astype(np.int16)
+        luminance = (
+            0.2126 * values[:, :, 0]
+            + 0.7152 * values[:, :, 1]
+            + 0.0722 * values[:, :, 2]
+        )
+        chroma = values.max(axis=2) - values.min(axis=2)
+        return (
+            (chroma <= int(color_match.get("maximum_chroma", 24)))
+            & (luminance >= int(color_match.get("minimum_luminance", 28)))
+            & (luminance <= int(color_match.get("maximum_luminance", 210)))
+        )
     if isinstance(color_match, dict) and color_match.get("space") == "HSV_HUE_FAMILY":
         from .plot_region import _rgb_to_hsv_arrays
 
@@ -102,6 +115,16 @@ def _find_color_components(
         region = np.asarray(source.convert("RGB").crop((x0, y0, x1, y1)), dtype=np.uint8)
 
     mask = _build_color_mask(region, rgb, tolerance, color_match)
+    if (
+        isinstance(color_match, dict)
+        and color_match.get("space") == "ACHROMATIC_LUMINANCE_RANGE"
+    ):
+        fraction = float(color_match.get("boundary_exclusion_fraction", 0.015))
+        edge = max(1, int(round(min(mask.shape) * fraction)))
+        mask[:edge, :] = False
+        mask[-edge:, :] = False
+        mask[:, :edge] = False
+        mask[:, -edge:] = False
     from .plot_region import detect_colored_y_axis_spines
 
     spine_evidence = detect_colored_y_axis_spines(
@@ -875,7 +898,9 @@ def _ordered_skeleton_paths(
     }
 
 
-def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
+def _path_branch_groups(
+    components: list[dict], *, collapse_all_partial: bool = True
+) -> list[list[dict]]:
     """Group partial paths from one ambiguous source component without joining them.
 
     A full-span path remains an independent branch. When one source component
@@ -908,7 +933,7 @@ def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
     # curves: returning zero points merely because their fragments are
     # disconnected would discard all available geometry. No line is drawn
     # between the segments and the collection cannot be a complete extraction.
-    if len(groups) > 1 and all(
+    if collapse_all_partial and len(groups) > 1 and all(
         all(
             (item.get("path_qc") or {}).get("status")
             == "PARTIAL_PATHS_NEEDS_REVIEW"
@@ -929,6 +954,194 @@ def _path_branch_groups(components: list[dict]) -> list[list[dict]]:
         -sum(int(item.get("pixel_count", 0)) for item in group),
     ))
     return groups
+
+
+def _group_achromatic_fragment_tracks(
+    groups: list[list[dict]], *, plot_width: int, plot_height: int,
+) -> tuple[list[list[dict]], list[dict], dict]:
+    """Associate disconnected dash fragments only when local geometry is unique.
+
+    Original pixel paths remain separate segments. No pixels are inserted across
+    the gaps. Ambiguous, short, or poorly supported fragments remain diagnostics.
+    """
+    full_groups = [
+        group for group in groups
+        if len(group) == 1
+        and group[0].get("path_kind", "FULL_X_SPAN_PATH") == "FULL_X_SPAN_PATH"
+    ]
+    partial_items = [
+        item for group in groups
+        if group not in full_groups
+        for item in group
+        if str(item.get("path_kind", "")).startswith("LOCAL_")
+        or (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+    ]
+
+    def describe(item: dict) -> dict | None:
+        path = item.get("path") or []
+        if len(path) < 8:
+            return None
+        xy = sorted(
+            ((float(px), float(py)) for py, px in path),
+            key=lambda point: point[0],
+        )
+        x0, y0 = xy[0]
+        x1, y1 = xy[-1]
+        sample_count = max(3, min(len(xy), int(round(len(xy) / 3))))
+
+        def slope(samples):
+            mean_x = sum(point[0] for point in samples) / len(samples)
+            mean_y = sum(point[1] for point in samples) / len(samples)
+            denominator = sum((point[0] - mean_x) ** 2 for point in samples)
+            if denominator <= 1e-9:
+                return 0.0
+            return sum(
+                (point[0] - mean_x) * (point[1] - mean_y)
+                for point in samples
+            ) / denominator
+
+        start = xy[:sample_count]
+        end = xy[-sample_count:]
+        return {
+            "component": item,
+            "x0": x0,
+            "x1": x1,
+            "y0": sum(point[1] for point in start) / len(start),
+            "y1": sum(point[1] for point in end) / len(end),
+            "slope_start": slope(start),
+            "slope_end": slope(end),
+        }
+
+    descriptions = [
+        description for item in partial_items
+        if (description := describe(item)) is not None
+    ]
+    max_gap = max(8, int(round(plot_width * 0.05)))
+    residual_limit = max(4.0, plot_height * 0.02)
+    slope_limit = 0.70
+    successor_candidates: dict[int, list[tuple[float, int]]] = {}
+    predecessor_candidates: dict[int, list[tuple[float, int]]] = {}
+
+    for first_index, first in enumerate(descriptions):
+        candidates = []
+        for second_index, second in enumerate(descriptions):
+            if first_index == second_index:
+                continue
+            if second["x0"] < first["x1"] - 1:
+                continue
+            gap = max(0.0, second["x0"] - first["x1"])
+            if gap > max_gap:
+                continue
+            predicted_y = first["y1"] + first["slope_end"] * (
+                second["x0"] - first["x1"]
+            )
+            residual = abs(second["y0"] - predicted_y)
+            slope_delta = abs(first["slope_end"] - second["slope_start"])
+            allowed_residual = residual_limit + gap * 0.18
+            if residual > allowed_residual or slope_delta > slope_limit:
+                continue
+            cost = residual + slope_delta * 2.0 + gap * 0.05
+            candidates.append((float(cost), second_index))
+            predecessor_candidates.setdefault(second_index, []).append(
+                (float(cost), first_index)
+            )
+        candidates.sort()
+        if candidates:
+            successor_candidates[first_index] = candidates
+
+    def unique_best(items: list[tuple[float, int]]) -> int | None:
+        if not items:
+            return None
+        ordered = sorted(items)
+        if len(ordered) > 1 and ordered[1][0] - ordered[0][0] < 1.75:
+            return None
+        return ordered[0][1]
+
+    successors = {}
+    predecessors = {}
+    for source_index, candidates in successor_candidates.items():
+        target_index = unique_best(candidates)
+        if target_index is None:
+            continue
+        reverse_best = unique_best(predecessor_candidates.get(target_index, []))
+        if reverse_best == source_index:
+            successors[source_index] = target_index
+            predecessors[target_index] = source_index
+
+    chains = []
+    visited = set()
+    for start_index in range(len(descriptions)):
+        if start_index in predecessors or start_index in visited:
+            continue
+        chain = []
+        cursor = start_index
+        while cursor not in visited:
+            visited.add(cursor)
+            chain.append(cursor)
+            if cursor not in successors:
+                break
+            cursor = successors[cursor]
+        if len(chain) >= 3:
+            x_start = min(descriptions[index]["x0"] for index in chain)
+            x_end = max(descriptions[index]["x1"] for index in chain)
+            coverage = (x_end - x_start) / max(1, plot_width)
+            if coverage >= 0.22:
+                components = [
+                    descriptions[index]["component"] for index in chain
+                ]
+                components.sort(key=lambda item: (
+                    int(item.get("bbox", [0, 0, 0, 0])[0]),
+                    int(item.get("bbox", [0, 0, 0, 0])[1]),
+                ))
+                chains.append({
+                    "component_indexes": chain,
+                    "segment_count": len(components),
+                    "x_coverage_fraction": float(coverage),
+                    "bbox": [
+                        min(int(item["bbox"][0]) for item in components),
+                        min(int(item["bbox"][1]) for item in components),
+                        max(int(item["bbox"][2]) for item in components),
+                        max(int(item["bbox"][3]) for item in components),
+                    ],
+                })
+
+    tracks = []
+    tracked_indexes = {
+        index for chain in chains for index in chain["component_indexes"]
+    }
+    for chain in chains:
+        tracks.append([
+            descriptions[index]["component"]
+            for index in chain["component_indexes"]
+        ])
+    unassigned = [
+        {
+            "bbox": [int(value) for value in item.get("bbox", [])],
+            "point_count": int(item.get("pixel_count", 0)),
+            "path_kind": item.get("path_kind"),
+            "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_DASH_TRACK",
+        }
+        for index, item in enumerate(descriptions)
+        if index not in tracked_indexes
+    ]
+    result_groups = full_groups + tracks
+    result_groups.sort(key=lambda group: (
+        min(int(item.get("bbox", [0, 0, 0, 0])[0]) for item in group),
+        min(int(item.get("bbox", [0, 0, 0, 0])[1]) for item in group),
+        -sum(int(item.get("pixel_count", 0)) for item in group),
+    ))
+    diagnostics = {
+        "status": "TRACKS_FOUND" if tracks else "NO_UNIQUE_DASH_TRACK",
+        "partial_component_count": len(partial_items),
+        "track_count": len(tracks),
+        "tracks": chains,
+        "unassigned_fragment_count": len(unassigned),
+        "max_gap_pixels": max_gap,
+        "residual_limit_pixels": residual_limit,
+        "slope_difference_limit": slope_limit,
+        "inter_fragment_pixels_inserted": 0,
+    }
+    return result_groups, unassigned, diagnostics
 
 
 def _branch_group_has_full_span_path(group: list[dict]) -> bool:
@@ -1086,6 +1299,7 @@ def detect_monotonic_color_branches(
     min_column_support: float = 0.65,
     min_branch_presence_fraction: float = 0.15,
     max_branches: int = 24,
+    preserve_partial_fragments: bool = False,
 ) -> dict:
     """Inventory independent paths and grouped local fragments without joining them.
 
@@ -1097,7 +1311,17 @@ def detect_monotonic_color_branches(
         image_path, rgb, tolerance, plot_box=plot_box, color_match=color_match
     )
     components = result.get("components", [])
-    groups = _path_branch_groups(components)
+    groups = _path_branch_groups(
+        components, collapse_all_partial=not preserve_partial_fragments
+    )
+    fragment_review = []
+    fragment_tracking = None
+    if preserve_partial_fragments:
+        x0, y0, x1, y1 = result.get("plot_box") or [0, 0, 0, 0]
+        groups, fragment_review, fragment_tracking = _group_achromatic_fragment_tracks(
+            groups, plot_width=max(1, int(x1) - int(x0)),
+            plot_height=max(1, int(y1) - int(y0)),
+        )
     summaries = [
         _branch_group_summary(index, group)
         for index, group in enumerate(groups)
@@ -1122,11 +1346,13 @@ def detect_monotonic_color_branches(
             "plot_box": result.get("plot_box"),
         }
 
-    groups, excluded_partial_branches = _select_unique_full_span_group(groups)
-    summaries = [
-        _branch_group_summary(index, group)
-        for index, group in enumerate(groups)
-    ]
+    excluded_partial_branches = []
+    if not preserve_partial_fragments:
+        groups, excluded_partial_branches = _select_unique_full_span_group(groups)
+        summaries = [
+            _branch_group_summary(index, group)
+            for index, group in enumerate(groups)
+        ]
     if len(groups) == 1:
         excluded_partial_branches.extend(
             _compact_rejected_review_candidates(
@@ -1171,6 +1397,8 @@ def detect_monotonic_color_branches(
         "rejected_components": rejected_components,
         "plot_box": result.get("plot_box"),
         "path_model": "CONNECTED_2D_PIXEL_COMPONENTS_WITH_EXPLICIT_SEGMENT_BREAKS",
+        "partial_fragment_review": fragment_review,
+        "partial_fragment_tracking": fragment_tracking,
         "provisional": True,
     }
 
@@ -1188,6 +1416,7 @@ def trace_monotonic_color(
     color_match: dict | None = None,
     branch_index: int | None = None,
     branch_count: int | None = None,
+    preserve_partial_fragments: bool = False,
 ) -> tuple[list[SeriesPoint], dict]:
     """Trace ordered paths while retaining ambiguous local fragments as segments.
 
@@ -1210,7 +1439,19 @@ def trace_monotonic_color(
             "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
         }
     components = result.get("components", [])
-    groups = _path_branch_groups(components)
+    groups = _path_branch_groups(
+        components, collapse_all_partial=not preserve_partial_fragments
+    )
+    partial_fragment_review = []
+    partial_fragment_tracking = None
+    if preserve_partial_fragments:
+        x0, y0, x1, y1 = result.get("plot_box") or [0, 0, 0, 0]
+        groups, partial_fragment_review, partial_fragment_tracking = (
+            _group_achromatic_fragment_tracks(
+                groups, plot_width=max(1, int(x1) - int(x0)),
+                plot_height=max(1, int(y1) - int(y0)),
+            )
+        )
     if not groups:
         return [], {
             "status": "NEEDS_REVIEW",
@@ -1223,7 +1464,10 @@ def trace_monotonic_color(
 
     auto_excluded = []
     if branch_index is None:
-        selected_groups, auto_excluded = _select_unique_full_span_group(groups)
+        selected_groups, auto_excluded = (
+            (groups, []) if preserve_partial_fragments
+            else _select_unique_full_span_group(groups)
+        )
         if len(selected_groups) == 1 and len(groups) > 1:
             groups = selected_groups
             selected_index = 0
@@ -1236,6 +1480,8 @@ def trace_monotonic_color(
                     _branch_group_summary(index, group)
                     for index, group in enumerate(groups)
                 ],
+                "partial_fragment_review": partial_fragment_review,
+                "partial_fragment_tracking": partial_fragment_tracking,
                 "path_model": "CONNECTED_2D_PIXEL_COMPONENTS",
             }
         else:
@@ -1321,7 +1567,12 @@ def trace_monotonic_color(
             "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
             if partial_review_required else "EXTRACTED_PROVISIONAL"
         ),
-        "method": "raster_color_connected_path",
+        "method": (
+            "raster_achromatic_connected_path"
+            if isinstance(color_match, dict)
+            and color_match.get("space") == "ACHROMATIC_LUMINANCE_RANGE"
+            else "raster_color_connected_path"
+        ),
         "path_model": "CONNECTED_2D_PIXEL_COMPONENTS_WITH_EXPLICIT_SEGMENT_BREAKS",
         "path_order": "LEFT_TO_RIGHT_WITHIN_EACH_DISCONNECTED_SEGMENT",
         "component_index": selected_index,
@@ -1368,6 +1619,8 @@ def trace_monotonic_color(
         ),
         "branch_index": selected_index,
         "branch_count": branch_count or len(groups),
+        "partial_fragment_review": partial_fragment_review,
+        "partial_fragment_tracking": partial_fragment_tracking,
     }
 
 def map_explicit_polyline(
