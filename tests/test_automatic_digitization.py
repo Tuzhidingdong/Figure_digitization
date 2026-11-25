@@ -1329,7 +1329,10 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
             ],
             "achromatic_review": qc.get("achromatic_geometry_review"),
         })
-    assert result["series_count"] == 3, series_diagnostics
+    if result["series_count"] != 3:
+        for diagnostic in series_diagnostics:
+            print("SERIES_DIAGNOSTIC " + json.dumps(diagnostic, sort_keys=True))
+    assert result["series_count"] == 3
     family_types = [
         item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
         for item in result["series"]
