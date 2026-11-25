@@ -72,7 +72,10 @@ def processing_stage_state(
     profile_fingerprint = profile_registry_fingerprint()
     relevant_options = {
         "render_scale": float(options.get("render_scale", 1.5)),
-        "max_render_pixels": int(options.get("max_render_pixels", 12_000_000)),
+        "max_render_pixels": int(options.get("max_render_pixels", 10_240_000)),
+        "max_render_long_edge": int(options.get("max_render_long_edge", 3200)),
+        "memory_soft_limit_mb": int(options.get("memory_soft_limit_mb", 1434)),
+        "memory_hard_limit_mb": int(options.get("memory_hard_limit_mb", 1843)),
         "temp_disk_limit_mb": int(options.get("temp_disk_limit_mb", 2048)),
         "context_memory_budget": int(options.get("context_memory_budget", 500_000)),
         "ocr": bool(options.get("ocr", False)),
