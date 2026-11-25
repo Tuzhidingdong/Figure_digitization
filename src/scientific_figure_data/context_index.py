@@ -48,7 +48,7 @@ def _cached_index(index_path: Path, db_path: Path, fingerprint: str,
                   memory_budget_bytes: int) -> "PaperContextIndex | None":
     try:
         metadata = json.loads(index_path.read_text(encoding="utf-8"))
-        if metadata.get("schema_version") != "1.0" or metadata.get("fingerprint") != fingerprint:
+        if metadata.get("schema_version") != "1.1" or metadata.get("fingerprint") != fingerprint:
             return None
         storage = metadata.get("storage")
         if storage == "sqlite":
@@ -139,7 +139,7 @@ class PaperContextIndex:
                             text = " ".join(line.strip().split())
                             if not text:
                                 continue
-                            found = []
+                            found = [("statement", text)]
                             found.extend(("sample_alias", match.group(0)) for match in SAMPLE_RE.finditer(text))
                             found.extend(("reference_electrode", match.group(0)) for match in REFERENCE_RE.finditer(text))
                             found.extend(("statistics", match.group(0)) for match in ERROR_RE.finditer(text))
@@ -163,7 +163,7 @@ class PaperContextIndex:
                 estimated_size = estimated
 
             atomic_write_json(index_path, {
-                "schema_version": "1.0",
+                "schema_version": "1.1",
                 "fingerprint": fingerprint,
                 "storage": storage,
                 "estimated_memory_bytes": estimated_size,
