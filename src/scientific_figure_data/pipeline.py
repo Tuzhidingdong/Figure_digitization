@@ -2445,10 +2445,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         snapshot.paper_id, snapshot.input_fingerprint, figures, panels, series, context,
         pass1_state=semantic_pass1,
     )
+    check_worker_memory()
     disk_usage = _paper_disk_usage(paper_output)
     if memory_observations:
         disk_usage["worker_memory"] = {
-            "peak_rss_bytes": max(
+            "max_observed_checkpoint_rss_bytes": max(
                 (int(item.get("rss_bytes") or 0) for item in memory_observations),
                 default=0,
             ),
