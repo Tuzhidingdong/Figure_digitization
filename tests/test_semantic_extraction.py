@@ -99,3 +99,25 @@ def test_two_pass_registry_exact_links_and_unresolved_visual_only_candidate():
     assert result["series_subject_links"][1]["link_status"] == "UNRESOLVED_IMAGE_ONLY"
     assert any(item["condition_scope"] == "SYNTHESIS" for item in result["conditions"])
     assert records[0].metadata["semantic_pass2_fingerprint"]
+
+
+
+def test_explicit_offset_stacked_spectrum_forces_non_comparable_baseline():
+    record = SimpleNamespace(
+        series_id="series-stacked", paper_id="paper-a", figure_id="Figure2",
+        panel_id="a", label="Sample A", technique="Raman",
+        subject_links=[], conditions=[], metadata={
+            "vertical_offset_stacked_detected": True,
+            "y_signal_mode": "SERIES_RELATIVE_SIGNAL",
+        }, measurement_id=None, y_unit=None,
+    )
+    result = build_semantic_package(
+        "paper-a", "fingerprint-b",
+        [{"figure_id": "Figure2", "caption": "Raman spectra."}],
+        [], [record], _Context(),
+    )
+    assert record.scale_type == "ARBITRARY_OFFSET_STACKED"
+    assert record.baseline_comparable is False
+    assert result["cross_validation"]["status"] in {
+        "COMPLETED_WITH_UNRESOLVED", "CONSISTENT_WITH_AVAILABLE_EVIDENCE",
+    }
