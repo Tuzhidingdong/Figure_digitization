@@ -121,3 +121,35 @@ def test_explicit_offset_stacked_spectrum_forces_non_comparable_baseline():
     assert result["cross_validation"]["status"] in {
         "COMPLETED_WITH_UNRESOLVED", "CONSISTENT_WITH_AVAILABLE_EVIDENCE",
     }
+
+
+
+def test_sentence_scoping_does_not_attach_following_experiment_to_sample_synthesis():
+    context = _Context()
+    context.statements = [{
+        "value": "Sample A",
+        "source_path": "main_analysis.md",
+        "line_number": 30,
+        "snippet": (
+            "Sample A was synthesized hydrothermally at 200 °C for 2 h. "
+            "The cell was tested at 1 A g−1."
+        ),
+    }]
+    record = SimpleNamespace(
+        series_id="series-a", paper_id="paper-a", figure_id="Figure1",
+        panel_id="a", label="Sample A", technique="CV",
+        subject_links=[], conditions=[], metadata={}, measurement_id=None,
+        y_unit="mA",
+    )
+    result = build_semantic_package(
+        "paper-a", "fingerprint-sentence",
+        [{"figure_id": "Figure1", "caption": "CV curves of Sample A."}],
+        [], [record], context,
+    )
+    assert [item["raw_text"] for item in result["conditions"]] == [
+        "200 °C", "2 h",
+    ]
+    assert {item["condition_name"] for item in result["conditions"]} == {
+        "temperature", "duration",
+    }
+    assert all(item["condition_scope"] == "SYNTHESIS" for item in result["conditions"])
