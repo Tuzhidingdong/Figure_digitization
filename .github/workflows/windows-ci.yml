@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/task-plan-v2.1
       - feat/p1-automatic-monotonic-digitization
       - fix/p1-rapidocr-310-compatibility
       - feat/p1-multicolor-dual-y-axis
