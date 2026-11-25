@@ -88,6 +88,10 @@ class SeriesPoint:
     err_type: str = "UNKNOWN"
 
 
+# Canonical V2.1 name for the point record already used by the digitization pipeline.
+DataPoint = SeriesPoint
+
+
 @dataclass(slots=True)
 class SeriesRecord:
     series_id: str
