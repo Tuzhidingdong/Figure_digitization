@@ -134,6 +134,8 @@
         "scope_entity_id": { "type": ["string", "null"] },
         "scope_status": { "type": "string" },
         "raw_text": { "type": "string" },
+        "condition_name": { "type": ["string", "null"] },
+        "source_snippet": { "type": ["string", "null"] },
         "value": { "$ref": "#/$defs/ConditionValue" },
         "evidence_ids": { "type": "array", "items": { "type": "string" } },
         "parse_status": { "type": "string" }
