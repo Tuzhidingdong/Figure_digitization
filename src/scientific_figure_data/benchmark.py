@@ -185,6 +185,37 @@ def evaluate_condition_scope(
     return metrics
 
 
+def evaluate_condition_kind_scope(
+    gold_assertions: dict[str, tuple[str, str]],
+    predicted_assertions: dict[str, tuple[str, str] | None],
+) -> dict[str, Any]:
+    """Evaluate atomic condition kind AND synthesis/experiment scope as one assertion."""
+    gold = {
+        (str(condition_id), str(kind).upper(), str(scope).upper())
+        for condition_id, (kind, scope) in gold_assertions.items()
+    }
+    predicted = set()
+    false_scope = 0
+    unresolved = 0
+    for condition_id, assertion in predicted_assertions.items():
+        if assertion is None:
+            unresolved += 1
+            continue
+        kind, scope = assertion
+        item = (str(condition_id), str(kind).upper(), str(scope).upper())
+        predicted.add(item)
+        expected = gold_assertions.get(condition_id)
+        if expected is not None and (
+            str(expected[0]).upper() != item[1] or str(expected[1]).upper() != item[2]
+        ):
+            false_scope += 1
+    metrics = precision_recall(gold, predicted)
+    metrics["false_scope_attachments"] = false_scope
+    metrics["unresolved_prediction_count"] = unresolved
+    metrics["false_scope_attachment_rate"] = false_scope / max(1, len(predicted))
+    return metrics
+
+
 def curve_nrmse(
     predicted: list[float] | None, independent_ground_truth: list[float] | None,
 ) -> dict[str, Any]:
