@@ -1120,7 +1120,8 @@ def test_achromatic_family_traces_gray_solid_and_dashed_as_separate_series(tmp_p
 
     # Same neutral hue, but a separate dashed trace. Gaps are source gaps:
     # the extractor may group the fragments, but may not paint/interpolate them.
-    dash_y = lambda x: int(119 - 13 * (x - 54) / 292)
+    def dash_y(x):
+        return int(119 - 13 * (x - 54) / 292)
     for start in range(54, 348, 25):
         end = min(start + 17, 348)
         draw.line(
@@ -1197,3 +1198,41 @@ def test_achromatic_candidate_does_not_claim_a_curve_when_neutral_pixels_are_abs
     assert result["status"] == "NEEDS_REVIEW"
     assert result["reason"] == "INSUFFICIENT_ACHROMATIC_TRACE_PIXELS"
     assert result["families"] == []
+
+
+def test_trace_specification_accepts_achromatic_candidate_family(tmp_path: Path):
+    from scientific_figure_data.calibration import fit_linear_axis
+    from scientific_figure_data.trace_spec import generate_trace_specification
+
+    image = tmp_path / "achromatic-chart.png"
+    image.write_bytes(b"image fixture")
+    x_cal = fit_linear_axis(
+        "x", [{"pixel": 10, "value": 0}, {"pixel": 90, "value": 10}], "s"
+    )
+    y_cal = fit_linear_axis(
+        "y", [{"pixel": 90, "value": 0}, {"pixel": 10, "value": 5}], "mA"
+    )
+    achromatic = {
+        "status": "UNIQUE_ACHROMATIC_FAMILY",
+        "color_rgb": [128, 128, 128],
+        "color_tolerance": 0,
+        "color_match": {
+            "space": "ACHROMATIC_LUMINANCE_RANGE",
+            "maximum_chroma": 24,
+            "minimum_luminance": 28,
+            "maximum_luminance": 210,
+        },
+    }
+
+    accepted = generate_trace_specification(
+        image, (10, 10, 90, 90), achromatic, x_cal, y_cal,
+        "UNCLASSIFIED", "Time (s)", allow_geometry_only=True,
+    )
+    assert accepted["status"] == "READY", accepted
+    assert accepted["specification"]["specification_type"] == (
+        "ACHROMATIC_CONNECTED_2D_RASTER_PATH"
+    )
+    assert accepted["specification"]["trace_family_type"] == "ACHROMATIC"
+    assert accepted["specification"]["color_match"]["space"] == (
+        "ACHROMATIC_LUMINANCE_RANGE"
+    )
