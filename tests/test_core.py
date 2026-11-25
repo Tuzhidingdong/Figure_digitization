@@ -606,7 +606,7 @@ def test_catalog_streaming_query_has_no_fixed_10000_series_limit(tmp_path: Path)
                  "NEEDS_REVIEW", "{}"),
             )
             catalog.con.execute(
-                "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO measurements(measurement_id,paper_id,figure_id,technique,domain,metadata_json) VALUES(?,?,?,?,?,?)",
                 (f"m-{index}", snapshot.paper_id, "Figure1", "CV", "battery", "{}"),
             )
     rows = sum(1 for _ in catalog.iter_query_series({"paper_id": snapshot.paper_id}, batch_size=127))
