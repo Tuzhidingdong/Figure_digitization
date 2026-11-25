@@ -23,26 +23,26 @@ UNIT_CANONICAL = {
     "%": "%", "wt.%": "wt.%", "rpm": "rpm",
 }
 UNIT_PATTERN = (
-    r"°C|℃|K|mV\\s*s(?:\\^?-?1|−1)?|mV/s|A\\s*g(?:\\^?-?1|−1)?|"
-    r"mA\\s*cm(?:\\^?-?2|−2)?|mg\\s*L(?:\\^?-?1|−1)?|mg/L|g/L|"
+    r"°C|℃|K|mV[ \t]*s(?:[ \t]*-[ \t]*1|−1)?|mV/s|A[ \t]*g(?:[ \t]*-[ \t]*1|−1)?|"
+    r"mA[ \t]*cm(?:[ \t]*-[ \t]*2|−2)?|mg[ \t]*L(?:[ \t]*-[ \t]*1|−1)?|mg/L|g/L|"
     r"mmol/L|mol/L|mM|uM|μM|µM|M|kHz|MHz|Hz|mV|V|mA|A|h|hr|hours?|"
-    r"min|minutes?|s|sec|seconds?|wt\\.%|%|rpm|bar|MPa|mL\\s*min(?:\\^?-?1|−1)?"
+    r"min|minutes?|s|sec|seconds?|wt[.]%|%|rpm|bar|MPa|mL[ \t]*min(?:[ \t]*-[ \t]*1|−1)?"
 )
-NUMBER = r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?"
+NUMBER = r"[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?"
 LIST_QUANTITY_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<expr>{NUMBER}(?:\\s*,\\s*{NUMBER}){{2,}}\\s*(?:{UNIT_PATTERN}))",
+    rf"(?<![A-Za-z0-9])(?P<expr>{NUMBER}(?:[ \t]*,[ \t]*{NUMBER}){{2,}}[ \t]*(?:{UNIT_PATTERN}))",
     re.IGNORECASE,
 )
 QUANTITY_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<expr>(?:<=|>=|<|>|≤|≥|~|≈|about\\s+)?\\s*{NUMBER}"
-    rf"(?:\\s*(?:–|—|-|to)\\s*{NUMBER})?"
-    rf"(?:\\s*(?:±|\\+/-)\\s*{NUMBER})?"
-    rf"\\s*(?:{UNIT_PATTERN}))",
+    rf"(?<![A-Za-z0-9])(?P<expr>(?:<=|>=|<|>|≤|≥|~|≈|about[ \t]+)?[ \t]*{NUMBER}"
+    rf"(?:[ \t]*(?:–|—|-|to)[ \t]*{NUMBER})?"
+    rf"(?:[ \t]*(?:±|[+]/-)[ \t]*{NUMBER})?"
+    rf"[ \t]*(?:{UNIT_PATTERN}))",
     re.IGNORECASE,
 )
-PANEL_MARKER_RE = re.compile(r"\\(\\s*([a-z])\\s*\\)", re.IGNORECASE)
+PANEL_MARKER_RE = re.compile(r"[(][ \t]*([a-z])[ \t]*[)]", re.IGNORECASE)
 SAMPLE_MENTION_RE = re.compile(
-    r"\\b(?:sample|specimen|electrode|catalyst|material)\\s*[-_ ]+"
+    r"[ \t]*\\b(?:sample|specimen|electrode|catalyst|material)[-_ ]+"
     r"([A-Za-z0-9][A-Za-z0-9_.@+/-]{0,40})\\b",
     re.IGNORECASE,
 )
@@ -107,14 +107,14 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
     result = ConditionValue(raw_text=raw)
     if not raw:
         return result
-    unit_match = re.search(rf"({UNIT_PATTERN})\\s*$", raw, re.IGNORECASE)
+    unit_match = re.search(rf"({UNIT_PATTERN})[ \\t]*$", raw, re.IGNORECASE)
     if unit_match:
         result.unit_raw = unit_match.group(1)
         result.unit_canonical = UNIT_CANONICAL.get(result.unit_raw.casefold())
         numeric_text = raw[:unit_match.start()].strip()
     else:
         numeric_text = raw
-    comparator = re.match(r"^(<=|>=|<|>|≤|≥|~|≈|about\\s+)", numeric_text, re.IGNORECASE)
+    comparator = re.match(r"^(<=|>=|<|>|≤|≥|~|≈|about[ \\t]+)", numeric_text, re.IGNORECASE)
     if comparator:
         token = comparator.group(1).strip().casefold()
         result.operator = {
@@ -122,7 +122,7 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
             "≥": "GTE", "~": "APPROX", "≈": "APPROX", "about": "APPROX",
         }.get(token, "UNKNOWN")
         numeric_text = numeric_text[comparator.end():].strip()
-    uncertainty = re.fullmatch(rf"({NUMBER})\\s*(?:±|\\+/-)\\s*({NUMBER})", numeric_text)
+    uncertainty = re.fullmatch(rf"({NUMBER})[ \\t]*(?:±|[+]/-)[ \\t]*({NUMBER})", numeric_text)
     if uncertainty:
         result.value_kind = "QUANTITY"
         result.operator = "EQ" if result.operator == "UNKNOWN" else result.operator
@@ -130,7 +130,7 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
         result.uncertainty = {"value": float(uncertainty.group(2)), "unit_raw": result.unit_raw}
         result.parse_status = "PARSED"
         return result
-    range_match = re.fullmatch(rf"({NUMBER})\\s*(?:–|—|-|to)\\s*({NUMBER})", numeric_text, re.IGNORECASE)
+    range_match = re.fullmatch(rf"({NUMBER})[ \\t]*(?:–|—|-|to)[ \\t]*({NUMBER})", numeric_text, re.IGNORECASE)
     if range_match:
         result.value_kind = "QUANTITY"
         result.operator = "RANGE" if result.operator == "UNKNOWN" else result.operator
