@@ -309,31 +309,76 @@ def build_semantic_package(
     text_candidates = pass1_state["text_candidates"]
     registry_pass1 = pass1_state["registry_pass1"]
 
-    # One visual enrichment pass. Series labels are treated as candidates, not facts.
+    # One visual enrichment pass. OCR text and series labels remain candidates, not facts.
     visual_candidates = []
+    seen_visual = set()
     for record in series_records:
+        metadata = getattr(record, "metadata", {})
+        raw_candidates = metadata.get("visual_legend_candidates", []) if isinstance(metadata, dict) else []
+        for item in raw_candidates if isinstance(raw_candidates, list) else []:
+            if not isinstance(item, dict):
+                continue
+            label = " ".join(str(item.get("label") or "").split())
+            key = normalize_alias(label)
+            if not key or key in GENERIC_SERIES_LABELS:
+                continue
+            visual_key = (key, item.get("figure_id"), item.get("panel_id"))
+            if visual_key in seen_visual:
+                continue
+            seen_visual.add(visual_key)
+            visual_candidates.append({
+                "series_id": None,
+                "figure_id": item.get("figure_id") or getattr(record, "figure_id", None),
+                "panel_id": item.get("panel_id") or getattr(record, "panel_id", None),
+                "label": label,
+                "evidence_type": item.get("source_type", "OCR_TEXT_CANDIDATE"),
+                "evidence_id": item.get("evidence_id"),
+                "polygon": item.get("polygon"),
+                "confidence": item.get("confidence"),
+            })
         label = str(getattr(record, "label", None) or "").strip()
         if normalize_alias(label) in GENERIC_SERIES_LABELS:
             continue
-        visual_candidates.append({
-            "series_id": getattr(record, "series_id", None),
-            "figure_id": getattr(record, "figure_id", None),
-            "panel_id": getattr(record, "panel_id", None),
-            "label": label, "evidence_type": "SERIES_LABEL",
-        })
+        visual_key = (normalize_alias(label), getattr(record, "figure_id", None),
+                      getattr(record, "panel_id", None))
+        if visual_key not in seen_visual:
+            seen_visual.add(visual_key)
+            visual_candidates.append({
+                "series_id": getattr(record, "series_id", None),
+                "figure_id": getattr(record, "figure_id", None),
+                "panel_id": getattr(record, "panel_id", None),
+                "label": label, "evidence_type": "SERIES_LABEL",
+                "evidence_id": None, "polygon": None, "confidence": None,
+            })
     pass2_new_names = []
     for candidate in visual_candidates:
         key = normalize_alias(candidate["label"])
-        if key not in text_candidates:
-            evidence = {
-                "evidence_id": stable_id(
-                    "visual_evidence", f"{paper_id}|{candidate['series_id']}|{candidate['label']}"
-                ),
-                "source_type": "VISUAL_SERIES_LABEL", **candidate,
-            }
-            add_candidate(candidate["label"], evidence, "VISUAL")
-            text_candidates[key]["resolution_status"] = "UNRESOLVED_IMAGE_ONLY"
-            pass2_new_names.append(candidate["label"])
+        evidence = {
+            "evidence_id": candidate.get("evidence_id") or stable_id(
+                "visual_evidence",
+                f"{paper_id}|{candidate.get('figure_id')}|{candidate.get('panel_id')}|{candidate['label']}",
+            ),
+            "source_type": candidate.get("evidence_type", "VISUAL_CANDIDATE"),
+            "figure_id": candidate.get("figure_id"),
+            "panel_id": candidate.get("panel_id"),
+            "snippet": candidate["label"],
+            "polygon": candidate.get("polygon"),
+            "confidence": candidate.get("confidence"),
+        }
+        if key in text_candidates:
+            entity = text_candidates[key]
+            if evidence not in entity["evidence"]:
+                entity["evidence"].append(evidence)
+            if "VISUAL_CORROBORATION" not in entity["source_kinds"]:
+                entity["source_kinds"].append("VISUAL_CORROBORATION")
+            continue
+        text_candidates[key] = {
+            "subject_entity_id": stable_id("subject", f"{paper_id}|{key}"),
+            "canonical_name": candidate["label"], "aliases": [candidate["label"]],
+            "entity_kind": "SAMPLE", "resolution_status": "UNRESOLVED_IMAGE_ONLY",
+            "evidence": [evidence], "source_kinds": ["VISUAL"],
+        }
+        pass2_new_names.append(candidate["label"])
     registry_pass2 = list(text_candidates.values())
 
     # Targeted backfill only queries the prebuilt statement index for Pass-2 names.
