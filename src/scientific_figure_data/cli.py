@@ -168,15 +168,15 @@ def _scan(args) -> int:
                 )
                 seen_ids: set[str] = set()
                 for package in packages:
-                    if package.paper_id in seen_ids:
-                        raise ValueError(
-                            f"Duplicate authoritative upstream paper_id: {package.paper_id!r}"
-                        )
-                    seen_ids.add(package.paper_id)
                     snapshot = snapshot_paper(
                         package.paper_dir, input_root, paper_id=package.paper_id,
                         external_path_root=corpus_root,
                     )
+                    if snapshot.paper_id in seen_ids:
+                        raise ValueError(
+                            f"Duplicate normalized upstream paper_id: {snapshot.paper_id!r}"
+                        )
+                    seen_ids.add(snapshot.paper_id)
                     stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\\n")
                     count += 1
                 upstream_contract = {
