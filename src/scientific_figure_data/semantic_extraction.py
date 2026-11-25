@@ -237,7 +237,7 @@ def build_semantic_pass1(
     """Build provisional text-first caption/sample candidates before image interpretation."""
     captions: list[dict[str, Any]] = []
     text_candidates: dict[str, dict[str, Any]] = {}
-    sample_rows = context_index.search("sample_alias", "")
+    sample_rows = context_index.search("sample_alias", "", limit=5000)
 
     def add_candidate(name: str, evidence: dict[str, Any], source_kind: str):
         cleaned = " ".join(str(name).strip().split())
@@ -339,7 +339,7 @@ def build_semantic_package(
     # Targeted backfill only queries the prebuilt statement index for Pass-2 names.
     targeted_backfill = []
     for name in pass2_new_names:
-        for row in context_index.search("statement", name):
+        for row in context_index.search("statement", name, limit=500):
             targeted_backfill.append({
                 "sample_name": name, "source_path": row.get("source_path"),
                 "line_number": row.get("line_number"), "snippet": row.get("snippet"),
@@ -375,7 +375,7 @@ def build_semantic_package(
         aliases = entity["aliases"]
         matching_rows = []
         for alias in aliases:
-            matching_rows.extend(context_index.search("statement", alias))
+            matching_rows.extend(context_index.search("statement", alias, limit=500))
         unique_rows = {
             (row.get("source_path"), row.get("line_number"), row.get("snippet")): row
             for row in matching_rows
