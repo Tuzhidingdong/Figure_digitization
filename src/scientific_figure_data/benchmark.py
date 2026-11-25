@@ -115,6 +115,12 @@ def evaluate_relation(
         ((str(a), str(b)) for a, b in gold_pairs), predictions,
     )
     result["unresolved_prediction_count"] = unresolved
+    result["false_cross_associations"] = result["false_positive"]
+    result["wrong_assignment_rate"] = (
+        result["false_positive"] / result["predicted_count"]
+        if result["predicted_count"] else 1.0
+    )
+    result["wrong_link_rate"] = result["wrong_assignment_rate"]
     return result
 
 
