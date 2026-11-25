@@ -59,7 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--workers", type=int, default=1)
     run.add_argument("--max-attempts", type=int, default=2)
     run.add_argument("--lease-seconds", type=int, default=180)
-    run.add_argument("--memory-limit", type=int, default=2048, help="soft per-process memory budget in MiB")
+    run.add_argument("--memory-soft-limit", type=int, default=1434,
+                     help="worker RSS soft limit in MiB; triggers best-effort GC and process recycle")
+    run.add_argument("--memory-limit", type=int, default=1843,
+                     help="worker RSS hard limit in MiB; legacy option name retained")
     run.add_argument("--render-scale", type=float, default=1.5)
     run.add_argument("--temp-disk-limit", type=int, default=2048,
                      help="per-paper evidence + context-index disk budget in MiB; 0 disables the budget")
@@ -68,7 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--min-free-memory-mb", type=int, default=512,
                      help="pause new paper dispatch when available system memory falls below this threshold; 0 disables the guard")
     run.add_argument("--context-memory-budget", type=int, default=500000)
-    run.add_argument("--max-render-pixels", type=int, default=12000000)
+    run.add_argument("--max-render-pixels", type=int, default=10240000)
+    run.add_argument("--max-render-long-edge", type=int, default=3200)
     run.add_argument("--max-open-pdfs", type=int, default=1)
     run.add_argument("--batch-size", type=int, default=1000)
     run.add_argument("--qc-thresholds", type=Path,
@@ -251,13 +255,15 @@ def _run(args) -> int:
         )
 
     options = {
-        "memory_limit_mb": args.memory_limit,
+        "memory_soft_limit_mb": args.memory_soft_limit,
+        "memory_hard_limit_mb": args.memory_limit,
         "render_scale": args.render_scale,
         "temp_disk_limit_mb": args.temp_disk_limit,
         "min_free_disk_mb": args.min_free_disk_mb,
         "min_free_memory_mb": args.min_free_memory_mb,
         "context_memory_budget": args.context_memory_budget,
         "max_render_pixels": args.max_render_pixels,
+        "max_render_long_edge": args.max_render_long_edge,
         "max_open_pdfs": args.max_open_pdfs,
         "batch_size": args.batch_size,
         "qc_thresholds": str(args.qc_thresholds) if args.qc_thresholds else None,
