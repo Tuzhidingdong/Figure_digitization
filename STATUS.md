@@ -220,3 +220,16 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - SQLite is configured for WAL, `synchronous=NORMAL`, and a 10-second busy timeout. The schema migration is additive and preserves existing catalog tables.
 - Added `docs/UPSTREAM_CONTRACT.md`, `schemas/v2.1_semantic_contract.schema.json`, and focused tests for upstream package validation, condition parsing, Pass 1/Pass 2 behavior, DAG cycles, schema contracts and catalog persistence.
 - CI has not yet validated the latest semantic/storage commits. Do not treat the earlier Phase 1 CI result or the earlier pre-semantic V2.1 CI run as validation of the current head.
+
+## V2.1 implementation completion candidate
+
+- Algorithm and snapshot adapter versions are now `2.1.0`.
+- Semantic outputs now include `caption_semantics.json`, `sample_registry.json`, `synthesis_processes.json`, `experiments.json`, `unresolved_conditions.json`, and `cross_validation.json`; the bundle hashes all of them.
+- Unresolved quantity candidates are retained with `condition_scope=UNRESOLVED`; they are not attached to synthesis or measurement records. Exact alias matches are the only resolved series-to-sample links.
+- Clause-level evidence is persisted in `evidence_items`; process and measurement evidence is retained with source path/line/snippet. Series associations expose synthesis steps, measurement links, cross-validation and unresolved paper conditions.
+- Shared synthesis process nodes are deduplicated across sample steps. Ordered process dependencies are checked for cycles before artifacts are published.
+- The export schema now carries scale type, baseline comparability, offset/normalization provenance, synthesis process context, measurement links, cross-validation and unresolved conditions.
+- Stacked-spectrum detection uses conservative pixel-band separation and shared X-domain overlap. Arbitrary-relative and offset-stacked curves are explicitly non-comparable in raw inter-series Y/peak-height terms.
+- Runtime controls and bounded retry policies are implemented and documented in `docs/RUNTIME_CONTRACT.md`.
+- Gold Benchmark API/CLI, fixed metric thresholds, minimum coverage gate, blind held-out split and regression tests are implemented. No gold labels have been fabricated; accuracy acceptance remains `NOT_EVALUATED` until the minimum benchmark corpus is supplied.
+- Latest feature-branch head at this status update: `4372b6fe6ef7fe6e280704320e8203b28a842851`. The most recent full CI run was against an earlier intermediate commit and exposed compatibility issues that have since been corrected; the current head still requires the planned full CI run. No final Windows user acceptance is claimed.
