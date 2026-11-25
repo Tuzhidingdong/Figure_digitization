@@ -2369,9 +2369,21 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "reason": failure_reason,
             })
+            panel_classification = first_metadata.get("chart_family_classification") or {}
+            panel_family = panel_classification.get("chart_family", "UNCLASSIFIED")
+            panel_relative_signal = (
+                str(first_metadata.get("y_signal_mode", "")).upper()
+                == "SERIES_RELATIVE_SIGNAL"
+            )
+            raw_plot_box_pixels = first_metadata.get("plot_box_pixels")
+            panel_plot_box_pixels = (
+                tuple(int(round(float(value))) for value in raw_plot_box_pixels)
+                if isinstance(raw_plot_box_pixels, (list, tuple)) and len(raw_plot_box_pixels) == 4
+                else None
+            )
             stacked_offset_evidence = (
-                _detect_offset_stacked_spectra(extracted, plot_box_pixels)
-                if family == "SPECTRUM" and relative_signal
+                _detect_offset_stacked_spectra(extracted, panel_plot_box_pixels)
+                if panel_family == "SPECTRUM" and panel_relative_signal
                 else {"detected": False, "reason": "NOT_A_RELATIVE_SPECTRUM"}
             )
             if stacked_offset_evidence.get("detected"):
