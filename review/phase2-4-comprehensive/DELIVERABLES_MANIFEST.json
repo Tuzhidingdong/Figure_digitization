@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "branch": "review/phase2-4-comprehensive",
+  "generated_at": "2026-11-25",
+  "note": "Phase 2/3/4 evidence-only delivery; no production code, no new tests, no new extraction",
+  "files": [
+    {
+      "path": "review/phase2-4-comprehensive/FINAL_REPORT.md",
+      "bytes": 4602,
+      "sha256": "42e219f270a5923e5579d4ba7457f1bcf8e222cab745008f9d0ee165deaab837"
+    },
+    {
+      "path": "review/phase2-4-comprehensive/P8_EVIDENCE_FREEZE.md",
+      "bytes": 8828,
+      "sha256": "85d999f9845fe43d19a2fd3d1b43c7920a6099d6a23cded227ebe02fcac1e904"
+    },
+    {
+      "path": "review/phase2-4-comprehensive/P8_EVIDENCE_MANIFEST.json",
+      "bytes": 27431,
+      "sha256": "6fca9085e9c67dac37e7e12f32662093676a89bfc2fc0265854b7dee33ae0851"
+    },
+    {
+      "path": "review/phase2-4-comprehensive/P3_OCR_AND_FRAGMENT_DIAGNOSIS.md",
+      "bytes": 4883,
+      "sha256": "0b0258847648dffbf2591d77f4e1dd4b46e6cb7008af35c1b77c5595a6b7273c"
+    },
+    {
+      "path": "review/phase2-4-comprehensive/PHASE4_AXIS_AND_CALIBRATION.md",
+      "bytes": 3965,
+      "sha256": "d75d2f2227cb44e528aad0e833e2264d51deaeb54d735eaee934c8cec5ce9733"
+    },
+    {
+      "path": "review/phase2-4-comprehensive/TEST_REPORT.md",
+      "bytes": 2800,
+      "sha256": "86c68f595cf2db3cf375eb52bcbbb969577a13e771ce4e53f6c14c1d10a5e84e"
+    }
+  ]
+}
