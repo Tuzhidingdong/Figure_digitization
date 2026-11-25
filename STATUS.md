@@ -233,3 +233,13 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - Runtime controls and bounded retry policies are implemented and documented in `docs/RUNTIME_CONTRACT.md`.
 - Gold Benchmark API/CLI, fixed metric thresholds, minimum coverage gate, blind held-out split and regression tests are implemented. No gold labels have been fabricated; accuracy acceptance remains `NOT_EVALUATED` until the minimum benchmark corpus is supplied.
 - Latest feature-branch head at this status update: `4372b6fe6ef7fe6e280704320e8203b28a842851`. The most recent full CI run was against an earlier intermediate commit and exposed compatibility issues that have since been corrected; the current head still requires the planned full CI run. No final Windows user acceptance is claimed.
+
+## V2.1 validation result
+
+- Latest validated feature-branch head: `3f8a3f068fd64a6cfe4e63c5b6f96aea6bdfaf97`.
+- Windows CI run `45557059720`: **success** for Python 3.11, 3.12 and 3.13; RapidOCR Python 3.10 compatibility job also **success**.
+- All three Python jobs passed `python -m compileall -q src tests`, Ruff `E4,E7,E9,F821`, and the full `pytest -q` suite. No pytest failures or ProcessPoolExecutor thread-shutdown warnings remained.
+- The first CI candidate exposed two Gold Benchmark coverage-gate test expectation issues and ProcessPoolExecutor shutdown warnings. Those were corrected; the final run above passed.
+- This is GitHub-hosted Windows CI evidence only. It does not replace the user's/local-Agent acceptance against the actual Chem-Literature corpus and Windows working environment.
+- Gold Benchmark accuracy remains `NOT_EVALUATED` because no human-labeled gold corpus or independent curve ground truth has been supplied. The evaluator refuses to lower coverage floors or pass empty outputs.
+- PR #23 remains Draft and unmerged. No changes were made to `main`, PR #22, `TASK_PLAN_v1.4.1.md`, or the upstream Chem-Literature repository.
