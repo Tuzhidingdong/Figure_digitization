@@ -295,6 +295,60 @@ def build_semantic_pass1(
     }
 
 
+def _segment_statement(text: str) -> list[str]:
+    clauses = [
+        part.strip() for part in re.split(
+            r"(?<=[.!?])[ \t]+(?=[A-Z0-9])|;[ \t]+(?=[A-Z0-9])",
+            str(text or ""),
+        ) if part.strip()
+    ]
+    return clauses or ([str(text).strip()] if str(text).strip() else [])
+
+
+def _condition_name(text: str, start: int) -> str:
+    prefix = text[max(0, start - 90):start].casefold()
+    candidates = [
+        ("scan_rate", ("scan rate", "sweep rate")),
+        ("current_density", ("current density",)),
+        ("potential_window", ("potential window", "voltage window")),
+        ("mass_loading", ("mass loading",)),
+        ("concentration", ("concentration", "molarity")),
+        ("temperature", ("temperature", "calcined at", "heated at", "annealed at")),
+        ("duration", ("duration", "reaction time", "for ")),
+        ("frequency", ("frequency",)),
+        ("pressure", ("pressure",)),
+        ("pH", ("ph",)),
+        ("potential", ("potential", "voltage")),
+        ("rate", ("rate",)),
+    ]
+    matches = [
+        (max(prefix.rfind(token) for token in tokens), name)
+        for name, tokens in candidates
+        if any(token in prefix for token in tokens)
+    ]
+    return max(matches)[1] if matches else "UNNAMED_QUANTITY"
+
+
+def _process_step_role(text: str) -> str:
+    lowered = text.casefold()
+    roles = (
+        ("HYDROTHERMAL_TREATMENT", ("hydrothermal",)),
+        ("SOLVOTHERMAL_TREATMENT", ("solvothermal",)),
+        ("CALCINATION", ("calcination", "calcined")),
+        ("ANNEALING", ("anneal",)),
+        ("PYROLYSIS", ("pyrolysis", "pyrolyzed", "pyrolysed")),
+        ("DRYING", ("dried", "drying")),
+        ("WASHING", ("washed", "washing")),
+        ("MIXING", ("mixed", "stirred", "mixing")),
+        ("PRECIPITATION", ("precipitated", "precipitation")),
+        ("SYNTHESIS", ("synthesized", "synthesised", "synthesis", "prepared")),
+    )
+    for role, terms in roles:
+        if any(term in lowered for term in terms):
+            return role
+    return "UNRESOLVED"
+
+
 def build_semantic_package(
     paper_id: str,
     input_fingerprint: str,
@@ -432,178 +486,107 @@ def build_semantic_package(
         )
         step_order = 0
         for row in ordered_rows:
-            snippet = str(row.get("snippet") or "")
-            scope = _scope_for_statement(snippet)
-            evidence_id = _evidence_id(
-                paper_id, row.get("source_path", ""),
-                int(row.get("line_number", 0)), snippet,
-            )
-            techniques = _techniques(snippet)
-            for technique in techniques:
-                figure_candidates = [
-                    item for item in measurements.values()
-                    if item.get("technique") == technique and item.get("figure_id")
-                ]
-                if len(figure_candidates) == 1:
-                    measurement_id = figure_candidates[0]["measurement_id"]
-                    if evidence_id not in figure_candidates[0]["evidence_ids"]:
-                        figure_candidates[0]["evidence_ids"].append(evidence_id)
-                else:
-                    measurement_id = stable_id(
-                        "measurement",
-                        f"{paper_id}|{technique}|{row.get('source_path')}|{row.get('line_number')}",
+            original_snippet = str(row.get("snippet") or "")
+            for clause_index, snippet in enumerate(_segment_statement(original_snippet)):
+                if not any(normalize_alias(alias) in normalize_alias(snippet) for alias in aliases):
+                    continue
+                mentioned_entities = [
+                    candidate for candidate in text_candidates.values()
+                    if any(
+                        normalize_alias(alias) in normalize_alias(snippet)
+                        for alias in candidate["aliases"]
                     )
-                    measurements.setdefault(measurement_id, {
-                        "measurement_id": measurement_id, "paper_id": paper_id,
-                        "figure_id": None, "technique": technique,
-                        "scope_status": "TEXT_CANDIDATE",
-                        "evidence_ids": [evidence_id], "condition_ids": [],
-                    })
-            process_id = None
-            if scope == "SYNTHESIS":
-                process_id = stable_id("process", f"{paper_id}|{evidence_id}")
-                step_order += 1
-                synthesis_processes.append({
-                    "process_id": process_id, "paper_id": paper_id,
-                    "method_text": snippet, "evidence_ids": [evidence_id],
-                    "process_status": "CANDIDATE", "condition_ids": [],
-                })
-                sample_steps.append({
-                    "sample_id": entity["subject_entity_id"], "process_id": process_id,
-                    "step_order": step_order, "step_role": "UNRESOLVED",
-                    "evidence_id": evidence_id, "scope_status": "SOURCE_BACKED_CANDIDATE",
-                })
-            if scope in {"SYNTHESIS", "EXPERIMENT"}:
-                statement_measurements = [
-                    item for item in measurements.values()
-                    if item.get("technique") in techniques
-                    and item.get("technique") is not None
                 ]
-                scope_entity_id = (
-                    process_id if scope == "SYNTHESIS"
-                    else statement_measurements[0]["measurement_id"]
-                    if len(statement_measurements) == 1 else None
+                group_scope_explicit = bool(re.search(
+                    r"\b(?:both|all|each|respectively)\b|"
+                    r"\bsamples?\s+[A-Za-z0-9].*\band\b",
+                    snippet, re.IGNORECASE,
+                ))
+                ambiguous_group = len(mentioned_entities) > 1 and not group_scope_explicit
+                scope = _scope_for_statement(snippet)
+                line_evidence_id = _evidence_id(
+                    paper_id, row.get("source_path", ""),
+                    int(row.get("line_number", 0)), original_snippet,
                 )
-                for quantity in extract_quantity_expressions(snippet):
-                    condition_id = stable_id(
-                        "condition", f"{paper_id}|{scope}|{evidence_id}|{quantity['start']}|{quantity['raw_text']}"
-                    )
-                    conditions.append({
-                        "condition_id": condition_id, "paper_id": paper_id,
-                        "condition_scope": scope, "scope_entity_id": scope_entity_id,
-                        "scope_status": "LINKED" if scope_entity_id else "UNRESOLVED_TARGET",
-                        "raw_text": quantity["raw_text"], "value": quantity["value"],
-                        "evidence_ids": [evidence_id], "parse_status": quantity["value"]["parse_status"],
-                    })
-                    if scope == "SYNTHESIS" and process_id:
-                        process_record = next(
-                            (item for item in synthesis_processes if item["process_id"] == process_id),
-                            None,
+                evidence_id = stable_id("evidence_clause", f"{line_evidence_id}|{clause_index}")
+                techniques = _techniques(snippet)
+                for technique in techniques:
+                    figure_candidates = [
+                        item for item in measurements.values()
+                        if item.get("technique") == technique and item.get("figure_id")
+                    ]
+                    if len(figure_candidates) == 1:
+                        measurement_id = figure_candidates[0]["measurement_id"]
+                        if evidence_id not in figure_candidates[0]["evidence_ids"]:
+                            figure_candidates[0]["evidence_ids"].append(evidence_id)
+                    else:
+                        measurement_id = stable_id(
+                            "measurement",
+                            f"{paper_id}|{technique}|{row.get('source_path')}|{row.get('line_number')}|{clause_index}",
                         )
-                        if process_record is not None:
-                            process_record["condition_ids"].append(condition_id)
-                    elif scope == "EXPERIMENT" and scope_entity_id:
-                        measurement_record = measurements.get(scope_entity_id)
-                        if measurement_record is not None:
-                            measurement_record["condition_ids"].append(condition_id)
+                        measurements.setdefault(measurement_id, {
+                            "measurement_id": measurement_id, "paper_id": paper_id,
+                            "figure_id": None, "technique": technique,
+                            "scope_status": "TEXT_CANDIDATE",
+                            "evidence_ids": [evidence_id], "condition_ids": [],
+                        })
+                process_id = None
+                if scope == "SYNTHESIS":
+                    process_id = stable_id("process", f"{paper_id}|{evidence_id}")
+                    role = _process_step_role(snippet)
+                    synthesis_processes.append({
+                        "process_id": process_id, "paper_id": paper_id,
+                        "method_text": snippet, "process_type": role,
+                        "evidence_ids": [evidence_id],
+                        "process_status": "CANDIDATE", "condition_ids": [],
+                    })
+                    if not ambiguous_group:
+                        step_order += 1
+                        sample_steps.append({
+                            "sample_id": entity["subject_entity_id"], "process_id": process_id,
+                            "step_order": step_order, "step_role": role,
+                            "evidence_id": evidence_id,
+                            "scope_status": "AMBIGUOUS_MULTI_SUBJECT_SCOPE"
+                            if ambiguous_group else "SOURCE_BACKED_CANDIDATE",
+                        })
+                if scope in {"SYNTHESIS", "EXPERIMENT"}:
+                    statement_measurements = [
+                        item for item in measurements.values()
+                        if item.get("technique") in techniques
+                        and item.get("technique") is not None
+                    ]
+                    scope_entity_id = (
+                        process_id if scope == "SYNTHESIS"
+                        else statement_measurements[0]["measurement_id"]
+                        if len(statement_measurements) == 1 else None
+                    )
+                    for quantity in extract_quantity_expressions(snippet):
+                        condition_id = stable_id(
+                            "condition",
+                            f"{paper_id}|{scope}|{evidence_id}|{quantity['start']}|{quantity['raw_text']}",
+                        )
+                        condition_name = _condition_name(snippet, quantity["start"])
+                        conditions.append({
+                            "condition_id": condition_id, "paper_id": paper_id,
+                            "condition_scope": scope, "scope_entity_id": scope_entity_id,
+                            "scope_status": "LINKED" if scope_entity_id else "UNRESOLVED_TARGET",
+                            "condition_name": condition_name,
+                            "raw_text": quantity["raw_text"], "source_snippet": snippet,
+                            "value": quantity["value"], "evidence_ids": [evidence_id],
+                            "parse_status": quantity["value"]["parse_status"],
+                        })
+                        if scope == "SYNTHESIS" and process_id:
+                            process_record = next(
+                                (item for item in synthesis_processes if item["process_id"] == process_id),
+                                None,
+                            )
+                            if process_record is not None:
+                                process_record["condition_ids"].append(condition_id)
+                        elif scope == "EXPERIMENT" and scope_entity_id:
+                            measurement_record = measurements.get(scope_entity_id)
+                            if measurement_record is not None:
+                                measurement_record["condition_ids"].append(condition_id)
 
-    # Caption and series association uses exact normalized aliases only.
-    aliases_to_entity = {}
-    for key, entity in text_candidates.items():
-        for alias in entity["aliases"]:
-            aliases_to_entity[normalize_alias(alias)] = entity
-    series_subject_links = []
-    series_measurement_links = []
-    cross_validation = []
-    for record in series_records:
-        label = str(getattr(record, "label", None) or "").strip()
-        entity = aliases_to_entity.get(normalize_alias(label)) if label else None
-        if entity:
-            link = {
-                "series_id": record.series_id, "subject_entity_id": entity["subject_entity_id"],
-                "subject_role": "UNKNOWN", "link_status": "MATCHED_EXACT_ALIAS",
-                "evidence_ids": [item.get("evidence_id") for item in entity["evidence"]],
-            }
-        elif label and normalize_alias(label) not in GENERIC_SERIES_LABELS:
-            candidate = text_candidates.get(normalize_alias(label))
-            link = {
-                "series_id": record.series_id,
-                "subject_entity_id": candidate["subject_entity_id"] if candidate else None,
-                "subject_role": "UNKNOWN", "link_status": "UNRESOLVED_IMAGE_ONLY",
-                "evidence_ids": [item.get("evidence_id") for item in candidate["evidence"]] if candidate else [],
-            }
-        else:
-            link = {
-                "series_id": record.series_id, "subject_entity_id": None,
-                "subject_role": "UNKNOWN", "link_status": "UNASSIGNED",
-                "evidence_ids": [],
-            }
-        series_subject_links.append(link)
-        technique = str(getattr(record, "technique", None) or "").upper()
-        figure_measurements = [
-            item for item in measurements.values()
-            if technique and str(item.get("technique", "")).upper() == technique
-            and item.get("figure_id") == record.figure_id
-        ]
-        paper_text_measurements = [
-            item for item in measurements.values()
-            if technique and str(item.get("technique", "")).upper() == technique
-            and item.get("figure_id") is None
-        ]
-        matching_measurements = (
-            figure_measurements if figure_measurements
-            else paper_text_measurements if len(paper_text_measurements) == 1
-            else []
-        )
-        if len(matching_measurements) == 1:
-            series_measurement_links.append({
-                "series_id": record.series_id,
-                "measurement_id": matching_measurements[0]["measurement_id"],
-                "measurement_role": "MEASUREMENT_RESULT",
-                "link_status": "CANDIDATE_TECHNIQUE_MATCH",
-                "evidence_ids": matching_measurements[0]["evidence_ids"],
-            })
-        else:
-            series_measurement_links.append({
-                "series_id": record.series_id, "measurement_id": None,
-                "measurement_role": "UNKNOWN", "link_status": "UNRESOLVED",
-                "evidence_ids": [],
-            })
-        figure_caption = next(
-            (str(item.get("caption") or "") for item in figures
-             if item.get("figure_id") == record.figure_id),
-            "",
-        )
-        caption_techniques = _techniques(figure_caption)
-        technique_conflict = bool(
-            technique and caption_techniques
-            and technique.casefold() not in {item.casefold() for item in caption_techniques}
-        )
-        checks = [{
-            "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
-            "status": link["link_status"],
-            "evidence_ids": link["evidence_ids"],
-        }]
-        if technique and caption_techniques:
-            checks.append({
-                "check": "SERIES_TECHNIQUE_TO_CAPTION",
-                "status": "CONFLICT" if technique_conflict else "CONSISTENT",
-                "series_technique": technique,
-                "caption_techniques": caption_techniques,
-            })
-        cross_validation.append({
-            "series_id": record.series_id,
-            "status": "CONFLICT" if technique_conflict else
-            "CONSISTENT_WITH_AVAILABLE_EVIDENCE"
-            if link["link_status"] == "MATCHED_EXACT_ALIAS"
-            else "UNRESOLVED",
-            "checks": checks,
-            "unresolved_fields": (
-                ["technique"] if technique_conflict else
-                [] if link["link_status"] == "MATCHED_EXACT_ALIAS"
-                else ["subject_entity_id"]
-            ),
-        })
 
     # Deduplicate shared process/condition nodes while preserving multiple sample-step links.
     synthesis_processes = list({
