@@ -837,7 +837,7 @@ class Catalog:
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (condition_id, item.paper_id,
                  measurement_id if condition_scope == "EXPERIMENT" else None,
-                 str(condition.get("raw_text") or condition.get("name", "unknown")),
+                 str(condition.get("condition_name") or condition.get("raw_text") or condition.get("name", "unknown")),
                  json.dumps(value, ensure_ascii=False),
                  json.dumps(
                      condition.get("evidence", condition.get("evidence_ids", {})),
