@@ -381,6 +381,22 @@ class Catalog:
                 "DELETE FROM series_subject_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
                 (snapshot.paper_id,),
             )
+            self.con.execute(
+                "DELETE FROM series_measurement_links WHERE series_id IN (SELECT series_id FROM series WHERE paper_id=?)",
+                (snapshot.paper_id,),
+            )
+            self.con.execute("DELETE FROM cross_validation_results WHERE paper_id=?", (snapshot.paper_id,))
+            self.con.execute("DELETE FROM evidence_items WHERE paper_id=?", (snapshot.paper_id,))
+            self.con.execute(
+                "DELETE FROM sample_process_steps WHERE sample_id IN (SELECT subject_entity_id FROM subject_entities WHERE paper_id=?)",
+                (snapshot.paper_id,),
+            )
+            self.con.execute(
+                "DELETE FROM subject_entity_aliases WHERE subject_entity_id IN (SELECT subject_entity_id FROM subject_entities WHERE paper_id=?)",
+                (snapshot.paper_id,),
+            )
+            self.con.execute("DELETE FROM subject_entities WHERE paper_id=?", (snapshot.paper_id,))
+            self.con.execute("DELETE FROM synthesis_processes WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM series WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM conditions WHERE paper_id=?", (snapshot.paper_id,))
             self.con.execute("DELETE FROM measurements WHERE paper_id=?", (snapshot.paper_id,))
@@ -398,6 +414,7 @@ class Catalog:
                 self._insert_series(item)
             if paper_root:
                 self._index_panel_csv_points(paper_root, series, batch_size)
+                self._index_semantic_artifacts(paper_root, snapshot.paper_id)
 
     def _index_panel_csv_points(self, paper_root: Path, series: list[SeriesRecord] | set[str],
                                 batch_size: int = 1000):
@@ -425,6 +442,251 @@ class Catalog:
                         batch.clear()
             if batch:
                 self.con.executemany("INSERT INTO series_points VALUES(?,?,?,?,?,?,?,?,?,?)", batch)
+
+    def _index_semantic_artifacts(self, paper_root: Path, paper_id: str):
+        """Index V2.1 canonical semantic artifacts with paper-scoped identifiers."""
+        from .models import namespaced_id
+        import unicodedata
+
+        def read_json(name: str) -> dict:
+            path = paper_root / name
+            if not path.is_file():
+                return {}
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+                return value if isinstance(value, dict) else {}
+            except (OSError, ValueError, TypeError):
+                return {}
+
+        registry = read_json("sample_registry.json")
+        processes_doc = read_json("synthesis_processes.json")
+        experiments_doc = read_json("experiments.json")
+        validation_doc = read_json("cross_validation.json")
+        subjects = registry.get("subjects", [])
+        processes = processes_doc.get("processes", [])
+        steps = processes_doc.get("sample_process_steps", [])
+        conditions = (
+            list(processes_doc.get("conditions", []))
+            + list(experiments_doc.get("conditions", []))
+        )
+        measurements = experiments_doc.get("measurements", [])
+        subject_ids = {
+            str(item.get("subject_entity_id")): namespaced_id(
+                paper_id, str(item.get("subject_entity_id"))
+            )
+            for item in subjects if item.get("subject_entity_id")
+        }
+        process_ids = {
+            str(item.get("process_id")): namespaced_id(paper_id, str(item.get("process_id")))
+            for item in processes if item.get("process_id")
+        }
+        measurement_ids = {
+            str(item.get("measurement_id")): namespaced_id(
+                paper_id, str(item.get("measurement_id"))
+            )
+            for item in measurements if item.get("measurement_id")
+        }
+        condition_ids = {
+            str(item.get("condition_id")): namespaced_id(
+                paper_id, str(item.get("condition_id"))
+            )
+            for item in conditions if item.get("condition_id")
+        }
+
+        for subject in subjects:
+            raw_id = str(subject.get("subject_entity_id") or "")
+            if not raw_id:
+                continue
+            subject_id = subject_ids[raw_id]
+            aliases = list(dict.fromkeys(
+                [str(subject.get("canonical_name") or "")]
+                + [str(alias) for alias in subject.get("aliases", []) if alias]
+            ))
+            evidence = subject.get("evidence", [])
+            self.con.execute(
+                """INSERT OR REPLACE INTO subject_entities(
+                   subject_entity_id,paper_id,entity_kind,canonical_name,aliases_json,
+                   resolution_status,composition_json,preparation_variant_json,evidence_json)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                (subject_id, paper_id, subject.get("entity_kind", "SAMPLE"),
+                 str(subject.get("canonical_name") or subject_id),
+                 json.dumps(aliases, ensure_ascii=False),
+                 subject.get("resolution_status", "UNRESOLVED"),
+                 json.dumps(subject.get("composition"), ensure_ascii=False),
+                 json.dumps(subject.get("preparation_variant"), ensure_ascii=False),
+                 json.dumps(evidence, ensure_ascii=False)),
+            )
+            for alias in aliases:
+                if not alias:
+                    continue
+                alias_norm = unicodedata.normalize("NFKC", alias).casefold()
+                alias_evidence = [
+                    item for item in evidence
+                    if alias.casefold() in str(item.get("snippet", "")).casefold()
+                ]
+                self.con.execute(
+                    """INSERT OR REPLACE INTO subject_entity_aliases(
+                       subject_entity_id,alias,alias_norm,alias_type,evidence_json)
+                       VALUES(?,?,?,?,?)""",
+                    (subject_id, alias, alias_norm, "EXACT",
+                     json.dumps(alias_evidence, ensure_ascii=False)),
+                )
+            for item in evidence:
+                evidence_id = str(item.get("evidence_id") or "")
+                if not evidence_id:
+                    continue
+                self.con.execute(
+                    """INSERT OR REPLACE INTO evidence_items(
+                       evidence_id,paper_id,source_type,source_path,source_sha256,
+                       location_json,snippet,parser_version,confidence_json)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (evidence_id, paper_id, item.get("source_type", "UNKNOWN"),
+                     item.get("source_path"), item.get("source_sha256"),
+                     json.dumps({
+                         key: item.get(key) for key in (
+                             "page_number", "figure_id", "panel_id", "line_number", "bbox"
+                         ) if item.get(key) is not None
+                     }, ensure_ascii=False),
+                     str(item.get("snippet") or ""), item.get("parser_version"),
+                     json.dumps(item.get("confidence", {}), ensure_ascii=False)),
+                )
+
+        for process in processes:
+            raw_id = str(process.get("process_id") or "")
+            if not raw_id:
+                continue
+            mapped_conditions = [
+                condition_ids.get(str(item), namespaced_id(paper_id, str(item)))
+                for item in process.get("condition_ids", [])
+            ]
+            self.con.execute(
+                """INSERT OR REPLACE INTO synthesis_processes(
+                   process_id,paper_id,method_text,process_type,input_materials_json,
+                   condition_ids_json,evidence_json,process_status)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (process_ids[raw_id], paper_id, str(process.get("method_text") or ""),
+                 process.get("process_type"),
+                 json.dumps(process.get("input_materials", []), ensure_ascii=False),
+                 json.dumps(mapped_conditions, ensure_ascii=False),
+                 json.dumps(process.get("evidence_ids", []), ensure_ascii=False),
+                 process.get("process_status", "UNRESOLVED")),
+            )
+
+        for step in steps:
+            sample_id = subject_ids.get(str(step.get("sample_id") or ""))
+            process_id = process_ids.get(str(step.get("process_id") or ""))
+            if not sample_id or not process_id:
+                continue
+            self.con.execute(
+                """INSERT OR REPLACE INTO sample_process_steps(
+                   sample_id,process_id,step_order,step_role,evidence_id,scope_status)
+                   VALUES(?,?,?,?,?,?)""",
+                (sample_id, process_id, int(step.get("step_order", 1)),
+                 step.get("step_role", "UNRESOLVED"),
+                 str(step.get("evidence_id") or ""),
+                 step.get("scope_status", "UNRESOLVED")),
+            )
+
+        for measurement in measurements:
+            raw_id = str(measurement.get("measurement_id") or "")
+            if not raw_id:
+                continue
+            mapped_conditions = [
+                condition_ids.get(str(item), namespaced_id(paper_id, str(item)))
+                for item in measurement.get("condition_ids", [])
+            ]
+            self.con.execute(
+                """INSERT OR REPLACE INTO measurements(
+                   measurement_id,paper_id,figure_id,technique,domain,metadata_json,
+                   measurement_role,subject_roles_json,condition_ids_json,evidence_json,scope_status)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (measurement_ids[raw_id], paper_id, measurement.get("figure_id"),
+                 measurement.get("technique"), measurement.get("domain"),
+                 json.dumps(measurement.get("metadata", {}), ensure_ascii=False),
+                 measurement.get("measurement_role"),
+                 json.dumps(measurement.get("subject_roles", []), ensure_ascii=False),
+                 json.dumps(mapped_conditions, ensure_ascii=False),
+                 json.dumps(measurement.get("evidence_ids", []), ensure_ascii=False),
+                 measurement.get("scope_status", "UNRESOLVED")),
+            )
+
+        for condition in conditions:
+            raw_id = str(condition.get("condition_id") or "")
+            if not raw_id:
+                continue
+            value = condition.get("value") if isinstance(condition.get("value"), dict) else {}
+            scope = str(condition.get("condition_scope") or "UNRESOLVED")
+            raw_scope_id = str(condition.get("scope_entity_id") or "")
+            scope_id = (
+                process_ids.get(raw_scope_id) if scope == "SYNTHESIS"
+                else measurement_ids.get(raw_scope_id) if scope == "EXPERIMENT"
+                else None
+            )
+            measurement_id = scope_id if scope == "EXPERIMENT" else None
+            self.con.execute(
+                """INSERT OR REPLACE INTO conditions(
+                   condition_id,paper_id,measurement_id,name,value_json,evidence_json,
+                   condition_scope,scope_entity_id,value_kind,operator,numeric_values_json,
+                   text_values_json,unit_raw,unit_canonical,uncertainty_json,
+                   normalization_basis,parse_status)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (condition_ids[raw_id], paper_id, measurement_id,
+                 str(condition.get("raw_text") or "unresolved"),
+                 json.dumps(value, ensure_ascii=False),
+                 json.dumps(condition.get("evidence_ids", []), ensure_ascii=False),
+                 scope, scope_id, value.get("value_kind", "UNKNOWN"),
+                 value.get("operator", "UNKNOWN"),
+                 json.dumps(value.get("numeric_values", []), ensure_ascii=False),
+                 json.dumps(value.get("text_values", []), ensure_ascii=False),
+                 value.get("unit_raw"), value.get("unit_canonical"),
+                 json.dumps(value.get("uncertainty"), ensure_ascii=False),
+                 value.get("normalization_basis"), condition.get("parse_status", "UNRESOLVED")),
+            )
+
+        for link in registry.get("series_subject_links", []):
+            series_id = str(link.get("series_id") or "")
+            subject_id = subject_ids.get(str(link.get("subject_entity_id") or ""))
+            if not series_id or not subject_id:
+                continue
+            role = str(link.get("subject_role") or "UNKNOWN")
+            self.con.execute(
+                """INSERT OR REPLACE INTO series_subject_links(
+                   series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope,subject_role)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (series_id, subject_id, role,
+                 json.dumps(link.get("evidence_ids", []), ensure_ascii=False),
+                 link.get("link_status", "UNRESOLVED"), "PAPER", role),
+            )
+
+        for link in experiments_doc.get("series_measurement_links", []):
+            series_id = str(link.get("series_id") or "")
+            raw_measurement_id = str(link.get("measurement_id") or "")
+            mapped_measurement_id = measurement_ids.get(raw_measurement_id)
+            if not series_id:
+                continue
+            self.con.execute(
+                """INSERT OR REPLACE INTO series_measurement_links(
+                   series_id,measurement_id,measurement_role,link_status,evidence_json)
+                   VALUES(?,?,?,?,?)""",
+                (series_id, mapped_measurement_id,
+                 link.get("measurement_role", "UNKNOWN"),
+                 link.get("link_status", "UNRESOLVED"),
+                 json.dumps(link.get("evidence_ids", []), ensure_ascii=False)),
+            )
+
+        for result in validation_doc.get("results", []):
+            series_id = str(result.get("series_id") or "")
+            if not series_id:
+                continue
+            result_id = namespaced_id(paper_id, f"cross_validation:{series_id}")
+            self.con.execute(
+                """INSERT OR REPLACE INTO cross_validation_results(
+                   result_id,paper_id,series_id,status,checks_json,unresolved_fields_json)
+                   VALUES(?,?,?,?,?,?)""",
+                (result_id, paper_id, series_id, result.get("status", "UNRESOLVED"),
+                 json.dumps(result.get("checks", []), ensure_ascii=False),
+                 json.dumps(result.get("unresolved_fields", []), ensure_ascii=False)),
+            )
 
     def _insert_series(self, item: SeriesRecord):
         from .models import namespaced_id
