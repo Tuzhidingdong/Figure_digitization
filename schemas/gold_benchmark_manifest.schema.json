@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SFD V2.1 Gold Benchmark manifest",
+  "type": "object",
+  "required": ["schema_version", "benchmark_id", "papers", "coverage_counts", "annotation_version"],
+  "properties": {
+    "schema_version": { "const": "2.1" },
+    "benchmark_id": { "type": "string", "minLength": 1 },
+    "annotation_version": { "type": "string", "minLength": 1 },
+    "papers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["paper_id", "domain"],
+        "properties": {
+          "paper_id": { "type": "string", "minLength": 1 },
+          "domain": { "enum": ["Battery", "AOP", "PFAS"] },
+          "partition": { "enum": ["DEVELOPMENT", "BLIND_HELD_OUT"] }
+        }
+      }
+    },
+    "coverage_counts": {
+      "type": "object",
+      "required": [
+        "paired_papers", "figure_caption_pairs", "panels", "distinct_samples",
+        "explicit_legend_opportunities", "synthesis_condition_assertions",
+        "experiment_condition_assertions"
+      ],
+      "properties": {
+        "paired_papers": { "type": "integer", "minimum": 0 },
+        "figure_caption_pairs": { "type": "integer", "minimum": 0 },
+        "panels": { "type": "integer", "minimum": 0 },
+        "distinct_samples": { "type": "integer", "minimum": 0 },
+        "explicit_legend_opportunities": { "type": "integer", "minimum": 0 },
+        "synthesis_condition_assertions": { "type": "integer", "minimum": 0 },
+        "experiment_condition_assertions": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
