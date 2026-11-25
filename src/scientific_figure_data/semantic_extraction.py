@@ -617,6 +617,21 @@ def build_semantic_package(
         for item in sample_steps
     }.values())
 
+    # Validate the ordered process graph before publishing process links.
+    from .entities import assert_acyclic_process_graph
+    process_edges = []
+    steps_by_sample: dict[str, list[dict[str, Any]]] = {}
+    for step in sample_steps:
+        steps_by_sample.setdefault(step["sample_id"], []).append(step)
+    for ordered_steps in steps_by_sample.values():
+        ordered_steps.sort(key=lambda item: item["step_order"])
+        process_edges.extend(
+            (left["process_id"], right["process_id"])
+            for left, right in zip(ordered_steps, ordered_steps[1:])
+            if left["process_id"] != right["process_id"]
+        )
+    assert_acyclic_process_graph(process_edges)
+
     # A pass-2 fingerprint is recorded once; this function has no recursive retry path.
     pass2_fingerprint = hashlib.sha256(json.dumps({
         "input_fingerprint": input_fingerprint,
