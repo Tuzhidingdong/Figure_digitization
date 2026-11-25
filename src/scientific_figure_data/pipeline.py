@@ -33,7 +33,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.8.2"
+ALGORITHM_VERSION = "2.1.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
