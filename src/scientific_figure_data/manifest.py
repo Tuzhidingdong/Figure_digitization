@@ -147,6 +147,7 @@ def _has_embedded_figure_inventory(
 
 def _resolve_main_pdf_reference(
     paper_dir: Path, corpus_root: Path, artifacts: list[InputArtifact],
+    external_path_root: Path | None = None,
 ) -> tuple[Path | None, list[dict], list[InputArtifact], list[str]]:
     """Resolve the MAIN PDF referenced by Chem-Literature's evidence_index.
 
@@ -174,7 +175,9 @@ def _resolve_main_pdf_reference(
 
         declared = Path(raw_path).expanduser()
         candidates = [declared] if declared.is_absolute() else [
-            paper_dir / declared, corpus_root / declared,
+            paper_dir / declared,
+            (external_path_root or corpus_root) / declared,
+            corpus_root / declared,
         ]
         candidate = None
         for value in candidates:
@@ -250,7 +253,10 @@ def _resolve_main_pdf_reference(
     return None, [], [], []
 
 
-def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = None) -> PaperSnapshot:
+def create_snapshot(
+    paper_dir: Path, corpus_root: Path, paper_id: str | None = None,
+    external_path_root: Path | None = None,
+) -> PaperSnapshot:
     paper_dir = paper_dir.resolve()
     corpus_root = corpus_root.resolve()
     paper_id = paper_id or paper_dir.relative_to(corpus_root).as_posix()
@@ -268,7 +274,7 @@ def create_snapshot(paper_dir: Path, corpus_root: Path, paper_id: str | None = N
                 sha256=f"UNREADABLE:{type(exc).__name__}",
             ))
     source_pdf, external_sources, referenced_artifacts, source_warnings = _resolve_main_pdf_reference(
-        paper_dir, corpus_root, artifacts,
+        paper_dir, corpus_root, artifacts, external_path_root=external_path_root,
     )
     artifacts.extend(referenced_artifacts)
     present = {item.role for item in artifacts}
