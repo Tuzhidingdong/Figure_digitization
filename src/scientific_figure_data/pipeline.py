@@ -15,6 +15,7 @@ from .axis_text import (extract_axis_labels, extract_native_numeric_axis_anchors
 from .chart_classifier import classify_chart_family
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
+from .semantic_extraction import build_semantic_package
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
@@ -39,7 +40,8 @@ _ALGORITHM_SOURCE_FILES = (
     "pdf_backend.py", "vector_paths.py", "plot_region.py", "chart_classifier.py",
     "axis_text.py", "raster.py", "calibration.py", "semantics.py",
     "entities.py", "context_index.py", "storage.py", "profiles.py",
-    "qc.py", "hashing.py", "ocr.py", "panel_segmentation.py", "trace_spec.py", "reconstruction.py",
+    "qc.py", "hashing.py", "ocr.py", "panel_segmentation.py", "trace_spec.py",
+    "reconstruction.py", "semantic_extraction.py",
 )
 _ALGORITHM_FINGERPRINT_CACHE: str | None = None
 
@@ -2361,9 +2363,13 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     else:
         status = "COMPLETED_WITH_REVIEW" if review_needed else "COMPLETED"
     job_state = JobState.NEEDS_REVIEW.value if review_needed else JobState.COMPLETED.value
+    semantic_package = build_semantic_package(
+        snapshot.paper_id, snapshot.input_fingerprint, figures, panels, series, context,
+    )
     disk_usage = _paper_disk_usage(paper_output)
     artifacts = write_paper_artifacts(
         output_root, snapshot, figures, panels, series, status,
+        semantic_artifacts=semantic_package,
         extra={"algorithm_version": ALGORITHM_VERSION,
                "context_index_fingerprint": context.fingerprint,
                "figure_inventory_source": inventory_path.name if inventory_path else None,
@@ -2393,4 +2399,12 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         "resource_usage": disk_usage,
         "figure_count": len(figures), "panel_count": len(panels), "series_count": len(series),
         "panel_comparison": panel_comparison,
+        "semantic_status": semantic_package["cross_validation"]["status"],
+        "semantic_artifacts": {
+            "caption_semantics": str(Path(artifacts["paper_root"]) / "caption_semantics.json"),
+            "sample_registry": str(Path(artifacts["paper_root"]) / "sample_registry.json"),
+            "synthesis_processes": str(Path(artifacts["paper_root"]) / "synthesis_processes.json"),
+            "experiments": str(Path(artifacts["paper_root"]) / "experiments.json"),
+            "cross_validation": str(Path(artifacts["paper_root"]) / "cross_validation.json"),
+        },
     }
