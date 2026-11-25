@@ -692,15 +692,30 @@ def build_semantic_package(
             "ARBITRARY_OFFSET_STACKED", "UNKNOWN",
         }:
             scale_type = explicit_scale
-        elif offset_value is not None:
+        elif (
+            offset_value is not None
+            or record.metadata.get("vertical_offset_stacked_detected") is True
+        ):
             scale_type = "ARBITRARY_OFFSET_STACKED"
         elif record.metadata.get("normalization_provenance"):
             scale_type = "NORMALIZED"
+        elif str(record.metadata.get("y_signal_mode", "")).upper() == "SERIES_RELATIVE_SIGNAL":
+            scale_type = "ARBITRARY_RELATIVE"
+        elif (
+            str(record.metadata.get("y_signal_mode", "")).upper() == "CALIBRATED_NUMERIC"
+            and getattr(record, "y_unit", None)
+        ):
+            scale_type = "ABSOLUTE"
         else:
             scale_type = "UNKNOWN"
         record.scale_type = scale_type
         record.baseline_comparable = (
-            False if scale_type == "ARBITRARY_OFFSET_STACKED" else None
+            False if scale_type in {"ARBITRARY_OFFSET_STACKED", "ARBITRARY_RELATIVE"} else
+            True if scale_type == "ABSOLUTE" else
+            True if scale_type == "NORMALIZED" and isinstance(
+                record.metadata.get("normalization_provenance"), dict
+            ) and record.metadata["normalization_provenance"].get("shared_basis") else
+            False if scale_type == "NORMALIZED" else None
         )
         record.offset_value = float(offset_value) if offset_value is not None else None
         provenance = record.metadata.get("normalization_provenance")
