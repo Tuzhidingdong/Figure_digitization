@@ -47,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", help="process papers incrementally")
     _roots(run)
+    run.add_argument("--corpus-csv", type=Path,
+                     help="Authoritative Chem-Literature research_corpus_paired.csv")
+    run.add_argument("--corpus-root", type=Path,
+                     help="Upstream run_workflow.py working directory; resolves CSV and source-PDF paths")
     selection = run.add_mutually_exclusive_group(required=True)
     selection.add_argument("--all", action="store_true")
     selection.add_argument("--resume", action="store_true")
@@ -214,6 +218,38 @@ def _run(args) -> int:
     if output_root == input_root or input_root in output_root.parents:
         raise ValueError("Output root must be separate from, and outside, the upstream input root")
 
+    corpus_root = args.corpus_root.resolve() if args.corpus_root else None
+    package_by_path = {}
+    skipped_upstream_rows = []
+    if args.corpus_csv:
+        if corpus_root is None:
+            raise ValueError("--corpus-root is required with --corpus-csv")
+        try:
+            input_root.relative_to(corpus_root)
+        except ValueError as exc:
+            raise ValueError("--input-root must be inside --corpus-root") from exc
+        try:
+            output_root.relative_to(corpus_root)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("--output-root must be outside --corpus-root")
+        packages, skipped_upstream_rows = load_corpus_packages(
+            args.corpus_csv, corpus_root, input_root,
+        )
+        package_by_path = {item.paper_dir.resolve(): item for item in packages}
+        source_papers = [item.paper_dir for item in packages]
+    else:
+        source_papers = list(ensure_unique_paper_ids(discover_papers(input_root), input_root))
+
+    def make_snapshot(paper: Path):
+        package = package_by_path.get(paper.resolve())
+        return snapshot_paper(
+            paper, input_root,
+            paper_id=package.paper_id if package else None,
+            external_path_root=corpus_root,
+        )
+
     options = {
         "memory_limit_mb": args.memory_limit,
         "render_scale": args.render_scale,
@@ -228,10 +264,13 @@ def _run(args) -> int:
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
         "resume_cached_skipped": 0,
-        "discovered_papers": sum(1 for _ in ensure_unique_paper_ids(discover_papers(input_root), input_root)),
+        "discovered_papers": len(source_papers),
         "eligible_papers": 0,
         "skipped_by_selection": 0,
+        "upstream_skipped_rows": skipped_upstream_rows,
     }
+    if corpus_root is not None:
+        options["corpus_root"] = str(corpus_root)
     selected_states = None
     prior_fingerprints: dict[str, str] = {}
     prior_job_states: dict[str, str] = {}
@@ -272,9 +311,10 @@ def _run(args) -> int:
             selected_states = None
 
     def selected_papers():
-        for paper in ensure_unique_paper_ids(discover_papers(input_root), input_root):
+        for paper in source_papers:
             relative = paper.relative_to(input_root).as_posix()
-            storage_id = storage_paper_id("root-paper" if relative == "." else relative)
+            current_snapshot = make_snapshot(paper)
+            storage_id = current_snapshot.paper_id
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
                 options["skipped_by_selection"] += 1
                 continue
@@ -283,22 +323,18 @@ def _run(args) -> int:
                     options["skipped_by_selection"] += 1
                     continue
                 options["eligible_papers"] += 1
-                yield paper
+                yield (paper, current_snapshot)
                 continue
             options["eligible_papers"] += 1
             if args.resume and selected_states is not None and storage_id not in selected_states:
                 previous_fingerprint = prior_fingerprints.get(storage_id)
                 previous_job_state = prior_job_states.get(storage_id)
                 if previous_fingerprint is None or previous_job_state is None:
-                    yield paper
+                    yield (paper, current_snapshot)
                     continue
                 if previous_job_state not in {
                     "COMPLETED", "COMPLETED_WITH_REVIEW", "NEEDS_REVIEW", "BLOCKED"
                 }:
-                    yield paper
-                    continue
-                current_snapshot = snapshot_paper(paper, input_root)
-                if current_snapshot.input_fingerprint != previous_fingerprint:
                     yield (paper, current_snapshot)
                     continue
                 paper_root = output_root / "papers" / storage_id
@@ -327,7 +363,7 @@ def _run(args) -> int:
                         continue
                 options["resume_cached_skipped"] += 1
                 continue
-            yield paper
+            yield (paper, current_snapshot)
 
     result = run_corpus(input_root, output_root, selected_papers(), args.workers,
                         args.max_attempts, args.lease_seconds, args.dry_run, options)
