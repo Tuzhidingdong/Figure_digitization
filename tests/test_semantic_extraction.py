@@ -87,7 +87,7 @@ def test_two_pass_registry_exact_links_and_unresolved_visual_only_candidate():
     ]
     result = build_semantic_package(
         "paper-a", "fingerprint-a",
-        [{"figure_id": "Figure1", "caption": "Figure 1. (a) Sample A CV curves. (b) Sample B EIS."}],
+        [{"figure_id": "Figure1", "caption": "Figure 1. (a) Sample A CV curves. (b) EIS curves."}],
         [], records, _Context(),
     )
 
