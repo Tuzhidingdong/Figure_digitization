@@ -190,6 +190,58 @@
         "then": { "properties": { "baseline_comparable": { "const": false } } }
       }]
     },
+    "DataObservation": {
+      "type": "object",
+      "required": ["observation_id", "paper_id", "name", "raw_value", "source"],
+      "properties": {
+        "observation_id": { "type": "string" },
+        "paper_id": { "type": "string" },
+        "name": { "type": "string" },
+        "raw_value": {},
+        "unit": { "type": ["string", "null"] },
+        "source": { "type": "object" }
+      }
+    },
+    "DataPoint": {
+      "type": "object",
+      "required": ["point_index", "x", "y"],
+      "properties": {
+        "point_index": { "type": "integer", "minimum": 0 },
+        "x": { "type": ["number", "string", "null"] },
+        "y": { "type": ["number", "null"] },
+        "pixel_x": { "type": ["number", "null"] },
+        "pixel_y": { "type": ["number", "null"] },
+        "y_err_low": { "type": ["number", "null"] },
+        "y_err_high": { "type": ["number", "null"] },
+        "err_type": { "type": "string" }
+      }
+    },
+    "IntegratedSeries": {
+      "type": "object",
+      "required": [
+        "series_id", "paper_id", "figure_id", "panel_id", "measurement_id",
+        "scale_type", "baseline_comparable", "subject_links", "conditions", "points"
+      ],
+      "properties": {
+        "series_id": { "type": "string" },
+        "paper_id": { "type": "string" },
+        "figure_id": { "type": "string" },
+        "panel_id": { "type": "string" },
+        "measurement_id": { "type": ["string", "null"] },
+        "scale_type": { "enum": ["ABSOLUTE", "NORMALIZED", "ARBITRARY_RELATIVE", "ARBITRARY_OFFSET_STACKED", "UNKNOWN"] },
+        "baseline_comparable": { "type": ["boolean", "null"] },
+        "offset_value": { "type": ["number", "null"] },
+        "normalization_provenance": { "type": ["object", "null"] },
+        "subject_links": { "type": "array", "items": { "$ref": "#/$defs/SeriesSubjectLink" } },
+        "measurement_links": { "type": "array", "items": { "$ref": "#/$defs/SeriesMeasurementLink" } },
+        "conditions": { "type": "array", "items": { "$ref": "#/$defs/Condition" } },
+        "points": { "type": "array", "items": { "$ref": "#/$defs/DataPoint" } }
+      },
+      "allOf": [{
+        "if": { "properties": { "scale_type": { "const": "ARBITRARY_OFFSET_STACKED" } }, "required": ["scale_type"] },
+        "then": { "properties": { "baseline_comparable": { "const": false } } }
+      }]
+    },
     "CrossValidationResult": {
       "type": "object",
       "required": ["series_id", "status", "checks", "unresolved_fields"],
