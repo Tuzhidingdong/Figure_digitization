@@ -654,8 +654,13 @@ class Catalog:
                    series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope,subject_role)
                    VALUES(?,?,?,?,?,?,?)""",
                 (series_id, subject_id, role,
-                 json.dumps(link.get("evidence_ids", []), ensure_ascii=False),
-                 link.get("link_status", "UNRESOLVED"), "PAPER", role),
+                 json.dumps({
+                     "evidence_ids": link.get("evidence_ids", []),
+                     "semantic_link_status": link.get("link_status", "UNRESOLVED"),
+                 }, ensure_ascii=False),
+                 "ASSIGNED_WITH_EVIDENCE"
+                 if link.get("link_status") == "MATCHED_EXACT_ALIAS" else "UNASSIGNED",
+                 "PAPER", role),
             )
 
         for link in experiments_doc.get("series_measurement_links", []):
