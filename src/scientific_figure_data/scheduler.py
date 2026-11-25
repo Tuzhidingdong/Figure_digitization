@@ -95,7 +95,9 @@ def _worker_initializer(
         pass
 
 
-def _shutdown_executor_bounded(executor, grace_seconds: float = 8.0) -> dict:
+def _shutdown_executor_bounded(
+    executor, grace_seconds: float = 8.0, graceful_wait: bool = False,
+) -> dict:
     """Stop only this executor's children, with a bounded wait and escalation.
 
     ProcessPoolExecutor.shutdown(wait=True) can wait forever for a stuck native
@@ -108,7 +110,12 @@ def _shutdown_executor_bounded(executor, grace_seconds: float = 8.0) -> dict:
     processes = list((getattr(executor, "_processes", None) or {}).values())
     shutdown_error = None
     try:
-        executor.shutdown(wait=False, cancel_futures=True)
+        if graceful_wait:
+            # Normal completion has no pending futures; wait for the manager thread
+            # to exit cleanly instead of racing its process-replacement loop.
+            executor.shutdown(wait=True, cancel_futures=False)
+        else:
+            executor.shutdown(wait=False, cancel_futures=True)
     except TypeError:
         try:
             executor.shutdown(wait=False)
@@ -388,7 +395,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             max_workers=workers, mp_context=context,
             initializer=_worker_initializer,
             initargs=(str(run_temp_directory), str(worker_log_directory)),
-            max_tasks_per_child=5,
+            max_tasks_per_child=1,
         )
 
     executor_generation = 1
@@ -442,7 +449,14 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
                     try:
-                        input_snapshot = snapshot_paper(paper, input_root)
+                        if options.get("corpus_root"):
+                            input_snapshot = snapshot_paper(
+                                paper, input_root,
+                                paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
+                                external_path_root=Path(options["corpus_root"]),
+                            )
+                        else:
+                            input_snapshot = snapshot_paper(paper, input_root)
                         paper_relative = paper.relative_to(input_root).as_posix()
                     except Exception as exc:
                         ledger.finish(
@@ -471,7 +485,14 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         ):
                             input_snapshot = candidate[1]
                         else:
-                            input_snapshot = snapshot_paper(paper, input_root)
+                            if options.get("corpus_root"):
+                                input_snapshot = snapshot_paper(
+                                    paper, input_root,
+                                    paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
+                                    external_path_root=Path(options["corpus_root"]),
+                                )
+                            else:
+                                input_snapshot = snapshot_paper(paper, input_root)
                         paper_id = input_snapshot.paper_id
                     except Exception as exc:
                         fallback_relative = (
@@ -649,7 +670,9 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
         try:
             if executor is not None:
                 executor_shutdown_reports.append(
-                    _shutdown_executor_bounded(executor, grace_seconds=8.0)
+                    _shutdown_executor_bounded(
+                        executor, grace_seconds=8.0, graceful_wait=True,
+                    )
                 )
         finally:
             sfd_temp_bytes_before_cleanup = _directory_file_bytes(run_temp_directory)

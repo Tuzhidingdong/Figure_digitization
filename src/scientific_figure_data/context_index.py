@@ -48,7 +48,7 @@ def _cached_index(index_path: Path, db_path: Path, fingerprint: str,
                   memory_budget_bytes: int) -> "PaperContextIndex | None":
     try:
         metadata = json.loads(index_path.read_text(encoding="utf-8"))
-        if metadata.get("schema_version") != "1.0" or metadata.get("fingerprint") != fingerprint:
+        if metadata.get("schema_version") != "1.1" or metadata.get("fingerprint") != fingerprint:
             return None
         storage = metadata.get("storage")
         if storage == "sqlite":
@@ -139,7 +139,7 @@ class PaperContextIndex:
                             text = " ".join(line.strip().split())
                             if not text:
                                 continue
-                            found = []
+                            found = [("statement", text)]
                             found.extend(("sample_alias", match.group(0)) for match in SAMPLE_RE.finditer(text))
                             found.extend(("reference_electrode", match.group(0)) for match in REFERENCE_RE.finditer(text))
                             found.extend(("statistics", match.group(0)) for match in ERROR_RE.finditer(text))
@@ -163,7 +163,7 @@ class PaperContextIndex:
                 estimated_size = estimated
 
             atomic_write_json(index_path, {
-                "schema_version": "1.0",
+                "schema_version": "1.1",
                 "fingerprint": fingerprint,
                 "storage": storage,
                 "estimated_memory_bytes": estimated_size,
@@ -183,17 +183,22 @@ class PaperContextIndex:
 
         return cls(entries, fingerprint, db_path if storage == "sqlite" else None)
 
-    def search(self, kind: str, text: str = "") -> list[dict]:
+    def search(self, kind: str, text: str = "", limit: int = 100) -> list[dict]:
+        bounded_limit = max(1, int(limit))
         if self.db_path and self.db_path.exists():
             connection = sqlite3.connect(self.db_path)
             try:
                 rows = connection.execute(
-                    "SELECT kind,value,source_path,line_number,snippet FROM entries WHERE kind=? AND value LIKE ? LIMIT 100",
-                    (kind, f"%{text}%"),
+                    """SELECT kind,value,source_path,line_number,snippet
+                       FROM entries WHERE kind=? AND value LIKE ?
+                       ORDER BY source_path,line_number LIMIT ?""",
+                    (kind, f"%{text}%", bounded_limit),
                 ).fetchall()
             finally:
                 connection.close()
             return [dict(zip(("kind", "value", "source_path", "line_number", "snippet"), row))
                     for row in rows]
-        return [asdict(entry) for entry in self.entries
-                if entry.kind == kind and text.casefold() in entry.value.casefold()]
+        return [
+            asdict(entry) for entry in self.entries
+            if entry.kind == kind and text.casefold() in entry.value.casefold()
+        ][:bounded_limit]

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/task-plan-v2.1
       - feat/p1-automatic-monotonic-digitization
       - fix/p1-rapidocr-310-compatibility
       - feat/p1-multicolor-dual-y-axis
@@ -14,6 +15,7 @@ on:
       - main
       - baseline/v2.1-phase1
       - fix/p0-classification-qc-contract
+      - fix/qc-evidence-object-contract
       - feat/p1-automatic-monotonic-digitization
       - fix/p1-rapidocr-310-compatibility
       - feat/p1-multicolor-dual-y-axis

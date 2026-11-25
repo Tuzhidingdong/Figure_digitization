@@ -606,7 +606,7 @@ def test_catalog_streaming_query_has_no_fixed_10000_series_limit(tmp_path: Path)
                  "NEEDS_REVIEW", "{}"),
             )
             catalog.con.execute(
-                "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO measurements(measurement_id,paper_id,figure_id,technique,domain,metadata_json) VALUES(?,?,?,?,?,?)",
                 (f"m-{index}", snapshot.paper_id, "Figure1", "CV", "battery", "{}"),
             )
     rows = sum(1 for _ in catalog.iter_query_series({"paper_id": snapshot.paper_id}, batch_size=127))
@@ -2796,7 +2796,7 @@ def test_run_report_distinguishes_selected_cached_and_filtered_papers(tmp_path: 
     assert report["skipped_by_selection"] == 3
     assert report["skipped_cached_unchanged"] == 0
     assert report["skipped_papers"] == 3
-    assert report["algorithm_version"] == "0.8.2"
+    assert report["algorithm_version"] == "2.1.0"
     assert len(report["algorithm_implementation_fingerprint"]) == 64
     assert len(report["profile_config_fingerprint"]) == 64
     assert len(report["qc_threshold_fingerprint"]) == 64

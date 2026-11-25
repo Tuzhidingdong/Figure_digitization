@@ -208,3 +208,38 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - Added independent reconstruction, source-pixel overlay and all-panel comparison-sheet output.
 - Scope is intentionally limited. Actual paper-image performance and Windows CI are pending; this entry does not claim scientific accuracy, general multi-panel understanding, CV/EIS, scatter or bar extraction.
 
+
+## V2.1 development branch (Draft PR #23)
+
+- Approved development baseline: dedicated branch `feature/task-plan-v2.1`, created from tested Phase 1 commit `4495a4a5d945ff7fcacc427e0f0dfd6a16c12f4c`. The base branch `fix/qc-evidence-object-contract` has since advanced by one commit; this development branch deliberately preserves the exact tested baseline.
+- Draft PR: https://github.com/Tuzhidingdong/Figure_digitization/pull/23. Do not merge until the full V2.1 plan and validation are complete and reviewed.
+- Added a pinned Chem-Literature 1.1.0 adapter using the actual `research_corpus_paired.csv` handoff, explicit upstream working-directory path resolution, authoritative `evidence_index.json.paper_id`, and SHA256 checks for MAIN PDF and media assets.
+- Added deterministic text-first sample registry Pass 1, a single OCR/series-label visual enrichment Pass 2, targeted cached-context backfill, exact-alias-only series links, atomic condition parsing, measurement candidates, and conservative cross-validation.
+- Added canonical V2.1 semantic artifacts and SQLite tables for subject entities/aliases, synthesis processes/steps, scoped conditions, measurements, series links, evidence and cross-validation. Added typed semantic model dataclasses and process-DAG cycle validation.
+- Added stacked-spectrum scale metadata. Explicit offset-stacked series force `baseline_comparable=false`; missing scale evidence remains `UNKNOWN`.
+- SQLite is configured for WAL, `synchronous=NORMAL`, and a 10-second busy timeout. The schema migration is additive and preserves existing catalog tables.
+- Added `docs/UPSTREAM_CONTRACT.md`, `schemas/v2.1_semantic_contract.schema.json`, and focused tests for upstream package validation, condition parsing, Pass 1/Pass 2 behavior, DAG cycles, schema contracts and catalog persistence.
+- CI has not yet validated the latest semantic/storage commits. Do not treat the earlier Phase 1 CI result or the earlier pre-semantic V2.1 CI run as validation of the current head.
+
+## V2.1 implementation completion candidate
+
+- Algorithm and snapshot adapter versions are now `2.1.0`.
+- Semantic outputs now include `caption_semantics.json`, `sample_registry.json`, `synthesis_processes.json`, `experiments.json`, `unresolved_conditions.json`, and `cross_validation.json`; the bundle hashes all of them.
+- Unresolved quantity candidates are retained with `condition_scope=UNRESOLVED`; they are not attached to synthesis or measurement records. Exact alias matches are the only resolved series-to-sample links.
+- Clause-level evidence is persisted in `evidence_items`; process and measurement evidence is retained with source path/line/snippet. Series associations expose synthesis steps, measurement links, cross-validation and unresolved paper conditions.
+- Shared synthesis process nodes are deduplicated across sample steps. Ordered process dependencies are checked for cycles before artifacts are published.
+- The export schema now carries scale type, baseline comparability, offset/normalization provenance, synthesis process context, measurement links, cross-validation and unresolved conditions.
+- Stacked-spectrum detection uses conservative pixel-band separation and shared X-domain overlap. Arbitrary-relative and offset-stacked curves are explicitly non-comparable in raw inter-series Y/peak-height terms.
+- Runtime controls and bounded retry policies are implemented and documented in `docs/RUNTIME_CONTRACT.md`.
+- Gold Benchmark API/CLI, fixed metric thresholds, minimum coverage gate, blind held-out split and regression tests are implemented. No gold labels have been fabricated; accuracy acceptance remains `NOT_EVALUATED` until the minimum benchmark corpus is supplied.
+- Latest feature-branch head at this status update: `4372b6fe6ef7fe6e280704320e8203b28a842851`. The most recent full CI run was against an earlier intermediate commit and exposed compatibility issues that have since been corrected; the current head still requires the planned full CI run. No final Windows user acceptance is claimed.
+
+## V2.1 validation result
+
+- Latest validated feature-branch head: `3f8a3f068fd64a6cfe4e63c5b6f96aea6bdfaf97`.
+- Windows CI run `45557059720`: **success** for Python 3.11, 3.12 and 3.13; RapidOCR Python 3.10 compatibility job also **success**.
+- All three Python jobs passed `python -m compileall -q src tests`, Ruff `E4,E7,E9,F821`, and the full `pytest -q` suite. No pytest failures or ProcessPoolExecutor thread-shutdown warnings remained.
+- The first CI candidate exposed two Gold Benchmark coverage-gate test expectation issues and ProcessPoolExecutor shutdown warnings. Those were corrected; the final run above passed.
+- This is GitHub-hosted Windows CI evidence only. It does not replace the user's/local-Agent acceptance against the actual Chem-Literature corpus and Windows working environment.
+- Gold Benchmark accuracy remains `NOT_EVALUATED` because no human-labeled gold corpus or independent curve ground truth has been supplied. The evaluator refuses to lower coverage floors or pass empty outputs.
+- PR #23 remains Draft and unmerged. No changes were made to `main`, PR #22, `TASK_PLAN_v1.4.1.md`, or the upstream Chem-Literature repository.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import shutil
 from dataclasses import asdict
 from pathlib import Path
@@ -15,6 +16,7 @@ from .axis_text import (extract_axis_labels, extract_native_numeric_axis_anchors
 from .chart_classifier import classify_chart_family
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
+from .semantic_extraction import build_semantic_package, build_semantic_pass1
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
@@ -31,7 +33,7 @@ from .storage import write_paper_artifacts, append_panel_series_csv
 from .vector_paths import choose_vector_paths, pdf_points_to_crop_pixels
 
 
-ALGORITHM_VERSION = "0.8.2"
+ALGORITHM_VERSION = "2.1.0"
 
 
 _ALGORITHM_SOURCE_FILES = (
@@ -39,7 +41,8 @@ _ALGORITHM_SOURCE_FILES = (
     "pdf_backend.py", "vector_paths.py", "plot_region.py", "chart_classifier.py",
     "axis_text.py", "raster.py", "calibration.py", "semantics.py",
     "entities.py", "context_index.py", "storage.py", "profiles.py",
-    "qc.py", "hashing.py", "ocr.py", "panel_segmentation.py", "trace_spec.py", "reconstruction.py",
+    "qc.py", "hashing.py", "ocr.py", "panel_segmentation.py", "trace_spec.py",
+    "reconstruction.py", "semantic_extraction.py",
 )
 _ALGORITHM_FINGERPRINT_CACHE: str | None = None
 
@@ -54,6 +57,14 @@ def algorithm_implementation_fingerprint() -> str:
             path = package_root / name
             if path.is_file():
                 files.append((name, sha256_file(path)))
+        repository_root = package_root.parents[1]
+        for relative_path in (
+            Path("schemas/v2.1_semantic_contract.schema.json"),
+            Path("schemas/gold_benchmark_manifest.schema.json"),
+        ):
+            path = repository_root / relative_path
+            if path.is_file():
+                files.append((relative_path.as_posix(), sha256_file(path)))
         _ALGORITHM_FINGERPRINT_CACHE = sha256_json(files)
     return _ALGORITHM_FINGERPRINT_CACHE
 
@@ -69,7 +80,10 @@ def processing_stage_state(
     profile_fingerprint = profile_registry_fingerprint()
     relevant_options = {
         "render_scale": float(options.get("render_scale", 1.5)),
-        "max_render_pixels": int(options.get("max_render_pixels", 12_000_000)),
+        "max_render_pixels": int(options.get("max_render_pixels", 10_240_000)),
+        "max_render_long_edge": int(options.get("max_render_long_edge", 3200)),
+        "memory_soft_limit_mb": int(options.get("memory_soft_limit_mb", 1434)),
+        "memory_hard_limit_mb": int(options.get("memory_hard_limit_mb", 1843)),
         "temp_disk_limit_mb": int(options.get("temp_disk_limit_mb", 2048)),
         "context_memory_budget": int(options.get("context_memory_budget", 500_000)),
         "ocr": bool(options.get("ocr", False)),
@@ -495,16 +509,116 @@ def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = Fal
     }
 
 
-def _check_memory_budget(memory_limit_mb: int):
-    if memory_limit_mb <= 0:
-        return
+def _check_memory_budget(soft_limit_mb: int, hard_limit_mb: int) -> dict[str, Any]:
+    """Observe RSS, collect best-effort at the soft threshold, and enforce the hard stop."""
     try:
         import psutil
-        rss = psutil.Process().memory_info().rss
-        if rss > memory_limit_mb * 1024 * 1024:
-            raise MemoryError(f"Worker RSS {rss // (1024 * 1024)} MiB exceeds configured budget {memory_limit_mb} MiB")
     except ImportError:
-        return
+        return {"status": "PSUTIL_UNAVAILABLE", "rss_bytes": None, "soft_limit_exceeded": False}
+    process = psutil.Process()
+    rss_before = process.memory_info().rss
+    soft_limit_triggered = bool(
+        soft_limit_mb > 0 and rss_before > soft_limit_mb * 1024 * 1024
+    )
+    collected = 0
+    if soft_limit_triggered:
+        import gc
+        collected = gc.collect()
+    rss_after = process.memory_info().rss
+    if hard_limit_mb > 0 and rss_after > hard_limit_mb * 1024 * 1024:
+        raise MemoryError(
+            f"Worker RSS {rss_after // (1024 * 1024)} MiB exceeds hard limit {hard_limit_mb} MiB"
+        )
+    return {
+        "status": "SOFT_LIMIT_TRIGGERED" if soft_limit_triggered else "WITHIN_SOFT_LIMIT",
+        "rss_before_gc_bytes": rss_before,
+        "rss_bytes": rss_after,
+        "soft_limit_triggered": soft_limit_triggered,
+        "soft_limit_exceeded_after_gc": bool(
+            soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024
+        ),
+        "soft_limit_exceeded": soft_limit_triggered,
+        "soft_limit_mb": soft_limit_mb,
+        "hard_limit_mb": hard_limit_mb,
+        "gc_collected": collected,
+    }
+
+
+def _bounded_render_scale(
+    render_scale: float, page_width: float, page_height: float,
+    max_render_pixels: int, max_render_long_edge: int,
+) -> float:
+    if render_scale <= 0 or page_width <= 0 or page_height <= 0:
+        raise ValueError("Render scale and page dimensions must be positive")
+    if max_render_pixels <= 0 or max_render_long_edge <= 0:
+        raise ValueError("Render pixel and long-edge limits must be positive")
+    return min(
+        render_scale,
+        (max_render_pixels / max(1.0, page_width * page_height)) ** 0.5,
+        max_render_long_edge / max(1.0, page_width, page_height),
+    )
+
+
+def _detect_offset_stacked_spectra(
+    series_records: list[Any], plot_box_pixels: tuple[int, int, int, int] | None,
+) -> dict[str, Any]:
+    """Conservatively detect vertically separated, X-overlapping relative spectra."""
+    if not plot_box_pixels or len(series_records) < 2:
+        return {"detected": False, "reason": "INSUFFICIENT_SERIES_OR_PLOT_GEOMETRY"}
+    plot_height = max(1.0, float(plot_box_pixels[3] - plot_box_pixels[1]))
+    traces = []
+    for record in series_records:
+        points = getattr(record, "points", [])
+        xs = [
+            float(point.pixel_x) for point in points
+            if getattr(point, "pixel_x", None) is not None
+        ]
+        ys = [
+            float(point.pixel_y) for point in points
+            if getattr(point, "pixel_y", None) is not None
+        ]
+        if len(xs) < 3 or len(ys) < 3:
+            return {"detected": False, "reason": "INSUFFICIENT_PIXEL_TRACE_POINTS"}
+        traces.append({
+            "series_id": getattr(record, "series_id", None),
+            "x_min": min(xs), "x_max": max(xs),
+            "y_min": min(ys), "y_max": max(ys),
+            "y_median": sorted(ys)[len(ys) // 2],
+        })
+    traces.sort(key=lambda item: item["y_median"])
+    minimum_gap = max(3.0, plot_height * 0.04)
+    pair_checks = []
+    for upper, lower in zip(traces, traces[1:]):
+        if upper["y_max"] < lower["y_min"]:
+            gap = lower["y_min"] - upper["y_max"]
+        elif lower["y_max"] < upper["y_min"]:
+            gap = upper["y_min"] - lower["y_max"]
+        else:
+            gap = 0.0
+        overlap = max(0.0, min(upper["x_max"], lower["x_max"]) - max(
+            upper["x_min"], lower["x_min"]
+        ))
+        smaller_width = max(1.0, min(
+            upper["x_max"] - upper["x_min"], lower["x_max"] - lower["x_min"]
+        ))
+        overlap_ratio = overlap / smaller_width
+        pair_checks.append({
+            "series_ids": [upper["series_id"], lower["series_id"]],
+            "vertical_gap_pixels": gap,
+            "x_overlap_ratio": overlap_ratio,
+            "passes": gap >= minimum_gap and overlap_ratio >= 0.80,
+        })
+    detected = bool(pair_checks) and all(item["passes"] for item in pair_checks)
+    return {
+        "detected": detected,
+        "reason": "DISJOINT_VERTICAL_BANDS_WITH_SHARED_X_DOMAIN"
+        if detected else "STACKING_NOT_PROVEN",
+        "method": "relative_spectrum_disjoint_pixel_bands_v1",
+        "minimum_vertical_gap_pixels": minimum_gap,
+        "minimum_x_overlap_ratio": 0.80,
+        "traces": traces,
+        "pair_checks": pair_checks,
+    }
 
 
 def _plot_box_pixels(image_path: Path | None, plot_box: Any) -> tuple[int, int, int, int] | None:
@@ -1786,17 +1900,34 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             if partial_path.exists():
                 shutil.rmtree(partial_path)
 
-    memory_limit_mb = int(options.get("memory_limit_mb", 2048))
+    memory_soft_limit_mb = int(options.get("memory_soft_limit_mb", 1434))
+    memory_hard_limit_mb = int(options.get("memory_hard_limit_mb", 1843))
+    memory_observations = []
+    def check_worker_memory():
+        observation = _check_memory_budget(memory_soft_limit_mb, memory_hard_limit_mb)
+        memory_observations.append(observation)
+        return observation
     render_scale = float(options.get("render_scale", 1.5))
-    max_render_pixels = int(options.get("max_render_pixels", 12_000_000))
+    max_render_pixels = int(options.get("max_render_pixels", 10_240_000))
+    max_render_long_edge = int(options.get("max_render_long_edge", 3200))
     temp_disk_limit_mb = int(options.get("temp_disk_limit_mb", 2048))
-    _check_memory_budget(memory_limit_mb)
+    check_worker_memory()
     context = PaperContextIndex.build(
         paper_dir, paper_output / "context",
         memory_budget_bytes=int(options.get("context_memory_budget", 500_000)),
     )
     context_index_bytes = _directory_size(paper_output / "context")
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
+    semantic_figures_for_pass1 = [
+        {
+            "figure_id": safe_id(str(item.get("figure_id") or item.get("id") or f"Figure{index}")),
+            "caption": item.get("caption") or item.get("title"),
+        }
+        for index, item in enumerate(figures_raw, 1) if isinstance(item, dict)
+    ]
+    semantic_pass1 = build_semantic_pass1(
+        snapshot.paper_id, semantic_figures_for_pass1, context,
+    )
     pdf_expected = "main_pdf" not in snapshot.missing_roles
     pdf_path = locate_pdf(paper_dir, input_root, snapshot)
     pdf_integrity_issue = pdf_path is None and pdf_expected
@@ -2030,7 +2161,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 with backend.open(pdf_path) as doc:
                     with doc.page(int(figure["page"])) as pdf_page:
                         page_width, page_height = pdf_page.size
-                        safe_scale = min(render_scale, (max_render_pixels / max(1, page_width * page_height)) ** 0.5)
+                        safe_scale = _bounded_render_scale(
+                            render_scale, page_width, page_height,
+                            max_render_pixels, max_render_long_edge,
+                        )
                         safe_scale = max(0.25, safe_scale)
                         rendered = pdf_page.render(scale=safe_scale)
                         try:
@@ -2053,7 +2187,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                 }
                         finally:
                             rendered.close()
-            _check_memory_budget(memory_limit_mb)
+            check_worker_memory()
             ocr_evidence = []
             ocr_status = {"status": "NOT_REQUESTED"}
             if options.get("ocr"):
@@ -2235,7 +2369,65 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "reason": failure_reason,
             })
+            panel_classification = first_metadata.get("chart_family_classification") or {}
+            panel_family = panel_classification.get("chart_family", "UNCLASSIFIED")
+            panel_relative_signal = (
+                str(first_metadata.get("y_signal_mode", "")).upper()
+                == "SERIES_RELATIVE_SIGNAL"
+            )
+            raw_plot_box_pixels = first_metadata.get("plot_box_pixels")
+            panel_plot_box_pixels = (
+                tuple(int(round(float(value))) for value in raw_plot_box_pixels)
+                if isinstance(raw_plot_box_pixels, (list, tuple)) and len(raw_plot_box_pixels) == 4
+                else None
+            )
+            stacked_offset_evidence = (
+                _detect_offset_stacked_spectra(extracted, panel_plot_box_pixels)
+                if panel_family == "SPECTRUM" and panel_relative_signal
+                else {"detected": False, "reason": "NOT_A_RELATIVE_SPECTRUM"}
+            )
+            if stacked_offset_evidence.get("detected"):
+                for extracted_record in extracted:
+                    extracted_record.metadata["vertical_offset_stacked_detected"] = True
+                    extracted_record.metadata["stacked_offset_evidence"] = stacked_offset_evidence
+            visual_legend_candidates = []
+            ignored_visual_labels = {
+                "potential", "voltage", "current", "intensity", "wavenumber",
+                "frequency", "capacity", "time", "temperature", "sample",
+                "scan rate", "current density", "cycle number", "vs", "figure",
+            }
+            for ocr_row in ocr_evidence:
+                if not isinstance(ocr_row, dict):
+                    continue
+                visual_text = " ".join(str(
+                    ocr_row.get("text") or ocr_row.get("txt") or ocr_row.get("label") or ""
+                ).split())
+                if (
+                    len(visual_text) < 2 or len(visual_text) > 64
+                    or visual_text.casefold() in ignored_visual_labels
+                    or not any(character.isalpha() for character in visual_text)
+                    or re.fullmatch(r"[+-]?[0-9.,]+", visual_text)
+                ):
+                    continue
+                visual_legend_candidates.append({
+                    "label": visual_text,
+                    "figure_id": figure_id, "panel_id": panel_id,
+                    "source_type": "OCR_TEXT_CANDIDATE",
+                    "evidence_id": "visual_" + sha256_json({
+                        "paper_id": snapshot.paper_id, "figure_id": figure_id,
+                        "panel_id": panel_id, "text": visual_text,
+                        "polygon": ocr_row.get("polygon"),
+                    })[:16],
+                    "polygon": ocr_row.get("polygon"),
+                    "confidence": ocr_row.get("score"),
+                })
+            deduplicated_visual = {
+                (item["label"].casefold(), json.dumps(item.get("polygon"), sort_keys=True)): item
+                for item in visual_legend_candidates
+            }
+            visual_legend_candidates = list(deduplicated_visual.values())
             for item in extracted:
+                item.metadata["visual_legend_candidates"] = visual_legend_candidates
                 item.points.clear()
             series.extend(extracted)
             review_needed = review_needed or panel_status in {"NEEDS_REVIEW", "EXTRACTED_NEEDS_REVIEW"}
@@ -2361,16 +2553,37 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     else:
         status = "COMPLETED_WITH_REVIEW" if review_needed else "COMPLETED"
     job_state = JobState.NEEDS_REVIEW.value if review_needed else JobState.COMPLETED.value
+    semantic_package = build_semantic_package(
+        snapshot.paper_id, snapshot.input_fingerprint, figures, panels, series, context,
+        pass1_state=semantic_pass1,
+    )
+    check_worker_memory()
     disk_usage = _paper_disk_usage(paper_output)
+    if memory_observations:
+        disk_usage["worker_memory"] = {
+            "max_observed_checkpoint_rss_bytes": max(
+                (int(item.get("rss_bytes") or 0) for item in memory_observations),
+                default=0,
+            ),
+            "soft_limit_exceeded": any(
+                item.get("soft_limit_exceeded") for item in memory_observations
+            ),
+            "observations": memory_observations,
+            "recycle_policy": "ONE_PAPER_PER_WORKER_PROCESS",
+        }
     artifacts = write_paper_artifacts(
         output_root, snapshot, figures, panels, series, status,
+        semantic_artifacts=semantic_package,
         extra={"algorithm_version": ALGORITHM_VERSION,
                "context_index_fingerprint": context.fingerprint,
                "figure_inventory_source": inventory_path.name if inventory_path else None,
                "pdf_source": pdf_path.name if pdf_path else None,
                "native_page_evidence": native_evidence_by_page,
                "stage_fingerprint": stage_fingerprint,
-               "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
+               "memory_soft_limit_mb": memory_soft_limit_mb,
+               "memory_hard_limit_mb": memory_hard_limit_mb,
+               "max_render_long_edge": max_render_long_edge,
+               "render_scale": render_scale,
                "temp_disk_limit_mb": temp_disk_limit_mb,
                "evidence_bytes": disk_usage["evidence_bytes"],
                "context_index_bytes": disk_usage["context_index_bytes"],
@@ -2393,4 +2606,12 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         "resource_usage": disk_usage,
         "figure_count": len(figures), "panel_count": len(panels), "series_count": len(series),
         "panel_comparison": panel_comparison,
+        "semantic_status": semantic_package["cross_validation"]["status"],
+        "semantic_artifacts": {
+            "caption_semantics": str(Path(artifacts["paper_root"]) / "caption_semantics.json"),
+            "sample_registry": str(Path(artifacts["paper_root"]) / "sample_registry.json"),
+            "synthesis_processes": str(Path(artifacts["paper_root"]) / "synthesis_processes.json"),
+            "experiments": str(Path(artifacts["paper_root"]) / "experiments.json"),
+            "cross_validation": str(Path(artifacts["paper_root"]) / "cross_validation.json"),
+        },
     }

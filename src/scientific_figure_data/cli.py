@@ -16,6 +16,10 @@ from .pipeline import bundle_is_intact, processing_stage_state
 from .review import apply_review_patch
 from .scheduler import JobLedger, run_corpus
 from .storage import Catalog, connect_catalog
+from .upstream_contract import (
+    UPSTREAM_COMMIT, UPSTREAM_SCHEMA_PATH, UPSTREAM_SCHEMA_SHA256,
+    SUPPORTED_PACKAGE_VERSION, load_corpus_packages,
+)
 
 
 def _roots(parser):
@@ -36,9 +40,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     scan = sub.add_parser("scan", help="discover upstream paper outputs and snapshot them")
     _roots(scan)
+    scan.add_argument("--corpus-csv", type=Path,
+                      help="Authoritative Chem-Literature research_corpus_paired.csv")
+    scan.add_argument("--corpus-root", type=Path,
+                      help="Directory from which upstream run_workflow.py was executed; resolves CSV paths")
 
     run = sub.add_parser("run", help="process papers incrementally")
     _roots(run)
+    run.add_argument("--corpus-csv", type=Path,
+                     help="Authoritative Chem-Literature research_corpus_paired.csv")
+    run.add_argument("--corpus-root", type=Path,
+                     help="Upstream run_workflow.py working directory; resolves CSV and source-PDF paths")
     selection = run.add_mutually_exclusive_group(required=True)
     selection.add_argument("--all", action="store_true")
     selection.add_argument("--resume", action="store_true")
@@ -47,7 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--workers", type=int, default=1)
     run.add_argument("--max-attempts", type=int, default=2)
     run.add_argument("--lease-seconds", type=int, default=180)
-    run.add_argument("--memory-limit", type=int, default=2048, help="soft per-process memory budget in MiB")
+    run.add_argument("--memory-soft-limit", type=int, default=1434,
+                     help="worker RSS soft limit in MiB; triggers best-effort GC and process recycle")
+    run.add_argument("--memory-limit", type=int, default=1843,
+                     help="worker RSS hard limit in MiB; legacy option name retained")
     run.add_argument("--render-scale", type=float, default=1.5)
     run.add_argument("--temp-disk-limit", type=int, default=2048,
                      help="per-paper evidence + context-index disk budget in MiB; 0 disables the budget")
@@ -56,7 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--min-free-memory-mb", type=int, default=512,
                      help="pause new paper dispatch when available system memory falls below this threshold; 0 disables the guard")
     run.add_argument("--context-memory-budget", type=int, default=500000)
-    run.add_argument("--max-render-pixels", type=int, default=12000000)
+    run.add_argument("--max-render-pixels", type=int, default=10240000)
+    run.add_argument("--max-render-long-edge", type=int, default=3200)
     run.add_argument("--max-open-pdfs", type=int, default=1)
     run.add_argument("--batch-size", type=int, default=1000)
     run.add_argument("--qc-thresholds", type=Path,
@@ -118,6 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--output-root", type=Path, required=True)
     validate.add_argument("--input-root", type=Path)
 
+    benchmark = sub.add_parser("benchmark", help="evaluate frozen V2.1 Gold Benchmark metrics")
+    benchmark.add_argument("--manifest", type=Path, required=True)
+    benchmark.add_argument("--predictions", type=Path, required=True)
+    benchmark.add_argument("--output", type=Path, required=True)
+
     probe = sub.add_parser("backend-probe", help="run PDF backend measurements on supplied PDFs")
     probe.add_argument("pdfs", nargs="*", type=Path)
     probe.add_argument("--out", type=Path, default=Path("backend_probe_report.json"))
@@ -133,12 +154,54 @@ def _scan(args) -> int:
     jsonl_path = output_root / "corpus_manifest.jsonl"
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
     count = 0
+    skipped: list[dict] = []
+    upstream_contract = None
     try:
         with temporary.open("w", encoding="utf-8") as stream:
-            for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
-                snapshot = snapshot_paper(paper_dir, input_root)
-                stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
-                count += 1
+            if args.corpus_csv:
+                if not args.corpus_root:
+                    raise ValueError("--corpus-root is required with --corpus-csv")
+                corpus_root = args.corpus_root.resolve()
+                try:
+                    input_root.relative_to(corpus_root)
+                except ValueError as exc:
+                    raise ValueError("--input-root must be inside --corpus-root") from exc
+                try:
+                    output_root.relative_to(corpus_root)
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError("--output-root must be outside --corpus-root")
+                packages, skipped = load_corpus_packages(
+                    args.corpus_csv, corpus_root, input_root,
+                )
+                seen_ids: set[str] = set()
+                for package in packages:
+                    snapshot = snapshot_paper(
+                        package.paper_dir, input_root, paper_id=package.paper_id,
+                        external_path_root=corpus_root,
+                    )
+                    if snapshot.paper_id in seen_ids:
+                        raise ValueError(
+                            f"Duplicate normalized upstream paper_id: {snapshot.paper_id!r}"
+                        )
+                    seen_ids.add(snapshot.paper_id)
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
+                    count += 1
+                upstream_contract = {
+                    "repository": "Tuzhidingdong/chem-literature",
+                    "commit": UPSTREAM_COMMIT,
+                    "schema_path": UPSTREAM_SCHEMA_PATH,
+                    "schema_sha256": UPSTREAM_SCHEMA_SHA256,
+                    "supported_package_version": SUPPORTED_PACKAGE_VERSION,
+                    "csv": str(args.corpus_csv),
+                    "corpus_root_name": corpus_root.name,
+                }
+            else:
+                for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
+                    snapshot = snapshot_paper(paper_dir, input_root)
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
+                    count += 1
         temporary.replace(jsonl_path)
     except Exception:
         try:
@@ -147,8 +210,9 @@ def _scan(args) -> int:
             pass
         raise
     atomic_write_json(output_root / "corpus_manifest.json", {
-        "schema_version": "1.0", "input_root_name": input_root.name,
+        "schema_version": "1.1", "input_root_name": input_root.name,
         "paper_count": count, "paper_manifest_stream": "corpus_manifest.jsonl",
+        "upstream_contract": upstream_contract, "skipped_rows": skipped,
     })
     print(json.dumps({"discovered": count, "manifest": str(output_root / "corpus_manifest.json"),
                       "paper_stream": str(jsonl_path)}, indent=2))
@@ -163,24 +227,64 @@ def _run(args) -> int:
     if output_root == input_root or input_root in output_root.parents:
         raise ValueError("Output root must be separate from, and outside, the upstream input root")
 
+    corpus_root = args.corpus_root.resolve() if args.corpus_root else None
+    package_by_path = {}
+    skipped_upstream_rows = []
+    if args.corpus_csv:
+        if corpus_root is None:
+            raise ValueError("--corpus-root is required with --corpus-csv")
+        try:
+            input_root.relative_to(corpus_root)
+        except ValueError as exc:
+            raise ValueError("--input-root must be inside --corpus-root") from exc
+        try:
+            output_root.relative_to(corpus_root)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("--output-root must be outside --corpus-root")
+        packages, skipped_upstream_rows = load_corpus_packages(
+            args.corpus_csv, corpus_root, input_root,
+        )
+        package_by_path = {item.paper_dir.resolve(): item for item in packages}
+        source_papers = [item.paper_dir for item in packages]
+    else:
+        source_papers = list(ensure_unique_paper_ids(discover_papers(input_root), input_root))
+
+    def make_snapshot(paper: Path):
+        package = package_by_path.get(paper.resolve())
+        return snapshot_paper(
+            paper, input_root,
+            paper_id=package.paper_id if package else None,
+            external_path_root=corpus_root,
+        )
+
     options = {
-        "memory_limit_mb": args.memory_limit,
+        "memory_soft_limit_mb": args.memory_soft_limit,
+        "memory_hard_limit_mb": args.memory_limit,
         "render_scale": args.render_scale,
         "temp_disk_limit_mb": args.temp_disk_limit,
         "min_free_disk_mb": args.min_free_disk_mb,
         "min_free_memory_mb": args.min_free_memory_mb,
         "context_memory_budget": args.context_memory_budget,
         "max_render_pixels": args.max_render_pixels,
+        "max_render_long_edge": args.max_render_long_edge,
         "max_open_pdfs": args.max_open_pdfs,
         "batch_size": args.batch_size,
         "qc_thresholds": str(args.qc_thresholds) if args.qc_thresholds else None,
         "ocr": args.ocr,
         "force_recompute_reviewed": args.force_recompute_reviewed,
         "resume_cached_skipped": 0,
-        "discovered_papers": sum(1 for _ in ensure_unique_paper_ids(discover_papers(input_root), input_root)),
+        "discovered_papers": len(source_papers),
         "eligible_papers": 0,
         "skipped_by_selection": 0,
+        "upstream_skipped_rows": skipped_upstream_rows,
     }
+    if corpus_root is not None:
+        options["corpus_root"] = str(corpus_root)
+        options["upstream_paper_ids"] = {
+            str(path): package.paper_id for path, package in package_by_path.items()
+        }
     selected_states = None
     prior_fingerprints: dict[str, str] = {}
     prior_job_states: dict[str, str] = {}
@@ -221,9 +325,10 @@ def _run(args) -> int:
             selected_states = None
 
     def selected_papers():
-        for paper in ensure_unique_paper_ids(discover_papers(input_root), input_root):
+        for paper in source_papers:
             relative = paper.relative_to(input_root).as_posix()
-            storage_id = storage_paper_id("root-paper" if relative == "." else relative)
+            current_snapshot = make_snapshot(paper)
+            storage_id = current_snapshot.paper_id
             if args.paper_id and relative != args.paper_id and storage_id != args.paper_id and paper.name != args.paper_id:
                 options["skipped_by_selection"] += 1
                 continue
@@ -232,22 +337,18 @@ def _run(args) -> int:
                     options["skipped_by_selection"] += 1
                     continue
                 options["eligible_papers"] += 1
-                yield paper
+                yield (paper, current_snapshot)
                 continue
             options["eligible_papers"] += 1
             if args.resume and selected_states is not None and storage_id not in selected_states:
                 previous_fingerprint = prior_fingerprints.get(storage_id)
                 previous_job_state = prior_job_states.get(storage_id)
                 if previous_fingerprint is None or previous_job_state is None:
-                    yield paper
+                    yield (paper, current_snapshot)
                     continue
                 if previous_job_state not in {
                     "COMPLETED", "COMPLETED_WITH_REVIEW", "NEEDS_REVIEW", "BLOCKED"
                 }:
-                    yield paper
-                    continue
-                current_snapshot = snapshot_paper(paper, input_root)
-                if current_snapshot.input_fingerprint != previous_fingerprint:
                     yield (paper, current_snapshot)
                     continue
                 paper_root = output_root / "papers" / storage_id
@@ -276,7 +377,7 @@ def _run(args) -> int:
                         continue
                 options["resume_cached_skipped"] += 1
                 continue
-            yield paper
+            yield (paper, current_snapshot)
 
     result = run_corpus(input_root, output_root, selected_papers(), args.workers,
                         args.max_attempts, args.lease_seconds, args.dry_run, options)
@@ -548,6 +649,17 @@ def _validate(args) -> int:
     return 0 if not errors else 1
 
 
+def _benchmark(args) -> int:
+    from .benchmark import evaluate_gold_benchmark
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
+    predictions = json.loads(args.predictions.read_text(encoding="utf-8-sig"))
+    report = evaluate_gold_benchmark(manifest, predictions)
+    atomic_write_json(args.output, report)
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return {"PASS": 0, "FAIL": 1, "NOT_EVALUATED": 2}.get(report.get("status"), 2)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -567,6 +679,8 @@ def main(argv=None) -> int:
             return _rebuild(args)
         if args.command == "validate":
             return _validate(args)
+        if args.command == "benchmark":
+            return _benchmark(args)
         if args.command == "backend-probe":
             from .backend_probe import main as probe_main
             return probe_main([*(str(p) for p in args.pdfs), "--out", str(args.out),
