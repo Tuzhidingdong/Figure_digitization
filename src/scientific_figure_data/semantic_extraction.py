@@ -231,18 +231,12 @@ def _evidence_id(paper_id: str, source_path: str, line_number: int, snippet: str
     return stable_id("evidence", f"{paper_id}|{source_path}|{line_number}|{snippet}")
 
 
-def build_semantic_package(
-    paper_id: str,
-    input_fingerprint: str,
-    figures: list[dict],
-    panels: list[dict],
-    series_records: list[Any],
-    context_index: Any,
+def build_semantic_pass1(
+    paper_id: str, figures: list[dict], context_index: Any,
 ) -> dict[str, Any]:
-    """Deterministic two-pass semantic enrichment over extracted text and image evidence."""
+    """Build provisional text-first caption/sample candidates before image interpretation."""
     captions: list[dict[str, Any]] = []
     text_candidates: dict[str, dict[str, Any]] = {}
-    statement_rows = context_index.search("statement", "")
     sample_rows = context_index.search("sample_alias", "")
 
     def add_candidate(name: str, evidence: dict[str, Any], source_kind: str):
@@ -265,8 +259,10 @@ def build_semantic_package(
 
     for row in sample_rows:
         evidence = {
-            "evidence_id": _evidence_id(paper_id, row.get("source_path", ""),
-                                       int(row.get("line_number", 0)), row.get("snippet", "")),
+            "evidence_id": _evidence_id(
+                paper_id, row.get("source_path", ""),
+                int(row.get("line_number", 0)), row.get("snippet", ""),
+            ),
             "source_type": "EXTRACTED_TEXT", "source_path": row.get("source_path"),
             "line_number": row.get("line_number"), "snippet": row.get("snippet"),
         }
@@ -291,7 +287,27 @@ def build_semantic_package(
                     "panel_id": segment.get("panel_id"), "snippet": match.group(0),
                 }
                 add_candidate(name, evidence, "CAPTION")
-    registry_pass1 = list(text_candidates.values())
+    return {
+        "captions": captions,
+        "text_candidates": text_candidates,
+        "registry_pass1": list(text_candidates.values()),
+    }
+
+
+def build_semantic_package(
+    paper_id: str,
+    input_fingerprint: str,
+    figures: list[dict],
+    panels: list[dict],
+    series_records: list[Any],
+    context_index: Any,
+    pass1_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Complete the single visual enrichment pass over a provisional text-first registry."""
+    pass1_state = pass1_state or build_semantic_pass1(paper_id, figures, context_index)
+    captions = pass1_state["captions"]
+    text_candidates = pass1_state["text_candidates"]
+    registry_pass1 = pass1_state["registry_pass1"]
 
     # One visual enrichment pass. Series labels are treated as candidates, not facts.
     visual_candidates = []
