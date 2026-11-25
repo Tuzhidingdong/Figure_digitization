@@ -539,11 +539,21 @@ def build_semantic_package(
             }
         series_subject_links.append(link)
         technique = str(getattr(record, "technique", None) or "").upper()
-        matching_measurements = [
+        figure_measurements = [
             item for item in measurements.values()
             if technique and str(item.get("technique", "")).upper() == technique
-            and item.get("figure_id") in (None, record.figure_id)
+            and item.get("figure_id") == record.figure_id
         ]
+        paper_text_measurements = [
+            item for item in measurements.values()
+            if technique and str(item.get("technique", "")).upper() == technique
+            and item.get("figure_id") is None
+        ]
+        matching_measurements = (
+            figure_measurements if figure_measurements
+            else paper_text_measurements if len(paper_text_measurements) == 1
+            else []
+        )
         if len(matching_measurements) == 1:
             series_measurement_links.append({
                 "series_id": record.series_id,
