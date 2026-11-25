@@ -289,10 +289,11 @@ def evaluate_gold_benchmark(
     )
     curve = metrics.get("curve_nrmse", {})
     gates["curve_nrmse"] = (
-        curve.get("status") == "EVALUATED"
-        and curve.get("nrmse") is not None
+        curve.get("nrmse") is not None
         and curve["nrmse"] <= THRESHOLDS["curve_nrmse_max"]
-    ) if curve.get("status") == "EVALUATED" else None
+    ) if curve.get("status") == "EVALUATED" else (
+        None if curve.get("status") == "NOT_EVALUATED" else False
+    )
 
     required_gates = [value for value in gates.values() if value is not None]
     status = "PASS" if required_gates and all(required_gates) else "FAIL"
