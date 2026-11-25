@@ -442,12 +442,14 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                 if retry_queue:
                     paper, paper_id = retry_queue.popleft()
                     try:
-                        input_snapshot = snapshot_paper(
-                            paper, input_root,
-                            paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
-                            external_path_root=Path(options["corpus_root"])
-                            if options.get("corpus_root") else None,
-                        )
+                        if options.get("corpus_root"):
+                            input_snapshot = snapshot_paper(
+                                paper, input_root,
+                                paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
+                                external_path_root=Path(options["corpus_root"]),
+                            )
+                        else:
+                            input_snapshot = snapshot_paper(paper, input_root)
                         paper_relative = paper.relative_to(input_root).as_posix()
                     except Exception as exc:
                         ledger.finish(
@@ -476,11 +478,14 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                         ):
                             input_snapshot = candidate[1]
                         else:
-                            input_snapshot = snapshot_paper(
-                                paper, input_root,
-                                external_path_root=Path(options["corpus_root"])
-                                if options.get("corpus_root") else None,
-                            )
+                            if options.get("corpus_root"):
+                                input_snapshot = snapshot_paper(
+                                    paper, input_root,
+                                    paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
+                                    external_path_root=Path(options["corpus_root"]),
+                                )
+                            else:
+                                input_snapshot = snapshot_paper(paper, input_root)
                         paper_id = input_snapshot.paper_id
                     except Exception as exc:
                         fallback_relative = (
