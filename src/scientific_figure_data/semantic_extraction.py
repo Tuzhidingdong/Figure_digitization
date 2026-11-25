@@ -283,7 +283,8 @@ def build_semantic_pass1(
                         paper_id, f"caption:{figure.get('figure_id')}",
                         int(segment.get("start", 0)) + match.start(), match.group(0),
                     ),
-                    "source_type": "CAPTION", "figure_id": figure.get("figure_id"),
+                    "source_type": "CAPTION", "source_path": None,
+            "figure_id": figure.get("figure_id"),
                     "panel_id": segment.get("panel_id"), "snippet": match.group(0),
                 }
                 add_candidate(name, evidence, "CAPTION")
@@ -359,7 +360,7 @@ def build_semantic_package(
                 f"{paper_id}|{candidate.get('figure_id')}|{candidate.get('panel_id')}|{candidate['label']}",
             ),
             "source_type": candidate.get("evidence_type", "VISUAL_CANDIDATE"),
-            "figure_id": candidate.get("figure_id"),
+            "source_path": None, "figure_id": candidate.get("figure_id"),
             "panel_id": candidate.get("panel_id"),
             "snippet": candidate["label"],
             "polygon": candidate.get("polygon"),
