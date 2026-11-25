@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import shutil
 from dataclasses import asdict
 from pathlib import Path
@@ -2247,7 +2248,44 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 ),
                 "reason": failure_reason,
             })
+            visual_legend_candidates = []
+            ignored_visual_labels = {
+                "potential", "voltage", "current", "intensity", "wavenumber",
+                "frequency", "capacity", "time", "temperature", "sample",
+                "scan rate", "current density", "cycle number", "vs", "figure",
+            }
+            for ocr_row in ocr_evidence:
+                if not isinstance(ocr_row, dict):
+                    continue
+                visual_text = " ".join(str(
+                    ocr_row.get("text") or ocr_row.get("txt") or ocr_row.get("label") or ""
+                ).split())
+                if (
+                    len(visual_text) < 2 or len(visual_text) > 64
+                    or visual_text.casefold() in ignored_visual_labels
+                    or not any(character.isalpha() for character in visual_text)
+                    or re.fullmatch(r"[+-]?[0-9.,]+", visual_text)
+                ):
+                    continue
+                visual_legend_candidates.append({
+                    "label": visual_text,
+                    "figure_id": figure_id, "panel_id": panel_id,
+                    "source_type": "OCR_TEXT_CANDIDATE",
+                    "evidence_id": "visual_" + sha256_json({
+                        "paper_id": snapshot.paper_id, "figure_id": figure_id,
+                        "panel_id": panel_id, "text": visual_text,
+                        "polygon": ocr_row.get("polygon"),
+                    })[:16],
+                    "polygon": ocr_row.get("polygon"),
+                    "confidence": ocr_row.get("score"),
+                })
+            deduplicated_visual = {
+                (item["label"].casefold(), json.dumps(item.get("polygon"), sort_keys=True)): item
+                for item in visual_legend_candidates
+            }
+            visual_legend_candidates = list(deduplicated_visual.values())
             for item in extracted:
+                item.metadata["visual_legend_candidates"] = visual_legend_candidates
                 item.points.clear()
             series.extend(extracted)
             review_needed = review_needed or panel_status in {"NEEDS_REVIEW", "EXTRACTED_NEEDS_REVIEW"}
