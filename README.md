@@ -4,7 +4,7 @@ An independent downstream tool for turning existing chem-literature outputs into
 
 ## Current implementation boundary
 
-This repository is being implemented against the frozen v1.4.1 Task Plan. The default workflow is local, offline, single-worker, sequential, and zero-LLM-token.
+The v1.4.1 Task Plan remains a frozen historical baseline. The isolated `feature/task-plan-v2.1` development branch implements the approved V2.1 plan incrementally; its Draft PR is not merged or released. The default workflow remains local, offline, single-worker, sequential, and zero-LLM-token.
 
 The initial implementation provides corpus discovery, immutable input snapshots, compact paper context, a PDF backend abstraction, resumable paper jobs, canonical JSON/CSV artifacts, a rebuildable SQLite catalog, scientific queries, filtered exports, and hash-checked review patches.
 
@@ -28,13 +28,13 @@ No GPU or LLM is required. OCR is optional and is not installed by the default p
 
 ## Quick start
 
-    sfd scan --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA
-    sfd run --all --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA --workers 1 --temp-disk-limit 2048 --min-free-disk-mb 256 --min-free-memory-mb 512
+    sfd scan --corpus-csv PATH_TO_CHEM_LITERATURE_OUTPUTS/research_corpus_paired.csv --corpus-root PATH_TO_CHEM_LITERATURE_OUTPUTS --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA
+    sfd run --all --corpus-csv PATH_TO_CHEM_LITERATURE_OUTPUTS/research_corpus_paired.csv --corpus-root PATH_TO_CHEM_LITERATURE_OUTPUTS --input-root PATH_TO_CHEM_LITERATURE_OUTPUTS/runs/preprocessed --output-root PATH_TO_SFD_DATA --workers 1 --temp-disk-limit 2048 --min-free-disk-mb 256 --min-free-memory-mb 512
     sfd status --output-root PATH_TO_SFD_DATA
     sfd query --output-root PATH_TO_SFD_DATA --technique CV
     sfd export --output-root PATH_TO_SFD_DATA --format csv --out ml-export
 
-For the current Chem-Literature output layout, point --input-root at runs/preprocessed; each <paper_id>/01_preprocessing package is discovered separately. The adapter follows the package's hash-checked MAIN PDF reference in evidence_index.json when that source PDF is stored outside the preprocessing package. Use --dry-run before a first corpus run. Existing upstream files are read-only. Input and output roots must be disjoint: neither directory may contain the other. The CLI and direct scheduler API reject same-root, nested-output, and ancestor-output layouts before writing.
+For the current Chem-Literature output layout, the authoritative handoff is research_corpus_paired.csv. Pass --corpus-root as the working directory used by upstream run_workflow.py; preprocessing_path and MAIN PDF paths are resolved against that root, while package directories must remain under --input-root. The adapter uses evidence_index.json.paper_id as the canonical identity, accepts only the audited package version 1.1.0, and verifies package media and MAIN PDF SHA256 values. The older directory-only scan mode remains available for non-CSV fixtures. See docs/UPSTREAM_CONTRACT.md. Use --dry-run before a first corpus run. Existing upstream files are read-only. Input and output roots must be disjoint: neither directory may contain the other. The CLI and direct scheduler API reject same-root, nested-output, and ancestor-output layouts before writing.
 
 ## Commands
 
