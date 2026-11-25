@@ -546,7 +546,12 @@ def build_semantic_package(
                 ), None),
                 "entity_type": "SAMPLE", "role_in_series": subject["subject_role"],
                 "subject_role": subject["subject_role"],
-                "status": subject["link_status"], "evidence": {"evidence_ids": subject["evidence_ids"]},
+                "status": (
+                    "ASSIGNED_WITH_EVIDENCE"
+                    if subject["link_status"] == "MATCHED_EXACT_ALIAS" else "UNASSIGNED"
+                ),
+                "semantic_link_status": subject["link_status"],
+                "evidence": {"evidence_ids": subject["evidence_ids"]},
             }]
         measurement_link = next(
             (item for item in series_measurement_links
