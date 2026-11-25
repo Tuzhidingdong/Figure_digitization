@@ -37,6 +37,52 @@ CREATE TABLE IF NOT EXISTS entity_relationships(
  parent_entity_id TEXT NOT NULL, child_entity_id TEXT NOT NULL, relationship TEXT NOT NULL,
  evidence_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(parent_entity_id,child_entity_id,relationship)
 );
+CREATE TABLE IF NOT EXISTS subject_entities(
+ subject_entity_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, entity_kind TEXT NOT NULL,
+ canonical_name TEXT NOT NULL, aliases_json TEXT NOT NULL DEFAULT '[]',
+ resolution_status TEXT NOT NULL, composition_json TEXT, preparation_variant_json TEXT,
+ evidence_json TEXT NOT NULL DEFAULT '[]',
+ FOREIGN KEY(paper_id) REFERENCES papers(paper_id)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_entities_paper ON subject_entities(paper_id);
+CREATE TABLE IF NOT EXISTS subject_entity_aliases(
+ subject_entity_id TEXT NOT NULL, alias TEXT NOT NULL, alias_norm TEXT NOT NULL,
+ alias_type TEXT NOT NULL DEFAULT 'EXACT', evidence_json TEXT NOT NULL DEFAULT '[]',
+ PRIMARY KEY(subject_entity_id,alias_norm),
+ FOREIGN KEY(subject_entity_id) REFERENCES subject_entities(subject_entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_alias_norm ON subject_entity_aliases(alias_norm);
+CREATE TABLE IF NOT EXISTS synthesis_processes(
+ process_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, method_text TEXT NOT NULL,
+ process_type TEXT, input_materials_json TEXT NOT NULL DEFAULT '[]',
+ condition_ids_json TEXT NOT NULL DEFAULT '[]', evidence_json TEXT NOT NULL DEFAULT '[]',
+ process_status TEXT NOT NULL,
+ FOREIGN KEY(paper_id) REFERENCES papers(paper_id)
+);
+CREATE TABLE IF NOT EXISTS sample_process_steps(
+ sample_id TEXT NOT NULL, process_id TEXT NOT NULL, step_order INTEGER NOT NULL,
+ step_role TEXT NOT NULL, evidence_id TEXT NOT NULL, scope_status TEXT NOT NULL,
+ PRIMARY KEY(sample_id,process_id,step_order),
+ FOREIGN KEY(sample_id) REFERENCES subject_entities(subject_entity_id),
+ FOREIGN KEY(process_id) REFERENCES synthesis_processes(process_id)
+);
+CREATE TABLE IF NOT EXISTS series_measurement_links(
+ series_id TEXT NOT NULL, measurement_id TEXT, measurement_role TEXT NOT NULL,
+ link_status TEXT NOT NULL, evidence_json TEXT NOT NULL DEFAULT '[]',
+ PRIMARY KEY(series_id,measurement_id,measurement_role)
+);
+CREATE TABLE IF NOT EXISTS evidence_items(
+ evidence_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, source_type TEXT NOT NULL,
+ source_path TEXT, source_sha256 TEXT, location_json TEXT NOT NULL DEFAULT '{}',
+ snippet TEXT NOT NULL DEFAULT '', parser_version TEXT, confidence_json TEXT NOT NULL DEFAULT '{}',
+ FOREIGN KEY(paper_id) REFERENCES papers(paper_id)
+);
+CREATE TABLE IF NOT EXISTS cross_validation_results(
+ result_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, series_id TEXT NOT NULL,
+ status TEXT NOT NULL, checks_json TEXT NOT NULL DEFAULT '[]',
+ unresolved_fields_json TEXT NOT NULL DEFAULT '[]',
+ FOREIGN KEY(paper_id) REFERENCES papers(paper_id)
+);
 CREATE TABLE IF NOT EXISTS conditions(
  condition_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, measurement_id TEXT,
  name TEXT NOT NULL, value_json TEXT NOT NULL, evidence_json TEXT NOT NULL DEFAULT '[]'
@@ -49,7 +95,9 @@ CREATE TABLE IF NOT EXISTS series(
  series_id TEXT PRIMARY KEY, paper_id TEXT NOT NULL, figure_id TEXT NOT NULL,
  panel_id TEXT NOT NULL, measurement_id TEXT, technique TEXT, domain TEXT, label TEXT, x_unit TEXT, y_unit TEXT,
  y_axis_side TEXT NOT NULL, extraction_status TEXT NOT NULL, qc_status TEXT NOT NULL,
- review_state TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}'
+ review_state TEXT NOT NULL, metadata_json TEXT NOT NULL DEFAULT '{}',
+ scale_type TEXT NOT NULL DEFAULT 'UNKNOWN', baseline_comparable INTEGER,
+ offset_value REAL, normalization_provenance_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_series_paper ON series(paper_id);
 CREATE INDEX IF NOT EXISTS idx_series_technique ON series(technique);
@@ -62,7 +110,7 @@ CREATE TABLE IF NOT EXISTS series_points(
 CREATE TABLE IF NOT EXISTS series_subject_links(
  series_id TEXT NOT NULL, entity_id TEXT NOT NULL, role_in_series TEXT NOT NULL,
  evidence_json TEXT NOT NULL DEFAULT '{}', link_status TEXT NOT NULL DEFAULT 'UNASSIGNED',
- identity_scope TEXT NOT NULL DEFAULT 'PAPER',
+ identity_scope TEXT NOT NULL DEFAULT 'PAPER', subject_role TEXT NOT NULL DEFAULT 'UNKNOWN',
  PRIMARY KEY(series_id, entity_id, role_in_series)
 );
 CREATE TABLE IF NOT EXISTS observations(
@@ -93,16 +141,56 @@ CREATE TABLE IF NOT EXISTS applied_patches(
 
 def connect_catalog(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path, timeout=30)
+    con = sqlite3.connect(path, timeout=10)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA synchronous=FULL")
-    con.execute("PRAGMA busy_timeout=30000")
+    journal_mode = str(con.execute("PRAGMA journal_mode=WAL").fetchone()[0]).lower()
+    if journal_mode != "wal":
+        con.close()
+        raise RuntimeError(f"SQLite WAL mode unavailable (reported {journal_mode!r})")
+    con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA busy_timeout=10000")
     con.executescript(SCHEMA)
     # Additive schema migration for catalogs created by earlier development snapshots.
     series_columns = {row[1] for row in con.execute("PRAGMA table_info(series)").fetchall()}
     if "measurement_id" not in series_columns:
         con.execute("ALTER TABLE series ADD COLUMN measurement_id TEXT")
+    for name, declaration in (
+        ("scale_type", "TEXT NOT NULL DEFAULT 'UNKNOWN'"),
+        ("baseline_comparable", "INTEGER"),
+        ("offset_value", "REAL"),
+        ("normalization_provenance_json", "TEXT"),
+    ):
+        if name not in series_columns:
+            con.execute(f"ALTER TABLE series ADD COLUMN {name} {declaration}")
+    condition_columns = {row[1] for row in con.execute("PRAGMA table_info(conditions)").fetchall()}
+    for name, declaration in (
+        ("condition_scope", "TEXT NOT NULL DEFAULT 'UNRESOLVED'"),
+        ("scope_entity_id", "TEXT"),
+        ("value_kind", "TEXT NOT NULL DEFAULT 'UNKNOWN'"),
+        ("operator", "TEXT NOT NULL DEFAULT 'UNKNOWN'"),
+        ("numeric_values_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("text_values_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("unit_raw", "TEXT"),
+        ("unit_canonical", "TEXT"),
+        ("uncertainty_json", "TEXT"),
+        ("normalization_basis", "TEXT"),
+        ("parse_status", "TEXT NOT NULL DEFAULT 'UNRESOLVED'"),
+    ):
+        if name not in condition_columns:
+            con.execute(f"ALTER TABLE conditions ADD COLUMN {name} {declaration}")
+    measurement_columns = {row[1] for row in con.execute("PRAGMA table_info(measurements)").fetchall()}
+    for name, declaration in (
+        ("measurement_role", "TEXT"),
+        ("subject_roles_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("condition_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("evidence_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("scope_status", "TEXT NOT NULL DEFAULT 'UNRESOLVED'"),
+    ):
+        if name not in measurement_columns:
+            con.execute(f"ALTER TABLE measurements ADD COLUMN {name} {declaration}")
+    subject_link_columns = {row[1] for row in con.execute("PRAGMA table_info(series_subject_links)").fetchall()}
+    if "subject_role" not in subject_link_columns:
+        con.execute("ALTER TABLE series_subject_links ADD COLUMN subject_role TEXT NOT NULL DEFAULT 'UNKNOWN'")
     job_columns = {row[1] for row in con.execute("PRAGMA table_info(jobs)").fetchall()}
     for name, declaration in (
         ("worker_id", "TEXT"),
