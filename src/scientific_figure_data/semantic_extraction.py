@@ -468,11 +468,17 @@ def build_semantic_package(
             measurement_id = stable_id(
                 "measurement", f"{paper_id}|{figure.get('figure_id')}|{technique}",
             )
+            evidence_item = {
+                "evidence_id": evidence_id, "source_type": "CAPTION",
+                "source_path": None, "figure_id": figure.get("figure_id"),
+                "panel_id": None, "snippet": caption,
+                "parser_version": "semantic-extraction-0.1.0",
+            }
             measurements[measurement_id] = {
                 "measurement_id": measurement_id, "paper_id": paper_id,
                 "figure_id": figure.get("figure_id"), "technique": technique,
                 "scope_status": "CAPTION_CANDIDATE", "evidence_ids": [evidence_id],
-                "condition_ids": [],
+                "evidence": [evidence_item], "condition_ids": [],
             }
 
     # Build source-backed process and atomic condition candidates.
@@ -527,6 +533,13 @@ def build_semantic_package(
                         measurement_id = figure_candidates[0]["measurement_id"]
                         if evidence_id not in figure_candidates[0]["evidence_ids"]:
                             figure_candidates[0]["evidence_ids"].append(evidence_id)
+                        figure_candidates[0].setdefault("evidence", []).append({
+                            "evidence_id": evidence_id, "source_type": "EXTRACTED_TEXT",
+                            "source_path": row.get("source_path"),
+                            "line_number": row.get("line_number"),
+                            "snippet": snippet,
+                            "parser_version": "semantic-extraction-0.1.0",
+                        })
                     else:
                         measurement_id = stable_id(
                             "measurement",
@@ -536,7 +549,15 @@ def build_semantic_package(
                             "measurement_id": measurement_id, "paper_id": paper_id,
                             "figure_id": None, "technique": technique,
                             "scope_status": "TEXT_CANDIDATE",
-                            "evidence_ids": [evidence_id], "condition_ids": [],
+                            "evidence_ids": [evidence_id],
+                            "evidence": [{
+                                "evidence_id": evidence_id, "source_type": "EXTRACTED_TEXT",
+                                "source_path": row.get("source_path"),
+                                "line_number": row.get("line_number"),
+                                "snippet": snippet,
+                                "parser_version": "semantic-extraction-0.1.0",
+                            }],
+                            "condition_ids": [],
                         })
                 process_id = None
                 if scope == "SYNTHESIS":
@@ -546,6 +567,13 @@ def build_semantic_package(
                         "process_id": process_id, "paper_id": paper_id,
                         "method_text": snippet, "process_type": role,
                         "evidence_ids": [evidence_id],
+                        "evidence": [{
+                            "evidence_id": evidence_id, "source_type": "EXTRACTED_TEXT",
+                            "source_path": row.get("source_path"),
+                            "line_number": row.get("line_number"),
+                            "snippet": snippet,
+                            "parser_version": "semantic-extraction-0.1.0",
+                        }],
                         "process_status": "CANDIDATE", "condition_ids": [],
                     })
                     if not ambiguous_group:
@@ -584,6 +612,13 @@ def build_semantic_package(
                             "condition_name": condition_name,
                             "raw_text": quantity["raw_text"], "source_snippet": snippet,
                             "value": quantity["value"], "evidence_ids": [evidence_id],
+                            "evidence": [{
+                                "evidence_id": evidence_id, "source_type": "EXTRACTED_TEXT",
+                                "source_path": row.get("source_path"),
+                                "line_number": row.get("line_number"),
+                                "snippet": snippet,
+                                "parser_version": "semantic-extraction-0.1.0",
+                            }],
                             "parse_status": quantity["value"]["parse_status"],
                         })
                         if scope == "SYNTHESIS" and process_id:
