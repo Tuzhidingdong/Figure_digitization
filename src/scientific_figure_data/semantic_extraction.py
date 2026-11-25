@@ -546,15 +546,38 @@ def build_semantic_package(
         ]
         record.metadata["semantic_pass2_fingerprint"] = pass2_fingerprint
         record.metadata["semantic_subject_link_status"] = subject["link_status"] if subject else "UNASSIGNED"
-        record.metadata["scale_type"] = (
-            "ARBITRARY_OFFSET_STACKED"
+        explicit_scale = str(
+            record.metadata.get("scale_type")
+            or record.metadata.get("y_axis_scale_type")
+            or ""
+        ).upper()
+        offset_value = (
+            record.metadata.get("offset_value")
+            if record.metadata.get("offset_value") is not None
+            else record.metadata.get("vertical_offset")
             if record.metadata.get("vertical_offset") is not None
-            or record.metadata.get("stacked_offset") is not None
-            else "UNKNOWN"
+            else record.metadata.get("stacked_offset")
         )
-        record.metadata["baseline_comparable"] = (
-            False if record.metadata["scale_type"] == "ARBITRARY_OFFSET_STACKED" else None
+        if explicit_scale in {
+            "ABSOLUTE", "NORMALIZED", "ARBITRARY_RELATIVE",
+            "ARBITRARY_OFFSET_STACKED", "UNKNOWN",
+        }:
+            scale_type = explicit_scale
+        elif offset_value is not None:
+            scale_type = "ARBITRARY_OFFSET_STACKED"
+        elif record.metadata.get("normalization_provenance"):
+            scale_type = "NORMALIZED"
+        else:
+            scale_type = "UNKNOWN"
+        record.scale_type = scale_type
+        record.baseline_comparable = (
+            False if scale_type == "ARBITRARY_OFFSET_STACKED" else None
         )
+        record.offset_value = float(offset_value) if offset_value is not None else None
+        provenance = record.metadata.get("normalization_provenance")
+        record.normalization_provenance = provenance if isinstance(provenance, dict) else None
+        record.metadata["scale_type"] = record.scale_type
+        record.metadata["baseline_comparable"] = record.baseline_comparable
 
     return {
         "schema_version": "2.1", "paper_id": paper_id,
