@@ -611,6 +611,116 @@ def build_semantic_package(
         for item in sample_steps
     }.values())
 
+    # Exact alias association only. Image-only candidates remain unresolved identities.
+    aliases_to_entity = {}
+    for candidate in text_candidates.values():
+        for alias in candidate["aliases"]:
+            aliases_to_entity[normalize_alias(alias)] = candidate
+    series_subject_links: list[dict[str, Any]] = []
+    series_measurement_links: list[dict[str, Any]] = []
+    cross_validation: list[dict[str, Any]] = []
+    for record in series_records:
+        label = str(getattr(record, "label", None) or "").strip()
+        entity = aliases_to_entity.get(normalize_alias(label)) if label else None
+        if entity and entity.get("resolution_status") != "UNRESOLVED_IMAGE_ONLY":
+            link = {
+                "series_id": record.series_id,
+                "subject_entity_id": entity["subject_entity_id"],
+                "subject_role": "UNKNOWN",
+                "link_status": "MATCHED_EXACT_ALIAS",
+                "evidence_ids": [
+                    item.get("evidence_id") for item in entity["evidence"]
+                    if item.get("evidence_id")
+                ],
+            }
+        elif entity and entity.get("resolution_status") == "UNRESOLVED_IMAGE_ONLY":
+            link = {
+                "series_id": record.series_id,
+                "subject_entity_id": entity["subject_entity_id"],
+                "subject_role": "UNKNOWN",
+                "link_status": "UNRESOLVED_IMAGE_ONLY",
+                "evidence_ids": [
+                    item.get("evidence_id") for item in entity["evidence"]
+                    if item.get("evidence_id")
+                ],
+            }
+        else:
+            link = {
+                "series_id": record.series_id, "subject_entity_id": None,
+                "subject_role": "UNKNOWN", "link_status": "UNASSIGNED",
+                "evidence_ids": [],
+            }
+        series_subject_links.append(link)
+
+        technique = str(getattr(record, "technique", None) or "").upper()
+        figure_measurements = [
+            item for item in measurements.values()
+            if technique and str(item.get("technique", "")).upper() == technique
+            and item.get("figure_id") == record.figure_id
+        ]
+        paper_text_measurements = [
+            item for item in measurements.values()
+            if technique and str(item.get("technique", "")).upper() == technique
+            and item.get("figure_id") is None
+        ]
+        matching_measurements = (
+            figure_measurements if figure_measurements
+            else paper_text_measurements if len(paper_text_measurements) == 1
+            else []
+        )
+        if len(matching_measurements) == 1:
+            measurement = matching_measurements[0]
+            measurement_link = {
+                "series_id": record.series_id,
+                "measurement_id": measurement["measurement_id"],
+                "measurement_role": "MEASUREMENT_RESULT",
+                "link_status": "CANDIDATE_TECHNIQUE_MATCH",
+                "evidence_ids": measurement["evidence_ids"],
+            }
+        else:
+            measurement_link = {
+                "series_id": record.series_id, "measurement_id": None,
+                "measurement_role": "UNKNOWN", "link_status": "UNRESOLVED",
+                "evidence_ids": [],
+            }
+        series_measurement_links.append(measurement_link)
+
+        figure_caption = next(
+            (str(item.get("caption") or "") for item in figures
+             if item.get("figure_id") == record.figure_id),
+            "",
+        )
+        caption_techniques = _techniques(figure_caption)
+        technique_conflict = bool(
+            technique and caption_techniques
+            and technique.casefold() not in {item.casefold() for item in caption_techniques}
+        )
+        checks = [{
+            "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
+            "status": link["link_status"],
+            "evidence_ids": link["evidence_ids"],
+        }]
+        if technique and caption_techniques:
+            checks.append({
+                "check": "SERIES_TECHNIQUE_TO_CAPTION",
+                "status": "CONFLICT" if technique_conflict else "CONSISTENT",
+                "series_technique": technique,
+                "caption_techniques": caption_techniques,
+            })
+        cross_validation.append({
+            "series_id": record.series_id,
+            "status": "CONFLICT" if technique_conflict else
+            "CONSISTENT_WITH_AVAILABLE_EVIDENCE"
+            if link["link_status"] == "MATCHED_EXACT_ALIAS"
+            else "UNRESOLVED",
+            "checks": checks,
+            "unresolved_fields": (
+                ["technique"] if technique_conflict else
+                [] if link["link_status"] == "MATCHED_EXACT_ALIAS"
+                else ["subject_entity_id"]
+            ),
+        })
+
     # Validate the ordered process graph before publishing process links.
     from .entities import assert_acyclic_process_graph
     process_edges = []
