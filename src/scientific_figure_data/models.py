@@ -157,6 +157,17 @@ class Measurement:
 
 
 @dataclass(slots=True)
+class SynthesisProcess:
+    process_id: str
+    paper_id: str
+    method_text: str
+    process_status: str
+    condition_ids: list[str] = field(default_factory=list)
+    input_materials: list[dict[str, Any]] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class SampleProcessStep:
     sample_id: str
     process_id: str
