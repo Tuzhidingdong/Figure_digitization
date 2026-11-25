@@ -1312,6 +1312,6 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
         and item["metadata"].get("raster_qc", {}).get("path_segment_count", 0) >= 3
     ]
     assert len(dashed) == 1, result
-    assert dashed[0]["metadata"]["extraction_status"] == (
+    assert dashed[0]["extraction_status"] == (
         "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
     )
