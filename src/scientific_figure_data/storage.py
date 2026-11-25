@@ -270,6 +270,7 @@ def write_paper_artifacts(
         process_path = paper_root / "synthesis_processes.json"
         experiment_path = paper_root / "experiments.json"
         cross_validation_path = paper_root / "cross_validation.json"
+        unresolved_conditions_path = paper_root / "unresolved_conditions.json"
         atomic_write_json(caption_path, {
             "schema_version": "2.1", "paper_id": snapshot.paper_id,
             "figures": semantic_artifacts.get("caption_semantics", []),
@@ -302,9 +303,17 @@ def write_paper_artifacts(
             "schema_version": "2.1", "paper_id": snapshot.paper_id,
             **semantic_artifacts.get("cross_validation", {}),
         })
+        atomic_write_json(unresolved_conditions_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            "conditions": [
+                item for item in all_conditions
+                if item.get("condition_scope") == "UNRESOLVED"
+            ],
+        })
         semantic_paths = [
             path.name for path in (
-                caption_path, registry_path, process_path, experiment_path, cross_validation_path
+                caption_path, registry_path, process_path, experiment_path,
+                cross_validation_path, unresolved_conditions_path,
             )
         ]
 
@@ -484,6 +493,7 @@ class Catalog:
         registry = read_json("sample_registry.json")
         processes_doc = read_json("synthesis_processes.json")
         experiments_doc = read_json("experiments.json")
+        unresolved_doc = read_json("unresolved_conditions.json")
         validation_doc = read_json("cross_validation.json")
         subjects = registry.get("subjects", [])
         processes = processes_doc.get("processes", [])
@@ -491,6 +501,7 @@ class Catalog:
         conditions = (
             list(processes_doc.get("conditions", []))
             + list(experiments_doc.get("conditions", []))
+            + list(unresolved_doc.get("conditions", []))
         )
         measurements = experiments_doc.get("measurements", [])
         subject_ids = {
