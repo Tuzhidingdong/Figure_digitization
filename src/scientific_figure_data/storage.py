@@ -341,6 +341,28 @@ def write_paper_artifacts(
     return {"paper_root": str(paper_root), "bundle": bundle, "csv_paths": csv_paths}
 
 
+def retry_sqlite_busy(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        for attempt in range(5):
+            try:
+                return function(*args, **kwargs)
+            except sqlite3.OperationalError as exc:
+                code = getattr(exc, "sqlite_errorcode", None)
+                base_code = (code & 0xFF) if isinstance(code, int) else None
+                busy_codes = {
+                    getattr(sqlite3, "SQLITE_BUSY", 5),
+                    getattr(sqlite3, "SQLITE_LOCKED", 6),
+                }
+                is_busy = base_code in busy_codes or any(
+                    token in str(exc).casefold() for token in ("database is locked", "database is busy")
+                )
+                if not is_busy or attempt >= 4:
+                    raise
+                time.sleep(min(0.5, 0.05 * (2 ** attempt)))
+    return wrapped
+
+
 class Catalog:
     """SQLite index with a single writer owned by the parent scheduler/CLI."""
 
@@ -363,6 +385,7 @@ class Catalog:
              paths.get("manifest_path"), paths.get("bundle_path"), utc_now()),
         )
 
+    @retry_sqlite_busy
     def index_paper(self, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
                     series: list[SeriesRecord], status: str, artifact_paths: dict | None = None,
                     paper_root: Path | None = None, batch_size: int = 1000):
