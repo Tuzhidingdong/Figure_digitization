@@ -498,16 +498,32 @@ def _cached_result(paper_root: Path, snapshot: PaperSnapshot, locked: bool = Fal
     }
 
 
-def _check_memory_budget(memory_limit_mb: int):
-    if memory_limit_mb <= 0:
-        return
+def _check_memory_budget(soft_limit_mb: int, hard_limit_mb: int) -> dict[str, Any]:
+    """Observe RSS, collect best-effort at the soft threshold, and enforce the hard stop."""
     try:
         import psutil
-        rss = psutil.Process().memory_info().rss
-        if rss > memory_limit_mb * 1024 * 1024:
-            raise MemoryError(f"Worker RSS {rss // (1024 * 1024)} MiB exceeds configured budget {memory_limit_mb} MiB")
     except ImportError:
-        return
+        return {"status": "PSUTIL_UNAVAILABLE", "rss_bytes": None, "soft_limit_exceeded": False}
+    process = psutil.Process()
+    rss_before = process.memory_info().rss
+    collected = 0
+    if soft_limit_mb > 0 and rss_before > soft_limit_mb * 1024 * 1024:
+        import gc
+        collected = gc.collect()
+    rss_after = process.memory_info().rss
+    if hard_limit_mb > 0 and rss_after > hard_limit_mb * 1024 * 1024:
+        raise MemoryError(
+            f"Worker RSS {rss_after // (1024 * 1024)} MiB exceeds hard limit {hard_limit_mb} MiB"
+        )
+    return {
+        "status": "SOFT_LIMIT_EXCEEDED" if soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024 else "WITHIN_SOFT_LIMIT",
+        "rss_before_gc_bytes": rss_before,
+        "rss_bytes": rss_after,
+        "soft_limit_exceeded": bool(soft_limit_mb > 0 and rss_after > soft_limit_mb * 1024 * 1024),
+        "soft_limit_mb": soft_limit_mb,
+        "hard_limit_mb": hard_limit_mb,
+        "gc_collected": collected,
+    }
 
 
 def _plot_box_pixels(image_path: Path | None, plot_box: Any) -> tuple[int, int, int, int] | None:
@@ -1789,11 +1805,18 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
             if partial_path.exists():
                 shutil.rmtree(partial_path)
 
-    memory_limit_mb = int(options.get("memory_limit_mb", 2048))
+    memory_soft_limit_mb = int(options.get("memory_soft_limit_mb", 1434))
+    memory_hard_limit_mb = int(options.get("memory_hard_limit_mb", 1843))
+    memory_observations = []
+    def check_worker_memory():
+        observation = _check_memory_budget(memory_soft_limit_mb, memory_hard_limit_mb)
+        memory_observations.append(observation)
+        return observation
     render_scale = float(options.get("render_scale", 1.5))
-    max_render_pixels = int(options.get("max_render_pixels", 12_000_000))
+    max_render_pixels = int(options.get("max_render_pixels", 10_240_000))
+    max_render_long_edge = int(options.get("max_render_long_edge", 3200))
     temp_disk_limit_mb = int(options.get("temp_disk_limit_mb", 2048))
-    _check_memory_budget(memory_limit_mb)
+    check_worker_memory()
     context = PaperContextIndex.build(
         paper_dir, paper_output / "context",
         memory_budget_bytes=int(options.get("context_memory_budget", 500_000)),
@@ -2043,7 +2066,11 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                 with backend.open(pdf_path) as doc:
                     with doc.page(int(figure["page"])) as pdf_page:
                         page_width, page_height = pdf_page.size
-                        safe_scale = min(render_scale, (max_render_pixels / max(1, page_width * page_height)) ** 0.5)
+                        safe_scale = min(
+                            render_scale,
+                            (max_render_pixels / max(1, page_width * page_height)) ** 0.5,
+                            max_render_long_edge / max(1.0, page_width, page_height),
+                        )
                         safe_scale = max(0.25, safe_scale)
                         rendered = pdf_page.render(scale=safe_scale)
                         try:
@@ -2066,7 +2093,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                                 }
                         finally:
                             rendered.close()
-            _check_memory_budget(memory_limit_mb)
+            check_worker_memory()
             ocr_evidence = []
             ocr_status = {"status": "NOT_REQUESTED"}
             if options.get("ocr"):
@@ -2416,6 +2443,18 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
         pass1_state=semantic_pass1,
     )
     disk_usage = _paper_disk_usage(paper_output)
+    if memory_observations:
+        disk_usage["worker_memory"] = {
+            "peak_rss_bytes": max(
+                (int(item.get("rss_bytes") or 0) for item in memory_observations),
+                default=0,
+            ),
+            "soft_limit_exceeded": any(
+                item.get("soft_limit_exceeded") for item in memory_observations
+            ),
+            "observations": memory_observations,
+            "recycle_policy": "ONE_PAPER_PER_WORKER_PROCESS",
+        }
     artifacts = write_paper_artifacts(
         output_root, snapshot, figures, panels, series, status,
         semantic_artifacts=semantic_package,
@@ -2425,7 +2464,10 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
                "pdf_source": pdf_path.name if pdf_path else None,
                "native_page_evidence": native_evidence_by_page,
                "stage_fingerprint": stage_fingerprint,
-               "memory_limit_mb": memory_limit_mb, "render_scale": render_scale,
+               "memory_soft_limit_mb": memory_soft_limit_mb,
+               "memory_hard_limit_mb": memory_hard_limit_mb,
+               "max_render_long_edge": max_render_long_edge,
+               "render_scale": render_scale,
                "temp_disk_limit_mb": temp_disk_limit_mb,
                "evidence_bytes": disk_usage["evidence_bytes"],
                "context_index_bytes": disk_usage["context_index_bytes"],
