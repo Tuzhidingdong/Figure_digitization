@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from scientific_figure_data import hashing
-from scientific_figure_data.pipeline import _bounded_render_scale, _check_memory_budget
+from scientific_figure_data.pipeline import (
+    _bounded_render_scale, _check_memory_budget, _detect_offset_stacked_spectra,
+)
+from scientific_figure_data.models import SeriesPoint
 
 
 def test_render_scale_obeys_both_pixel_area_and_long_edge_limits():
@@ -94,3 +97,26 @@ def test_v21_cli_defaults_match_worker_and_overview_limits():
     assert args.memory_limit == 1843
     assert args.max_render_long_edge == 3200
     assert args.max_render_pixels == 10_240_000
+
+
+
+def test_stacked_spectrum_detection_requires_disjoint_y_bands_and_shared_x_domain():
+    first = SimpleNamespace(
+        series_id="s1",
+        points=[
+            SeriesPoint(point_index=i, x=float(i), y=1.0,
+                        pixel_x=float(i * 20), pixel_y=float(10 + i % 2))
+            for i in range(5)
+        ],
+    )
+    second = SimpleNamespace(
+        series_id="s2",
+        points=[
+            SeriesPoint(point_index=i, x=float(i), y=2.0,
+                        pixel_x=float(i * 20), pixel_y=float(30 + i % 2))
+            for i in range(5)
+        ],
+    )
+    result = _detect_offset_stacked_spectra([first, second], (0, 0, 100, 100))
+    assert result["detected"] is True
+    assert result["reason"] == "DISJOINT_VERTICAL_BANDS_WITH_SHARED_X_DOMAIN"
