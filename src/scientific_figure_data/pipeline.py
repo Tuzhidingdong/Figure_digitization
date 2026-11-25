@@ -15,7 +15,7 @@ from .axis_text import (extract_axis_labels, extract_native_numeric_axis_anchors
 from .chart_classifier import classify_chart_family
 from .context_index import PaperContextIndex
 from .entities import SubjectEntity, link_series_to_subject
-from .semantic_extraction import build_semantic_package
+from .semantic_extraction import build_semantic_package, build_semantic_pass1
 from .errors import OptionalDependencyError
 from .hashing import atomic_write_json, sha256_file, sha256_json
 from .models import AxisCalibration, JobState, PaperSnapshot, SeriesPoint, SeriesRecord, safe_id, namespaced_id
@@ -1799,6 +1799,16 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     )
     context_index_bytes = _directory_size(paper_output / "context")
     figures_raw, inventory_path = _inventory(paper_dir, snapshot)
+    semantic_figures_for_pass1 = [
+        {
+            "figure_id": safe_id(str(item.get("figure_id") or item.get("id") or f"Figure{index}")),
+            "caption": item.get("caption") or item.get("title"),
+        }
+        for index, item in enumerate(figures_raw, 1) if isinstance(item, dict)
+    ]
+    semantic_pass1 = build_semantic_pass1(
+        snapshot.paper_id, semantic_figures_for_pass1, context,
+    )
     pdf_expected = "main_pdf" not in snapshot.missing_roles
     pdf_path = locate_pdf(paper_dir, input_root, snapshot)
     pdf_integrity_issue = pdf_path is None and pdf_expected
@@ -2365,6 +2375,7 @@ def process_paper(input_root: Path, paper_relative: Path, output_root: Path,
     job_state = JobState.NEEDS_REVIEW.value if review_needed else JobState.COMPLETED.value
     semantic_package = build_semantic_package(
         snapshot.paper_id, snapshot.input_fingerprint, figures, panels, series, context,
+        pass1_state=semantic_pass1,
     )
     disk_usage = _paper_disk_usage(paper_output)
     artifacts = write_paper_artifacts(
