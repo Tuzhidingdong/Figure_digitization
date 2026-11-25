@@ -208,3 +208,15 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - Added independent reconstruction, source-pixel overlay and all-panel comparison-sheet output.
 - Scope is intentionally limited. Actual paper-image performance and Windows CI are pending; this entry does not claim scientific accuracy, general multi-panel understanding, CV/EIS, scatter or bar extraction.
 
+
+## V2.1 development branch (Draft PR #23)
+
+- Approved development baseline: dedicated branch `feature/task-plan-v2.1`, created from tested Phase 1 commit `4495a4a5d945ff7fcacc427e0f0dfd6a16c12f4c`. The base branch `fix/qc-evidence-object-contract` has since advanced by one commit; this development branch deliberately preserves the exact tested baseline.
+- Draft PR: https://github.com/Tuzhidingdong/Figure_digitization/pull/23. Do not merge until the full V2.1 plan and validation are complete and reviewed.
+- Added a pinned Chem-Literature 1.1.0 adapter using the actual `research_corpus_paired.csv` handoff, explicit upstream working-directory path resolution, authoritative `evidence_index.json.paper_id`, and SHA256 checks for MAIN PDF and media assets.
+- Added deterministic text-first sample registry Pass 1, a single OCR/series-label visual enrichment Pass 2, targeted cached-context backfill, exact-alias-only series links, atomic condition parsing, measurement candidates, and conservative cross-validation.
+- Added canonical V2.1 semantic artifacts and SQLite tables for subject entities/aliases, synthesis processes/steps, scoped conditions, measurements, series links, evidence and cross-validation. Added typed semantic model dataclasses and process-DAG cycle validation.
+- Added stacked-spectrum scale metadata. Explicit offset-stacked series force `baseline_comparable=false`; missing scale evidence remains `UNKNOWN`.
+- SQLite is configured for WAL, `synchronous=NORMAL`, and a 10-second busy timeout. The schema migration is additive and preserves existing catalog tables.
+- Added `docs/UPSTREAM_CONTRACT.md`, `schemas/v2.1_semantic_contract.schema.json`, and focused tests for upstream package validation, condition parsing, Pass 1/Pass 2 behavior, DAG cycles, schema contracts and catalog persistence.
+- CI has not yet validated the latest semantic/storage commits. Do not treat the earlier Phase 1 CI result or the earlier pre-semantic V2.1 CI run as validation of the current head.
