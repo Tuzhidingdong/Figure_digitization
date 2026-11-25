@@ -9,7 +9,7 @@ from typing import Iterable
 from .hashing import sha256_file, sha256_json
 from .models import InputArtifact, PaperSnapshot, utc_now
 
-ADAPTER_VERSION = "0.2.0"
+ADAPTER_VERSION = "2.1.0"
 
 
 def storage_paper_id(paper_id: str) -> str:
