@@ -177,7 +177,7 @@ def _scan(args) -> int:
                             f"Duplicate normalized upstream paper_id: {snapshot.paper_id!r}"
                         )
                     seen_ids.add(snapshot.paper_id)
-                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\\n")
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
                     count += 1
                 upstream_contract = {
                     "repository": "Tuzhidingdong/chem-literature",
@@ -191,7 +191,7 @@ def _scan(args) -> int:
             else:
                 for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
                     snapshot = snapshot_paper(paper_dir, input_root)
-                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\\n")
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
                     count += 1
         temporary.replace(jsonl_path)
     except Exception:
