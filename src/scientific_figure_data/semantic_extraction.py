@@ -565,7 +565,8 @@ def build_semantic_package(
         )
         caption_techniques = _techniques(figure_caption)
         technique_conflict = bool(
-            technique and caption_techniques and technique not in caption_techniques
+            technique and caption_techniques
+            and technique.casefold() not in {item.casefold() for item in caption_techniques}
         )
         checks = [{
             "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
