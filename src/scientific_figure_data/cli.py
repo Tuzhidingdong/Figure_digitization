@@ -271,6 +271,9 @@ def _run(args) -> int:
     }
     if corpus_root is not None:
         options["corpus_root"] = str(corpus_root)
+        options["upstream_paper_ids"] = {
+            str(path): package.paper_id for path, package in package_by_path.items()
+        }
     selected_states = None
     prior_fingerprints: dict[str, str] = {}
     prior_job_states: dict[str, str] = {}
