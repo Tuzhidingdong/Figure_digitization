@@ -183,13 +183,14 @@ def _resolve_main_pdf_reference(
         for value in candidates:
             resolved = value.resolve()
             if not declared.is_absolute():
-                try:
-                    resolved.relative_to(paper_dir.resolve())
-                except ValueError:
-                    try:
-                        resolved.relative_to(corpus_root.resolve())
-                    except ValueError:
-                        continue
+                allowed_roots = [paper_dir.resolve(), corpus_root.resolve()]
+                if external_path_root is not None:
+                    allowed_roots.append(external_path_root.resolve())
+                if not any(
+                    resolved == allowed or allowed in resolved.parents
+                    for allowed in allowed_roots
+                ):
+                    continue
             if resolved.is_file():
                 candidate = resolved
                 break
