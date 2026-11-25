@@ -815,7 +815,19 @@ class Catalog:
         for index, condition in enumerate(item.conditions):
             local_condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
             condition_id = namespaced_id(item.paper_id, local_condition_id)
-            value = condition.get("value") if isinstance(condition.get("value"), dict) else {}
+            raw_value = condition.get("value")
+            value = raw_value if isinstance(raw_value, dict) else {
+                "value": raw_value, "unit": condition.get("unit"),
+            }
+            condition_scope = str(condition.get("condition_scope") or "UNRESOLVED").upper()
+            if condition_scope == "UNRESOLVED":
+                # Legacy series-attached conditions are measurement-scoped by construction.
+                condition_scope = "EXPERIMENT"
+            raw_scope_id = condition.get("scope_entity_id")
+            scope_entity_id = (
+                namespaced_id(item.paper_id, str(raw_scope_id))
+                if raw_scope_id else measurement_id
+            )
             self.con.execute(
                 """INSERT OR REPLACE INTO conditions(
                    condition_id,paper_id,measurement_id,name,value_json,evidence_json,
@@ -824,16 +836,19 @@ class Catalog:
                    normalization_basis,parse_status)
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (condition_id, item.paper_id,
-                 measurement_id if condition.get("condition_scope") == "EXPERIMENT" else None,
+                 measurement_id if condition_scope == "EXPERIMENT" else None,
                  str(condition.get("raw_text") or condition.get("name", "unknown")),
                  json.dumps(value, ensure_ascii=False),
-                 json.dumps(condition.get("evidence", {}), ensure_ascii=False),
-                 condition.get("condition_scope", "UNRESOLVED"),
-                 condition.get("scope_entity_id"), value.get("value_kind", "UNKNOWN"),
+                 json.dumps(
+                     condition.get("evidence", condition.get("evidence_ids", {})),
+                     ensure_ascii=False,
+                 ),
+                 condition_scope, scope_entity_id, value.get("value_kind", "UNKNOWN"),
                  value.get("operator", "UNKNOWN"),
                  json.dumps(value.get("numeric_values", []), ensure_ascii=False),
                  json.dumps(value.get("text_values", []), ensure_ascii=False),
-                 value.get("unit_raw"), value.get("unit_canonical"),
+                 value.get("unit_raw", value.get("unit")),
+                 value.get("unit_canonical"),
                  json.dumps(value.get("uncertainty"), ensure_ascii=False),
                  value.get("normalization_basis"), value.get("parse_status", "UNRESOLVED")),
             )
