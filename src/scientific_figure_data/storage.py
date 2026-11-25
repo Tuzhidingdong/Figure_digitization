@@ -250,7 +250,7 @@ def write_paper_artifacts(
     })
     extra = extra or {}
     digitization = {
-        "schema_version": "1.0", "algorithm_version": extra.get("algorithm_version", "0.2.0"),
+        "schema_version": "1.0", "algorithm_version": extra.get("algorithm_version", "2.1.0"),
         "paper_id": snapshot.paper_id, "input_fingerprint": snapshot.input_fingerprint,
         "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
@@ -341,7 +341,7 @@ def write_paper_artifacts(
         "generated_at": utc_now(), "input_fingerprint": snapshot.input_fingerprint,
         "stage_fingerprint": extra.get("stage_fingerprint"),
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
-        "algorithm_versions": {"core": "0.1.0"}, "profile_versions": {},
+        "algorithm_versions": {"core": "2.1.0"}, "profile_versions": {},
         "status": status, "canonical_artifacts": canonical_paths, "content_hashes": hashes,
         "semantic_schema_version": "2.1" if semantic_paths else None,
         "series_count": len(series), "figure_count": len(figures), "panel_count": len(panels),
