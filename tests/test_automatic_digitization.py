@@ -1236,3 +1236,82 @@ def test_trace_specification_accepts_achromatic_candidate_family(tmp_path: Path)
     assert accepted["specification"]["color_match"]["space"] == (
         "ACHROMATIC_LUMINANCE_RANGE"
     )
+
+
+def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data import ocr
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-mixed-multiseries"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=3)
+
+    red = [
+        (x, int(222 - 104 * (x - 70) / 275))
+        for x in range(70, 346)
+    ]
+    gray_solid = [
+        (x, int(186 - 29 * (x - 70) / 275))
+        for x in range(70, 346)
+    ]
+    draw.line(red, fill=(230, 20, 30), width=3)
+    draw.line(gray_solid, fill=(112, 112, 112), width=3)
+
+    def gray_dash_y(x):
+        return int(136 - 18 * (x - 70) / 275)
+
+    for start in range(74, 342, 23):
+        end = min(start + 15, 346)
+        draw.line(
+            [(x, gray_dash_y(x)) for x in range(start, end)],
+            fill=(144, 144, 144), width=3,
+        )
+    draw.text((155, 294), "Time (s)", fill=(20, 20, 20))
+    draw.text((8, 148), "Signal (mA)", fill=(20, 20, 20))
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+        _ocr_row("Signal (mA)", 18, 155, 0.95),
+    ]
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({"figures": [{
+            "figure_id": "Figure1", "image_path": "Figure1.png",
+            "caption": "Mixed chromatic and achromatic monotonic curves.",
+            "panels": [],
+        }]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ocr, "run_ocr", lambda path: rows)
+
+    result = process_paper(
+        input_root, Path("paper-mixed-multiseries"), tmp_path / "output",
+        options={"ocr": True, "memory_limit_mb": 1024},
+    )
+    assert result["series_count"] == 3, result
+    family_types = [
+        item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        for item in result["series"]
+    ]
+    assert family_types.count("CHROMATIC") == 1, family_types
+    assert family_types.count("ACHROMATIC") == 2, family_types
+    assert all(item["metadata"]["points_count"] >= 50 for item in result["series"])
+    dashed = [
+        item for item in result["series"]
+        if item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        == "ACHROMATIC"
+        and item["metadata"].get("raster_qc", {}).get("path_segment_count", 0) >= 3
+    ]
+    assert len(dashed) == 1, result
+    assert dashed[0]["metadata"]["extraction_status"] == (
+        "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+    )
