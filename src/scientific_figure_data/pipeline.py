@@ -57,6 +57,14 @@ def algorithm_implementation_fingerprint() -> str:
             path = package_root / name
             if path.is_file():
                 files.append((name, sha256_file(path)))
+        repository_root = package_root.parents[1]
+        for relative_path in (
+            Path("schemas/v2.1_semantic_contract.schema.json"),
+            Path("schemas/gold_benchmark_manifest.schema.json"),
+        ):
+            path = repository_root / relative_path
+            if path.is_file():
+                files.append((relative_path.as_posix(), sha256_file(path)))
         _ALGORITHM_FINGERPRINT_CACHE = sha256_json(files)
     return _ALGORITHM_FINGERPRINT_CACHE
 
