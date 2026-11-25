@@ -24,6 +24,8 @@ FIELDS = [
     "normalization_provenance_json",
     "pixel_x", "pixel_y", "y_err_low", "y_err_high", "err_type",
     "subject_entity_ids_json", "subject_links_json", "conditions_json",
+    "synthesis_processes_json", "measurement_links_json", "cross_validation_json",
+    "unresolved_conditions_json",
     "compatibility_status", "compatibility_warnings_json",
     "qc_status", "review_state", "extraction_status",
     "source_manifest", "source_digitization",
@@ -63,7 +65,40 @@ def _normalized_associations(associations: dict) -> dict:
             "value": _decode_json(item.get("value_json"), {}),
             "evidence": _decode_json(item.get("evidence_json"), {}),
         })
-    return {"subject_links": subjects, "conditions": conditions}
+    processes = []
+    for item in associations.get("synthesis_processes", []):
+        process = dict(item)
+        process["evidence"] = _decode_json(process.get("evidence_json"), [])
+        process["conditions"] = [
+            {
+                **dict(condition),
+                "value": _decode_json(condition.get("value_json"), {}),
+                "evidence": _decode_json(condition.get("evidence_json"), []),
+            }
+            for condition in process.get("conditions", [])
+        ]
+        processes.append(process)
+    measurement_links = [
+        {
+            **dict(item),
+            "evidence": _decode_json(item.get("evidence_json"), []),
+        }
+        for item in associations.get("measurement_links", [])
+    ]
+    unresolved_conditions = [
+        {
+            **dict(item),
+            "value": _decode_json(item.get("value_json"), {}),
+            "evidence": _decode_json(item.get("evidence_json"), []),
+        }
+        for item in associations.get("unresolved_paper_conditions", [])
+    ]
+    return {
+        "subject_links": subjects, "conditions": conditions,
+        "synthesis_processes": processes, "measurement_links": measurement_links,
+        "cross_validation": associations.get("cross_validation"),
+        "unresolved_paper_conditions": unresolved_conditions,
+    }
 
 
 def _series_compatibility_warnings(record: dict, associations: dict, metadata: dict) -> list[str]:
@@ -269,6 +304,19 @@ def _make_row(record: dict, point: dict, associations: dict) -> dict[str, Any]:
         ),
         "conditions_json": json.dumps(
             associations.get("conditions", []), ensure_ascii=False, sort_keys=True
+        ),
+        "synthesis_processes_json": json.dumps(
+            associations.get("synthesis_processes", []), ensure_ascii=False, sort_keys=True
+        ),
+        "measurement_links_json": json.dumps(
+            associations.get("measurement_links", []), ensure_ascii=False, sort_keys=True
+        ),
+        "cross_validation_json": json.dumps(
+            associations.get("cross_validation"), ensure_ascii=False, sort_keys=True
+        ),
+        "unresolved_conditions_json": json.dumps(
+            associations.get("unresolved_paper_conditions", []),
+            ensure_ascii=False, sort_keys=True,
         ),
         "compatibility_status": "NOT_HARMONIZED",
         "compatibility_warnings_json": json.dumps(warnings, ensure_ascii=False),
