@@ -787,7 +787,14 @@ def _extract_panel(
                 candidates.extend({
                     **candidate, "family_type": "CHROMATIC",
                 } for candidate in chromatic_detection.get("families", []))
-            if achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY":
+            chromatic_family_count = int(
+                chromatic_detection.get("family_count", len(chromatic_detection.get("families", [])))
+            )
+            achromatic_routing_allowed = chromatic_family_count <= 1
+            if (
+                achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                and achromatic_routing_allowed
+            ):
                 candidates.extend({
                     **candidate, "family_type": "ACHROMATIC",
                 } for candidate in achromatic_detection.get("families", []))
@@ -801,6 +808,13 @@ def _extract_panel(
                 "families": candidates,
                 "chromatic_detection": chromatic_detection,
                 "achromatic_detection": achromatic_detection,
+                "achromatic_routing": {
+                    "status": (
+                        "ROUTED" if achromatic_routing_allowed
+                        else "NOT_ROUTED_MULTIPLE_CHROMATIC_FAMILIES_NEEDS_REVIEW"
+                    ),
+                    "chromatic_family_count": chromatic_family_count,
+                },
                 "acceptance_note": (
                     "Candidates require independent connected-path and review validation"
                 ),
@@ -821,7 +835,10 @@ def _extract_panel(
                         plot_box=tuple(pre_plot_box_pixels),
                         color_match=candidate.get("color_match"),
                         preserve_partial_fragments=is_achromatic,
-                        associate_full_span_fragments=True,
+                        associate_full_span_fragments=(
+                            achromatic_routing_allowed
+                            and achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                        ),
                     )
                     branch_count = (
                         int(branch_detection.get("branch_count", 1))
@@ -847,6 +864,10 @@ def _extract_panel(
                         )
                         definition["_auto_candidate_inventory"] = candidate_inventory
                         definition["_auto_preserve_partial_fragments"] = is_achromatic
+                        definition["_auto_associate_full_span_fragments"] = (
+                            achromatic_routing_allowed
+                            and achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                        )
                         definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
                         definition["_auto_plot_detection"] = pre_plot_detection
                         definition["_auto_trace_branch_detection"] = branch_detection
@@ -1726,7 +1747,9 @@ def _extract_panel(
                 preserve_partial_fragments=bool(
                     definition.get("_auto_preserve_partial_fragments", False)
                 ),
-                associate_full_span_fragments=True,
+                associate_full_span_fragments=bool(
+                    definition.get("_auto_associate_full_span_fragments", False)
+                ),
             )
             if definition.get("_auto_trace_branch_detection"):
                 qc["branch_detection"] = definition["_auto_trace_branch_detection"]
