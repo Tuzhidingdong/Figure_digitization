@@ -305,8 +305,16 @@ def _segment_statement(text: str) -> list[str]:
     return clauses or ([str(text).strip()] if str(text).strip() else [])
 
 
-def _condition_name(text: str, start: int) -> str:
+def _condition_name(text: str, start: int, unit_canonical: str | None = None) -> str:
     prefix = text[max(0, start - 90):start].casefold()
+    if unit_canonical in {"degC", "K"}:
+        return "temperature"
+    if unit_canonical in {"h", "min", "s"}:
+        return "duration"
+    if unit_canonical in {"mg/L", "g/L", "mol/L", "mmol/L", "umol/L"}:
+        return "concentration"
+    if unit_canonical in {"A/g", "mA/cm2"} and "density" in prefix:
+        return "current_density"
     candidates = [
         ("scan_rate", ("scan rate", "sweep rate")),
         ("current_density", ("current density",)),
@@ -565,7 +573,10 @@ def build_semantic_package(
                             "condition",
                             f"{paper_id}|{scope}|{evidence_id}|{quantity['start']}|{quantity['raw_text']}",
                         )
-                        condition_name = _condition_name(snippet, quantity["start"])
+                        condition_name = _condition_name(
+                            snippet, quantity["start"],
+                            quantity["value"].get("unit_canonical"),
+                        )
                         conditions.append({
                             "condition_id": condition_id, "paper_id": paper_id,
                             "condition_scope": scope, "scope_entity_id": scope_entity_id,
