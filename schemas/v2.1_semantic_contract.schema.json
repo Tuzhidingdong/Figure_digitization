@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tuzhidingdong.github.io/Figure_digitization/schemas/v2.1_semantic_contract.schema.json",
+  "title": "Scientific Figure Data V2.1 semantic contract",
+  "type": "object",
+  "required": [
+    "schema_version", "paper_id", "caption_semantics", "sample_registry",
+    "synthesis_processes", "measurements", "conditions",
+    "series_subject_links", "series_measurement_links", "cross_validation"
+  ],
+  "properties": {
+    "schema_version": { "const": "2.1" },
+    "paper_id": { "type": "string", "minLength": 1 },
+    "caption_semantics": { "type": "array", "items": { "type": "object" } },
+    "sample_registry": {
+      "type": "object",
+      "required": ["pass1_status", "pass2_status", "pass2_fingerprint", "subjects", "sample_process_steps"],
+      "properties": {
+        "pass1_status": { "const": "PROVISIONAL" },
+        "pass2_status": { "const": "COMPLETED_ONCE" },
+        "pass2_fingerprint": { "$ref": "#/$defs/sha256" },
+        "pass2_new_visual_names": { "type": "array", "items": { "type": "string" } },
+        "subjects": { "type": "array", "items": { "$ref": "#/$defs/SubjectEntity" } },
+        "sample_process_steps": { "type": "array", "items": { "$ref": "#/$defs/SampleProcessStep" } }
+      },
+      "additionalProperties": true
+    },
+    "synthesis_processes": { "type": "array", "items": { "$ref": "#/$defs/SynthesisProcess" } },
+    "measurements": { "type": "array", "items": { "$ref": "#/$defs/Measurement" } },
+    "conditions": { "type": "array", "items": { "$ref": "#/$defs/Condition" } },
+    "series_subject_links": { "type": "array", "items": { "$ref": "#/$defs/SeriesSubjectLink" } },
+    "series_measurement_links": { "type": "array", "items": { "$ref": "#/$defs/SeriesMeasurementLink" } },
+    "cross_validation": {
+      "type": "object",
+      "required": ["status", "results"],
+      "properties": {
+        "status": { "type": "string" },
+        "results": { "type": "array", "items": { "$ref": "#/$defs/CrossValidationResult" } }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "ConditionValue": {
+      "type": "object",
+      "required": [
+        "raw_text", "value_kind", "operator", "numeric_values", "text_values",
+        "unit_raw", "unit_canonical", "uncertainty", "normalization_basis", "parse_status"
+      ],
+      "properties": {
+        "raw_text": { "type": "string" },
+        "value_kind": { "enum": ["QUANTITY", "TEXT", "BOOLEAN", "LIST", "UNKNOWN"] },
+        "operator": { "enum": ["EQ", "LT", "LTE", "GT", "GTE", "APPROX", "RANGE", "LIST", "UNKNOWN"] },
+        "numeric_values": { "type": "array", "items": { "type": "number" } },
+        "text_values": { "type": "array", "items": { "type": "string" } },
+        "unit_raw": { "type": ["string", "null"] },
+        "unit_canonical": { "type": ["string", "null"] },
+        "uncertainty": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "object", "required": ["value"], "properties": {
+              "value": { "type": "number" }, "unit_raw": { "type": ["string", "null"] }
+            }}
+          ]
+        },
+        "normalization_basis": { "type": ["string", "null"] },
+        "parse_status": { "enum": ["PARSED", "TEXT_PRESERVED", "UNRESOLVED"] }
+      }
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "required": ["evidence_id", "source_type", "source_path", "snippet"],
+      "properties": {
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "source_type": { "type": "string" },
+        "source_path": { "type": ["string", "null"] },
+        "source_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "page_number": { "type": ["integer", "null"], "minimum": 1 },
+        "figure_id": { "type": ["string", "null"] },
+        "panel_id": { "type": ["string", "null"] },
+        "line_number": { "type": ["integer", "null"], "minimum": 1 },
+        "snippet": { "type": "string" },
+        "parser_version": { "type": ["string", "null"] }
+      }
+    },
+    "SubjectEntity": {
+      "type": "object",
+      "required": ["subject_entity_id", "canonical_name", "entity_kind", "aliases", "resolution_status", "evidence"],
+      "properties": {
+        "subject_entity_id": { "type": "string", "minLength": 1 },
+        "canonical_name": { "type": "string", "minLength": 1 },
+        "entity_kind": { "enum": ["SAMPLE", "MATERIAL", "ANALYTE", "PRODUCT", "ELECTRODE", "CATALYST", "OTHER"] },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "composition": { "type": ["object", "null"] },
+        "preparation_variant": { "type": ["object", "null"] },
+        "resolution_status": { "type": "string" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/EvidenceItem" } }
+      }
+    },
+    "SynthesisProcess": {
+      "type": "object",
+      "required": ["process_id", "paper_id", "method_text", "evidence_ids", "process_status", "condition_ids"],
+      "properties": {
+        "process_id": { "type": "string" },
+        "paper_id": { "type": "string" },
+        "method_text": { "type": "string" },
+        "process_type": { "type": ["string", "null"] },
+        "input_materials": { "type": "array", "items": { "type": "object" } },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "condition_ids": { "type": "array", "items": { "type": "string" } },
+        "process_status": { "type": "string" }
+      }
+    },
+    "SampleProcessStep": {
+      "type": "object",
+      "required": ["sample_id", "process_id", "step_order", "step_role", "evidence_id", "scope_status"],
+      "properties": {
+        "sample_id": { "type": "string" },
+        "process_id": { "type": "string" },
+        "step_order": { "type": "integer", "minimum": 1 },
+        "step_role": { "type": "string" },
+        "input_output_role": { "type": ["string", "null"] },
+        "evidence_id": { "type": "string" },
+        "scope_status": { "type": "string" }
+      }
+    },
+    "Condition": {
+      "type": "object",
+      "required": ["condition_id", "paper_id", "condition_scope", "scope_entity_id", "scope_status", "raw_text", "value", "evidence_ids", "parse_status"],
+      "properties": {
+        "condition_id": { "type": "string" },
+        "paper_id": { "type": "string" },
+        "condition_scope": { "enum": ["SYNTHESIS", "EXPERIMENT"] },
+        "scope_entity_id": { "type": ["string", "null"] },
+        "scope_status": { "type": "string" },
+        "raw_text": { "type": "string" },
+        "value": { "$ref": "#/$defs/ConditionValue" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "parse_status": { "type": "string" }
+      }
+    },
+    "Measurement": {
+      "type": "object",
+      "required": ["measurement_id", "paper_id", "technique", "scope_status", "evidence_ids", "condition_ids"],
+      "properties": {
+        "measurement_id": { "type": "string" },
+        "paper_id": { "type": "string" },
+        "figure_id": { "type": ["string", "null"] },
+        "technique": { "type": "string" },
+        "measurement_role": { "type": ["string", "null"] },
+        "subject_roles": { "type": "array", "items": { "type": "string" } },
+        "scope_status": { "type": "string" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } },
+        "condition_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "SeriesSubjectLink": {
+      "type": "object",
+      "required": ["series_id", "subject_entity_id", "subject_role", "link_status", "evidence_ids"],
+      "properties": {
+        "series_id": { "type": "string" },
+        "subject_entity_id": { "type": ["string", "null"] },
+        "subject_role": { "type": "string" },
+        "link_status": { "type": "string" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "SeriesMeasurementLink": {
+      "type": "object",
+      "required": ["series_id", "measurement_id", "measurement_role", "link_status", "evidence_ids"],
+      "properties": {
+        "series_id": { "type": "string" },
+        "measurement_id": { "type": ["string", "null"] },
+        "measurement_role": { "type": "string" },
+        "link_status": { "type": "string" },
+        "evidence_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "StackedAxisSemantics": {
+      "type": "object",
+      "required": ["scale_type", "baseline_comparable"],
+      "properties": {
+        "scale_type": { "enum": ["ABSOLUTE", "NORMALIZED", "ARBITRARY_RELATIVE", "ARBITRARY_OFFSET_STACKED", "UNKNOWN"] },
+        "baseline_comparable": { "type": "boolean" },
+        "offset_value": { "type": ["number", "null"] },
+        "normalization_provenance": { "type": ["object", "null"] }
+      },
+      "allOf": [{
+        "if": { "properties": { "scale_type": { "const": "ARBITRARY_OFFSET_STACKED" } }, "required": ["scale_type"] },
+        "then": { "properties": { "baseline_comparable": { "const": false } } }
+      }]
+    },
+    "CrossValidationResult": {
+      "type": "object",
+      "required": ["series_id", "status", "checks", "unresolved_fields"],
+      "properties": {
+        "series_id": { "type": "string" },
+        "status": { "type": "string" },
+        "checks": { "type": "array", "items": { "type": "object" } },
+        "unresolved_fields": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
