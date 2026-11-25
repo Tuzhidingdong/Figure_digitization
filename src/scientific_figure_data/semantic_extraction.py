@@ -477,7 +477,8 @@ def build_semantic_package(
             measurements[measurement_id] = {
                 "measurement_id": measurement_id, "paper_id": paper_id,
                 "figure_id": figure.get("figure_id"), "technique": technique,
-                "scope_status": "CAPTION_CANDIDATE", "evidence_ids": [evidence_id],
+                "scope_status": "CAPTION_CANDIDATE", "measurement_role": "MEASUREMENT_EVENT",
+                "subject_roles": [], "evidence_ids": [evidence_id],
                 "evidence": [evidence_item], "condition_ids": [],
             }
 
@@ -549,6 +550,7 @@ def build_semantic_package(
                             "measurement_id": measurement_id, "paper_id": paper_id,
                             "figure_id": None, "technique": technique,
                             "scope_status": "TEXT_CANDIDATE",
+                            "measurement_role": "MEASUREMENT_EVENT", "subject_roles": [],
                             "evidence_ids": [evidence_id],
                             "evidence": [{
                                 "evidence_id": evidence_id, "source_type": "EXTRACTED_TEXT",
