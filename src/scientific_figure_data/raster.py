@@ -958,11 +958,14 @@ def _path_branch_groups(
 
 def _group_achromatic_fragment_tracks(
     groups: list[list[dict]], *, plot_width: int, plot_height: int,
+    include_full_span_fragments: bool = False,
 ) -> tuple[list[list[dict]], list[dict], dict]:
-    """Associate disconnected dash fragments only when local geometry is unique.
+    """Associate disconnected raster fragments only when local geometry is unique.
 
-    Original pixel paths remain separate segments. No pixels are inserted across
-    the gaps. Ambiguous, short, or poorly supported fragments remain diagnostics.
+    Local dashed fragments require chains of at least three segments. Optionally,
+    two full-span fragments may be grouped when a short occlusion gap and
+    reciprocal endpoint/tangent evidence uniquely support the continuation.
+    Original pixel paths remain separate segments; no pixels are inserted.
     """
     full_groups = [
         group for group in groups
@@ -979,8 +982,11 @@ def _group_achromatic_fragment_tracks(
             or (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
         )
     ]
+    candidate_items = [(item, False) for item in partial_items]
+    if include_full_span_fragments:
+        candidate_items.extend((group[0], True) for group in full_groups)
 
-    def describe(item: dict) -> dict | None:
+    def describe(item: dict, *, full_span_fragment: bool = False) -> dict | None:
         path = item.get("path") or []
         if len(path) < 8:
             return None
@@ -1013,11 +1019,12 @@ def _group_achromatic_fragment_tracks(
             "y1": sum(point[1] for point in end) / len(end),
             "slope_start": slope(start),
             "slope_end": slope(end),
+            "full_span_fragment": bool(full_span_fragment),
         }
 
     descriptions = [
-        description for item in partial_items
-        if (description := describe(item)) is not None
+        description for item, is_full_span in candidate_items
+        if (description := describe(item, full_span_fragment=is_full_span)) is not None
     ]
     max_gap = max(8, int(round(plot_width * 0.05)))
     residual_limit = max(4.0, plot_height * 0.02)
@@ -1026,12 +1033,13 @@ def _group_achromatic_fragment_tracks(
     def unassigned_rows() -> list[dict]:
         return [
             {
-                "bbox": [int(value) for value in item.get("bbox", [])],
-                "point_count": int(item.get("pixel_count", 0)),
-                "path_kind": item.get("path_kind"),
-                "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_DASH_TRACK",
+                "bbox": [int(value) for value in description["component"].get("bbox", [])],
+                "point_count": int(description["component"].get("pixel_count", 0)),
+                "path_kind": description["component"].get("path_kind"),
+                "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_TRACK",
             }
-            for item in descriptions
+            for description in descriptions
+            if not description["full_span_fragment"]
         ]
 
     # A dense neutral pool can contain text, ticks and annotations. Fail closed
@@ -1132,7 +1140,13 @@ def _group_achromatic_fragment_tracks(
             if cursor not in successors:
                 break
             cursor = successors[cursor]
-        if len(chain) >= 3:
+        dashed_chain_supported = len(chain) >= 3
+        occlusion_chain_supported = (
+            include_full_span_fragments
+            and len(chain) >= 2
+            and all(descriptions[index]["full_span_fragment"] for index in chain)
+        )
+        if dashed_chain_supported or occlusion_chain_supported:
             x_start = min(descriptions[index]["x0"] for index in chain)
             x_end = max(descriptions[index]["x1"] for index in chain)
             coverage = (x_end - x_start) / max(1, plot_width)
@@ -1160,16 +1174,30 @@ def _group_achromatic_fragment_tracks(
     tracked_indexes = {
         index for chain in chains for index in chain["component_indexes"]
     }
+    tracked_full_span_ids = {
+        id(descriptions[index]["component"])
+        for index in tracked_indexes
+        if descriptions[index]["full_span_fragment"]
+    }
     for chain in chains:
         tracks.append([
             descriptions[index]["component"]
             for index in chain["component_indexes"]
         ])
     unassigned = [
-        row for index, row in enumerate(unassigned_rows())
-        if index not in tracked_indexes
+        {
+            "bbox": [int(value) for value in descriptions[index]["component"].get("bbox", [])],
+            "point_count": int(descriptions[index]["component"].get("pixel_count", 0)),
+            "path_kind": descriptions[index]["component"].get("path_kind"),
+            "reason": "FRAGMENT_NOT_PART_OF_UNIQUE_SUPPORTED_TRACK",
+        }
+        for index, description in enumerate(descriptions)
+        if not description["full_span_fragment"] and index not in tracked_indexes
     ]
-    result_groups = full_groups + tracks
+    remaining_full_groups = [
+        group for group in full_groups if id(group[0]) not in tracked_full_span_ids
+    ]
+    result_groups = remaining_full_groups + tracks
     result_groups.sort(key=lambda group: (
         min(int(item.get("bbox", [0, 0, 0, 0])[0]) for item in group),
         min(int(item.get("bbox", [0, 0, 0, 0])[1]) for item in group),
@@ -1178,6 +1206,9 @@ def _group_achromatic_fragment_tracks(
     diagnostics = {
         "status": "TRACKS_FOUND" if tracks else "NO_UNIQUE_DASH_TRACK",
         "partial_component_count": len(partial_items),
+        "full_span_fragment_count": sum(
+            1 for item in descriptions if item["full_span_fragment"]
+        ),
         "described_fragment_count": len(descriptions),
         "candidate_pair_count": candidate_pair_count,
         "candidate_pair_limit": max_candidate_pairs,
