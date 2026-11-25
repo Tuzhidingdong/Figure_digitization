@@ -9,6 +9,8 @@ from typing import Any, Iterable
 
 UNIT_CANONICAL = {
     "°c": "degC", "℃": "degC", "k": "K",
+    "mv s−1": "mV/s", "mv/s": "mV/s", "a g−1": "A/g",
+    "ma cm−2": "mA/cm2", "ml min−1": "mL/min",
     "h": "h", "hr": "h", "hour": "h", "hours": "h",
     "min": "min", "minute": "min", "minutes": "min",
     "s": "s", "sec": "s", "second": "s", "seconds": "s",
@@ -27,6 +29,10 @@ UNIT_PATTERN = (
     r"min|minutes?|s|sec|seconds?|wt\\.%|%|rpm|bar|MPa|mL\\s*min(?:\\^?-?1|−1)?"
 )
 NUMBER = r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?"
+LIST_QUANTITY_RE = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<expr>{NUMBER}(?:\\s*,\\s*{NUMBER}){{2,}}\\s*(?:{UNIT_PATTERN}))",
+    re.IGNORECASE,
+)
 QUANTITY_RE = re.compile(
     rf"(?<![A-Za-z0-9])(?P<expr>(?:<=|>=|<|>|≤|≥|~|≈|about\\s+)?\\s*{NUMBER}"
     rf"(?:\\s*(?:–|—|-|to)\\s*{NUMBER})?"
@@ -156,10 +162,12 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
 
 def extract_quantity_expressions(text: str) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
+    matches = list(LIST_QUANTITY_RE.finditer(text)) + list(QUANTITY_RE.finditer(text))
+    matches.sort(key=lambda match: (match.start("expr"), -(match.end("expr") - match.start("expr"))))
     seen: set[tuple[int, int]] = set()
-    for match in QUANTITY_RE.finditer(text):
+    for match in matches:
         span = match.span("expr")
-        if span in seen:
+        if any(not (span[1] <= old_start or span[0] >= old_end) for old_start, old_end in seen):
             continue
         seen.add(span)
         parsed = parse_condition_value(match.group("expr"))
@@ -168,7 +176,7 @@ def extract_quantity_expressions(text: str) -> list[dict[str, Any]]:
                 "start": span[0], "end": span[1], "raw_text": match.group("expr"),
                 "value": asdict(parsed),
             })
-    return found
+    return sorted(found, key=lambda item: item["start"])
 
 
 def segment_caption(caption: str | None) -> list[dict[str, Any]]:
@@ -323,10 +331,27 @@ def build_semantic_package(
                 ),
             })
 
+    # Caption-derived measurement candidates are figure-scoped, not copied to every series.
+    measurements: dict[str, dict[str, Any]] = {}
+    for figure in figures:
+        caption = str(figure.get("caption") or "")
+        for technique in _techniques(caption):
+            evidence_id = _evidence_id(
+                paper_id, f"caption:{figure.get('figure_id')}", 0, caption,
+            )
+            measurement_id = stable_id(
+                "measurement", f"{paper_id}|{figure.get('figure_id')}|{technique}",
+            )
+            measurements[measurement_id] = {
+                "measurement_id": measurement_id, "paper_id": paper_id,
+                "figure_id": figure.get("figure_id"), "technique": technique,
+                "scope_status": "CAPTION_CANDIDATE", "evidence_ids": [evidence_id],
+                "condition_ids": [],
+            }
+
     # Build source-backed process and atomic condition candidates.
     synthesis_processes: list[dict[str, Any]] = []
     conditions: list[dict[str, Any]] = []
-    measurements: dict[str, dict[str, Any]] = {}
     sample_steps: list[dict[str, Any]] = []
     for key, entity in text_candidates.items():
         aliases = entity["aliases"]
@@ -357,6 +382,7 @@ def build_semantic_package(
                     "technique": technique, "scope_status": "CANDIDATE",
                     "evidence_ids": [evidence_id], "condition_ids": [],
                 })
+            process_id = None
             if scope == "SYNTHESIS":
                 process_id = stable_id("process", f"{paper_id}|{entity['subject_entity_id']}|{evidence_id}")
                 step_order += 1
@@ -371,9 +397,15 @@ def build_semantic_package(
                     "evidence_id": evidence_id, "scope_status": "SOURCE_BACKED_CANDIDATE",
                 })
             if scope in {"SYNTHESIS", "EXPERIMENT"}:
+                statement_measurements = [
+                    item for item in measurements.values()
+                    if item.get("technique") in techniques
+                    and item.get("technique") is not None
+                ]
                 scope_entity_id = (
-                    entity["subject_entity_id"] if scope == "SYNTHESIS"
-                    else next(iter(measurements), None)
+                    process_id if scope == "SYNTHESIS"
+                    else statement_measurements[0]["measurement_id"]
+                    if len(statement_measurements) == 1 else None
                 )
                 for quantity in extract_quantity_expressions(snippet):
                     condition_id = stable_id(
@@ -382,6 +414,7 @@ def build_semantic_package(
                     conditions.append({
                         "condition_id": condition_id, "paper_id": paper_id,
                         "condition_scope": scope, "scope_entity_id": scope_entity_id,
+                        "scope_status": "LINKED" if scope_entity_id else "UNRESOLVED_TARGET",
                         "raw_text": quantity["raw_text"], "value": quantity["value"],
                         "evidence_ids": [evidence_id], "parse_status": quantity["value"]["parse_status"],
                     })
@@ -471,8 +504,35 @@ def build_semantic_package(
                 "entity_type": "SAMPLE", "role_in_series": subject["subject_role"],
                 "status": subject["link_status"], "evidence": {"evidence_ids": subject["evidence_ids"]},
             }]
+        measurement_link = next(
+            (item for item in series_measurement_links
+             if item["series_id"] == record.series_id and item.get("measurement_id")),
+            None,
+        )
+        if measurement_link:
+            record.measurement_id = measurement_link["measurement_id"]
+        related_scope_ids = {
+            item.get("scope_entity_id") for item in conditions if item.get("scope_entity_id")
+        }
+        related_ids = {
+            subject.get("subject_entity_id") if subject else None,
+            measurement_link.get("measurement_id") if measurement_link else None,
+        }
+        record.conditions = [
+            item for item in conditions
+            if item.get("scope_entity_id") in related_ids
+        ]
         record.metadata["semantic_pass2_fingerprint"] = pass2_fingerprint
         record.metadata["semantic_subject_link_status"] = subject["link_status"] if subject else "UNASSIGNED"
+        record.metadata["scale_type"] = (
+            "ARBITRARY_OFFSET_STACKED"
+            if record.metadata.get("vertical_offset") is not None
+            or record.metadata.get("stacked_offset") is not None
+            else "UNKNOWN"
+        )
+        record.metadata["baseline_comparable"] = (
+            False if record.metadata["scale_type"] == "ARBITRARY_OFFSET_STACKED" else None
+        )
 
     return {
         "schema_version": "2.1", "paper_id": paper_id,
