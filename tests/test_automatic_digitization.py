@@ -1094,3 +1094,106 @@ def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path)
         }
         for item in records
     ]
+
+
+
+def test_achromatic_family_traces_gray_solid_and_dashed_as_separate_series(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_achromatic_trace_family
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    image_path = tmp_path / "gray_solid_dashed_and_grid.png"
+    image = Image.new("RGB", (420, 280), "white")
+    draw = ImageDraw.Draw(image)
+    # The crop contains the true plot boundaries. They must not be proposed
+    # as trace paths after the narrow boundary exclusion.
+    draw.rectangle((30, 25, 390, 245), outline=(25, 25, 25), width=3)
+    plot_box = (30, 25, 390, 245)
+
+    solid = [
+        (x, int(177 - 25 * (x - 48) / 310))
+        for x in range(48, 360)
+    ]
+    draw.line(solid, fill=(112, 112, 112), width=3)
+
+    # Same neutral hue, but a separate dashed trace. Gaps are source gaps:
+    # the extractor may group the fragments, but may not paint/interpolate them.
+    dash_y = lambda x: int(119 - 13 * (x - 54) / 292)
+    for start in range(54, 348, 25):
+        end = min(start + 17, 348)
+        draw.line(
+            [(x, dash_y(x)) for x in range(start, end)],
+            fill=(142, 142, 142), width=3,
+        )
+
+    # A genuine neutral horizontal grid line is intentionally included.
+    # It can be inventoried, but the extracted result must remain review-only.
+    draw.line((35, 76, 385, 76), fill=(194, 194, 194), width=2)
+    image.save(image_path)
+
+    family = detect_achromatic_trace_family(image_path, plot_box)
+    assert family["status"] == "UNIQUE_ACHROMATIC_FAMILY", family
+    assert family["families"][0]["family_type"] == "ACHROMATIC"
+    match = family["families"][0]
+    detected = detect_monotonic_color_branches(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        plot_box=plot_box, color_match=match["color_match"],
+        preserve_partial_fragments=True,
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 3, detected
+    assert detected["partial_fragment_tracking"]["track_count"] >= 1
+    assert detected["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+
+    branch_rows = detected["branches"]
+    dashed_index = next(
+        index for index, row in enumerate(branch_rows)
+        if len(row.get("path_segments", [])) >= 3
+    )
+    dash_points, dash_qc = trace_monotonic_color(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        None, None, plot_box=plot_box, color_match=match["color_match"],
+        branch_index=dashed_index, branch_count=len(branch_rows),
+        preserve_partial_fragments=True,
+    )
+    assert dash_qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", dash_qc
+    assert dash_qc["path_segment_count"] >= 3, dash_qc
+    assert dash_qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+    assert len(dash_points) == sum(
+        segment["point_count"] for segment in dash_qc["path_segments"]
+    )
+
+    grid_index = next(
+        index for index, row in enumerate(branch_rows)
+        if row["x_span"] >= 0.60 * (plot_box[2] - plot_box[0])
+        and row["y_span"] <= 2
+    )
+    _, grid_qc = trace_monotonic_color(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        None, None, plot_box=plot_box, color_match=match["color_match"],
+        branch_index=grid_index, branch_count=len(branch_rows),
+        preserve_partial_fragments=True,
+    )
+    assert grid_qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", grid_qc
+    assert grid_qc["achromatic_geometry_review"]["horizontal_gridline_like"] is True
+    assert grid_qc["review_required"] is True
+
+
+def test_achromatic_candidate_does_not_claim_a_curve_when_neutral_pixels_are_absent(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_achromatic_trace_family
+
+    image_path = tmp_path / "chromatic_only.png"
+    image = Image.new("RGB", (220, 160), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((20, 120, 200, 35), fill=(225, 25, 35), width=3)
+    image.save(image_path)
+
+    result = detect_achromatic_trace_family(image_path, (10, 10, 210, 150))
+    assert result["status"] == "NEEDS_REVIEW"
+    assert result["reason"] == "INSUFFICIENT_ACHROMATIC_TRACE_PIXELS"
+    assert result["families"] == []
