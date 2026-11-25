@@ -223,8 +223,8 @@ def evaluate_gold_benchmark(
         }
 
     development_metrics = predictions.get("development_metrics", {})
-    metrics = predictions.get("blind_held_out_metrics") or predictions.get("metrics", {})
-    if not metrics:
+    metrics = predictions.get("blind_held_out_metrics")
+    if not isinstance(metrics, dict) or not metrics:
         return {
             "status": "NOT_EVALUATED",
             "reason": "BLIND_HELD_OUT_METRICS_NOT_SUPPLIED",
