@@ -130,7 +130,7 @@
       "properties": {
         "condition_id": { "type": "string" },
         "paper_id": { "type": "string" },
-        "condition_scope": { "enum": ["SYNTHESIS", "EXPERIMENT"] },
+        "condition_scope": { "enum": ["SYNTHESIS", "EXPERIMENT", "UNRESOLVED"] },
         "scope_entity_id": { "type": ["string", "null"] },
         "scope_status": { "type": "string" },
         "raw_text": { "type": "string" },
