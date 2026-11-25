@@ -460,7 +460,7 @@ def build_semantic_package(
                     })
             process_id = None
             if scope == "SYNTHESIS":
-                process_id = stable_id("process", f"{paper_id}|{entity['subject_entity_id']}|{evidence_id}")
+                process_id = stable_id("process", f"{paper_id}|{evidence_id}")
                 step_order += 1
                 synthesis_processes.append({
                     "process_id": process_id, "paper_id": paper_id,
@@ -558,21 +558,52 @@ def build_semantic_package(
                 "measurement_role": "UNKNOWN", "link_status": "UNRESOLVED",
                 "evidence_ids": [],
             })
+        figure_caption = next(
+            (str(item.get("caption") or "") for item in figures
+             if item.get("figure_id") == record.figure_id),
+            "",
+        )
+        caption_techniques = _techniques(figure_caption)
+        technique_conflict = bool(
+            technique and caption_techniques and technique not in caption_techniques
+        )
+        checks = [{
+            "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
+            "status": link["link_status"],
+            "evidence_ids": link["evidence_ids"],
+        }]
+        if technique and caption_techniques:
+            checks.append({
+                "check": "SERIES_TECHNIQUE_TO_CAPTION",
+                "status": "CONFLICT" if technique_conflict else "CONSISTENT",
+                "series_technique": technique,
+                "caption_techniques": caption_techniques,
+            })
         cross_validation.append({
             "series_id": record.series_id,
-            "status": "CONSISTENT_WITH_AVAILABLE_EVIDENCE"
+            "status": "CONFLICT" if technique_conflict else
+            "CONSISTENT_WITH_AVAILABLE_EVIDENCE"
             if link["link_status"] == "MATCHED_EXACT_ALIAS"
             else "UNRESOLVED",
-            "checks": [{
-                "check": "SERIES_LABEL_TO_SAMPLE_ALIAS",
-                "status": link["link_status"],
-                "evidence_ids": link["evidence_ids"],
-            }],
+            "checks": checks,
             "unresolved_fields": (
+                ["technique"] if technique_conflict else
                 [] if link["link_status"] == "MATCHED_EXACT_ALIAS"
                 else ["subject_entity_id"]
             ),
         })
+
+    # Deduplicate shared process/condition nodes while preserving multiple sample-step links.
+    synthesis_processes = list({
+        item["process_id"]: item for item in synthesis_processes
+    }.values())
+    conditions = list({
+        item["condition_id"]: item for item in conditions
+    }.values())
+    sample_steps = list({
+        (item["sample_id"], item["process_id"], item["step_order"]): item
+        for item in sample_steps
+    }.values())
 
     # A pass-2 fingerprint is recorded once; this function has no recursive retry path.
     pass2_fingerprint = hashlib.sha256(json.dumps({
@@ -669,7 +700,7 @@ def build_semantic_package(
         "targeted_condition_backfill": targeted_backfill,
         "cross_validation": {
             "status": "COMPLETED_WITH_UNRESOLVED" if any(
-                item["status"] == "UNRESOLVED" for item in cross_validation
+                item["status"] in {"UNRESOLVED", "CONFLICT"} for item in cross_validation
             ) else "CONSISTENT_WITH_AVAILABLE_EVIDENCE",
             "results": cross_validation,
         },
