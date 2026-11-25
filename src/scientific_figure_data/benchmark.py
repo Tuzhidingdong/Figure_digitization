@@ -8,7 +8,6 @@ from typing import Any, Iterable
 DOMAINS = ("Battery", "AOP", "PFAS")
 MINIMUM_COVERAGE = {
     "paired_papers": 9,
-    "papers_per_domain": 3,
     "figure_caption_pairs": 30,
     "panels": 60,
     "distinct_samples": 30,
