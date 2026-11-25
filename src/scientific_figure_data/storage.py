@@ -141,6 +141,7 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
 def write_paper_artifacts(
     output_root: Path, snapshot: PaperSnapshot, figures: list[dict], panels: list[dict],
     series: list[SeriesRecord], status: str, extra: dict | None = None,
+    semantic_artifacts: dict | None = None,
 ) -> dict:
     paper_root = output_root / "papers" / snapshot.paper_id
     (paper_root / "evidence").mkdir(parents=True, exist_ok=True)
@@ -173,6 +174,52 @@ def write_paper_artifacts(
     }
     atomic_write_json(paper_root / "digitization.json", digitization)
 
+    semantic_artifacts = semantic_artifacts or {}
+    semantic_paths = []
+    if semantic_artifacts:
+        caption_path = paper_root / "caption_semantics.json"
+        registry_path = paper_root / "sample_registry.json"
+        process_path = paper_root / "synthesis_processes.json"
+        experiment_path = paper_root / "experiments.json"
+        cross_validation_path = paper_root / "cross_validation.json"
+        atomic_write_json(caption_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            "figures": semantic_artifacts.get("caption_semantics", []),
+        })
+        atomic_write_json(registry_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            **semantic_artifacts.get("sample_registry", {}),
+            "series_subject_links": semantic_artifacts.get("series_subject_links", []),
+        })
+        all_conditions = semantic_artifacts.get("conditions", [])
+        atomic_write_json(process_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            "processes": semantic_artifacts.get("synthesis_processes", []),
+            "sample_process_steps": semantic_artifacts.get("sample_registry", {}).get(
+                "sample_process_steps", []
+            ),
+            "conditions": [
+                item for item in all_conditions if item.get("condition_scope") == "SYNTHESIS"
+            ],
+        })
+        atomic_write_json(experiment_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            "measurements": semantic_artifacts.get("measurements", []),
+            "series_measurement_links": semantic_artifacts.get("series_measurement_links", []),
+            "conditions": [
+                item for item in all_conditions if item.get("condition_scope") == "EXPERIMENT"
+            ],
+        })
+        atomic_write_json(cross_validation_path, {
+            "schema_version": "2.1", "paper_id": snapshot.paper_id,
+            **semantic_artifacts.get("cross_validation", {}),
+        })
+        semantic_paths = [
+            path.name for path in (
+                caption_path, registry_path, process_path, experiment_path, cross_validation_path
+            )
+        ]
+
     # Point batches are streamed to panel CSVs during extraction. Do not rewrite or
     # accumulate them here; this function handles compact paper-level metadata.
     csv_paths = [p.relative_to(paper_root).as_posix()
@@ -189,7 +236,7 @@ def write_paper_artifacts(
     ] if (paper_root / "context").exists() else []
     canonical_paths = list(dict.fromkeys(
         ["paper_manifest.json", "figure_inventory.json", "panel_layout.json", "digitization.json"]
-        + csv_paths + evidence_paths + context_paths
+        + semantic_paths + csv_paths + evidence_paths + context_paths
     ))
     hashes = {name: sha256_file(paper_root / name) for name in canonical_paths}
     bundle = {
@@ -199,6 +246,7 @@ def write_paper_artifacts(
         "context_index_fingerprint": extra.get("context_index_fingerprint"),
         "algorithm_versions": {"core": "0.1.0"}, "profile_versions": {},
         "status": status, "canonical_artifacts": canonical_paths, "content_hashes": hashes,
+        "semantic_schema_version": "2.1" if semantic_paths else None,
         "series_count": len(series), "figure_count": len(figures), "panel_count": len(panels),
     }
     atomic_write_json(paper_root / "paper_bundle.json", bundle)
