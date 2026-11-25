@@ -65,7 +65,8 @@ The isolated `feat/p1-achromatic-multiseries-raster` development branch adds a c
 - Achromatic candidates are identified by a bounded luminance/chroma mask inside an already resolved plot box. The initial detector proposes a neutral pixel pool; it does **not** claim that the pool represents one curve.
 - Connected 2-D path decomposition inventories spatially separate paths. A full-span solid path remains independent from other paths.
 - Disconnected local fragments may be associated into one dashed-trace candidate only when their left-to-right endpoint position, local tangent, predicted vertical offset and reciprocal best match are unique. Source fragments remain separate CSV path segments. No pixels are inserted or interpolated across gaps.
-- Unassigned fragments, multiple plausible continuations, crossings and unsupported junctions remain `NEEDS_REVIEW`.
+- **Occlusion across a crossing:** when two full-span pieces from the same raster family are separated by a short source-image occlusion, they may be associated only under a unique reciprocal endpoint/tangent match. Both original paths remain distinct segments; inserted bridge pixels are always zero and the combined series remains `EXTRACTED_PROVISIONAL_NEEDS_REVIEW`. Ambiguous crossings and same-colour intersections are not resolved automatically.
+- Unassigned fragments, multiple plausible continuations, same-colour intersections and unsupported junctions remain `NEEDS_REVIEW`.
 - Long, nearly horizontal achromatic paths are flagged as gridline-like and remain review-required; the detector does not silently classify them as data or delete them.
 - Plot-boundary exclusion is geometric and narrow. Interior grid lines, gray text, marker glyphs and other neutral annotations may still enter the candidate inventory and must be rejected or reviewed through path/QC evidence.
 
