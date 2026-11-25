@@ -6,7 +6,7 @@ An independent downstream tool for turning existing chem-literature outputs into
 
 The v1.4.1 Task Plan remains a frozen historical baseline. The isolated `feature/task-plan-v2.1` development branch implements the approved V2.1 plan incrementally; its Draft PR is not merged or released. The default workflow remains local, offline, single-worker, sequential, and zero-LLM-token.
 
-The initial implementation provides corpus discovery, immutable input snapshots, compact paper context, a PDF backend abstraction, resumable paper jobs, canonical JSON/CSV artifacts, a rebuildable SQLite catalog, scientific queries, filtered exports, and hash-checked review patches.
+The V2.1 branch adds the audited Chem-Literature CSV handoff, deterministic text/visual semantic enrichment, typed scoped conditions, canonical sample/process/measurement links, stacked-spectrum comparability safeguards, a rebuildable semantic SQLite catalog, and a paper-level Gold Benchmark evaluator. It retains the existing immutable input snapshots, resumable jobs, canonical JSON/CSV artifacts, scientific queries, filtered exports and hash-checked review patches.
 
 Automated digitization is conservative. A chart is not assigned guessed axes, units, sample identity, or reference scale. If a plot does not contain sufficient machine-readable evidence or a supported extraction override, the result is routed to review. Real-paper accuracy and calibrated QC require user-approved PDFs and annotations and are not claimed by this repository's synthetic tests.
 
@@ -47,6 +47,7 @@ For the current Chem-Literature output layout, the authoritative handoff is rese
 - review apply --patch PATCH_PATH: apply a hash-matched review patch as a new version.
 - index rebuild: recreate SQLite from canonical paper artifacts.
 - validate: validate canonical artifacts and source immutability snapshots.
+- benchmark: evaluate the frozen V2.1 Gold Benchmark manifest and blind-held-out metrics; returns NOT_EVALUATED if the coverage floor or held-out metrics are missing.
 
 ## Streaming and resource behavior
 
@@ -62,7 +63,7 @@ A compact cross-page context index is built from existing main/SI text and extra
 - CV/EIS order is preserved when a trace is explicitly supplied; automatic extraction does not sort paths by X.
 - Series identifiers are namespaced by paper ID, so repeated Figure1/a panel names in different papers do not collide in the global SQLite index.
 - QC defaults are provisional and every such result is labeled PROVISIONAL_UNCALIBRATED.
-- P1/P2 are not claimed complete.
+- The V2.1 feature branch remains Draft and has not been merged or released. The Gold Benchmark harness is implemented, but real accuracy gates remain NOT_EVALUATED until the required human-labeled paired-paper coverage and independent curve references are supplied. Windows production acceptance remains a separate user/local-Agent step.
 
 The corpus report records parent/worker CPU time, mean core use, sampled parent-plus-worker peak RSS, free disk and available memory, per-paper evidence/context-index storage, algorithm/profile/QC fingerprints and zero default LLM tokens. Its disk footprint fields are scoped estimates, not full OS temporary-directory accounting or a substitute for target-PC profiling.
 
