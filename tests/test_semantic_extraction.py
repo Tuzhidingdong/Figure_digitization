@@ -163,7 +163,7 @@ def test_mixed_scope_statement_preserves_quantities_as_unresolved_candidates():
         "value": "Sample A",
         "source_path": "main_analysis.md",
         "line_number": 41,
-        "snippet": "Sample A was heated at 200 °C and measured at 1 A g−1.",
+        "snippet": "Sample A was synthesized at 200 °C and measured at 1 A g−1.",
     }]
     record = SimpleNamespace(
         series_id="series-a", paper_id="paper-a", figure_id="Figure1",
