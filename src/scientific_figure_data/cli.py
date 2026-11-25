@@ -16,6 +16,10 @@ from .pipeline import bundle_is_intact, processing_stage_state
 from .review import apply_review_patch
 from .scheduler import JobLedger, run_corpus
 from .storage import Catalog, connect_catalog
+from .upstream_contract import (
+    UPSTREAM_COMMIT, UPSTREAM_SCHEMA_PATH, UPSTREAM_SCHEMA_SHA256,
+    SUPPORTED_PACKAGE_VERSION, load_corpus_packages,
+)
 
 
 def _roots(parser):
@@ -36,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     scan = sub.add_parser("scan", help="discover upstream paper outputs and snapshot them")
     _roots(scan)
+    scan.add_argument("--corpus-csv", type=Path,
+                      help="Authoritative Chem-Literature research_corpus_paired.csv")
+    scan.add_argument("--corpus-root", type=Path,
+                      help="Directory from which upstream run_workflow.py was executed; resolves CSV paths")
 
     run = sub.add_parser("run", help="process papers incrementally")
     _roots(run)
@@ -133,12 +141,54 @@ def _scan(args) -> int:
     jsonl_path = output_root / "corpus_manifest.jsonl"
     temporary = jsonl_path.with_suffix(".jsonl.tmp")
     count = 0
+    skipped: list[dict] = []
+    upstream_contract = None
     try:
         with temporary.open("w", encoding="utf-8") as stream:
-            for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
-                snapshot = snapshot_paper(paper_dir, input_root)
-                stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\n")
-                count += 1
+            if args.corpus_csv:
+                if not args.corpus_root:
+                    raise ValueError("--corpus-root is required with --corpus-csv")
+                corpus_root = args.corpus_root.resolve()
+                try:
+                    input_root.relative_to(corpus_root)
+                except ValueError as exc:
+                    raise ValueError("--input-root must be inside --corpus-root") from exc
+                try:
+                    output_root.relative_to(corpus_root)
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError("--output-root must be outside --corpus-root")
+                packages, skipped = load_corpus_packages(
+                    args.corpus_csv, corpus_root, input_root,
+                )
+                seen_ids: set[str] = set()
+                for package in packages:
+                    if package.paper_id in seen_ids:
+                        raise ValueError(
+                            f"Duplicate authoritative upstream paper_id: {package.paper_id!r}"
+                        )
+                    seen_ids.add(package.paper_id)
+                    snapshot = snapshot_paper(
+                        package.paper_dir, input_root, paper_id=package.paper_id,
+                        external_path_root=corpus_root,
+                    )
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\\n")
+                    count += 1
+                upstream_contract = {
+                    "repository": "Tuzhidingdong/chem-literature",
+                    "commit": UPSTREAM_COMMIT,
+                    "schema_path": UPSTREAM_SCHEMA_PATH,
+                    "schema_sha256": UPSTREAM_SCHEMA_SHA256,
+                    "supported_package_version": SUPPORTED_PACKAGE_VERSION,
+                    "csv": str(args.corpus_csv),
+                    "corpus_root_name": corpus_root.name,
+                }
+            else:
+                for paper_dir in ensure_unique_paper_ids(discover_papers(input_root), input_root):
+                    snapshot = snapshot_paper(paper_dir, input_root)
+                    stream.write(json.dumps(snapshot.to_dict(), ensure_ascii=False) + "\\n")
+                    count += 1
         temporary.replace(jsonl_path)
     except Exception:
         try:
@@ -147,8 +197,9 @@ def _scan(args) -> int:
             pass
         raise
     atomic_write_json(output_root / "corpus_manifest.json", {
-        "schema_version": "1.0", "input_root_name": input_root.name,
+        "schema_version": "1.1", "input_root_name": input_root.name,
         "paper_count": count, "paper_manifest_stream": "corpus_manifest.jsonl",
+        "upstream_contract": upstream_contract, "skipped_rows": skipped,
     })
     print(json.dumps({"discovered": count, "manifest": str(output_root / "corpus_manifest.json"),
                       "paper_stream": str(jsonl_path)}, indent=2))
