@@ -42,25 +42,25 @@ QUANTITY_RE = re.compile(
 )
 PANEL_MARKER_RE = re.compile(r"[(][ \t]*([a-z])[ \t]*[)]", re.IGNORECASE)
 SAMPLE_MENTION_RE = re.compile(
-    r"[ \t]*\\b(?:sample|specimen|electrode|catalyst|material)[-_ ]+"
-    r"([A-Za-z0-9][A-Za-z0-9_.@+/-]{0,40})\\b",
+    r"[ \t]*\b(?:sample|specimen|electrode|catalyst|material)[-_ ]+"
+    r"([A-Za-z0-9][A-Za-z0-9_.@+/-]{0,40})\b",
     re.IGNORECASE,
 )
 TECHNIQUES = {
-    "CV": r"\\bcyclic voltammetr(?:y|ic)|\\bCV\\b",
-    "GCD": r"\\bgalvanostatic charge.?discharge|\\bGCD\\b",
-    "EIS": r"\\belectrochemical impedance|\\bEIS\\b",
-    "GITT": r"\\bGITT\\b|\\bgalvanostatic intermittent titration",
-    "XRD": r"\\bX.?ray diffraction|\\bXRD\\b",
-    "Raman": r"\\bRaman\\b",
-    "FTIR": r"\\bFT.?IR\\b|\\binfrared spectroscopy",
-    "XPS": r"\\bXPS\\b|\\bX.?ray photoelectron",
-    "SEM": r"\\bSEM\\b|\\bscanning electron microscopy",
-    "TEM": r"\\bTEM\\b|\\btransmission electron microscopy",
-    "UV_VIS": r"\\bUV.?Vis\\b|\\bultraviolet.?visible",
-    "LSV": r"\\bLSV\\b|\\blinear sweep voltammetr",
-    "CA": r"\\bchronoamperometr",
-    "TGA": r"\\bTGA\\b|\\bthermogravimetric",
+    "CV": r"\bcyclic voltammetr(?:y|ic)|\bCV\b",
+    "GCD": r"\bgalvanostatic charge.?discharge|\bGCD\b",
+    "EIS": r"\belectrochemical impedance|\bEIS\b",
+    "GITT": r"\bGITT\b|\bgalvanostatic intermittent titration",
+    "XRD": r"\bX.?ray diffraction|\bXRD\b",
+    "Raman": r"\bRaman\b",
+    "FTIR": r"\bFT.?IR\b|\binfrared spectroscopy",
+    "XPS": r"\bXPS\b|\bX.?ray photoelectron",
+    "SEM": r"\bSEM\b|\bscanning electron microscopy",
+    "TEM": r"\bTEM\b|\btransmission electron microscopy",
+    "UV_VIS": r"\bUV.?Vis\b|\bultraviolet.?visible",
+    "LSV": r"\bLSV\b|\blinear sweep voltammetr",
+    "CA": r"\bchronoamperometr",
+    "TGA": r"\bTGA\b|\bthermogravimetric",
 }
 SYNTHESIS_HINTS = (
     "synthes", "hydrothermal", "solvothermal", "precursor", "calcination",
@@ -80,7 +80,7 @@ GENERIC_SERIES_LABELS = {
 
 
 def stable_id(namespace: str, value: str) -> str:
-    digest = hashlib.sha256(f"{namespace}\\0{value}".encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(f"{namespace}\0{value}".encode("utf-8")).hexdigest()[:16]
     return f"{namespace}_{digest}"
 
 
@@ -107,14 +107,14 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
     result = ConditionValue(raw_text=raw)
     if not raw:
         return result
-    unit_match = re.search(rf"({UNIT_PATTERN})[ \\t]*$", raw, re.IGNORECASE)
+    unit_match = re.search(rf"({UNIT_PATTERN})[ \t]*$", raw, re.IGNORECASE)
     if unit_match:
         result.unit_raw = unit_match.group(1)
         result.unit_canonical = UNIT_CANONICAL.get(result.unit_raw.casefold())
         numeric_text = raw[:unit_match.start()].strip()
     else:
         numeric_text = raw
-    comparator = re.match(r"^(<=|>=|<|>|≤|≥|~|≈|about[ \\t]+)", numeric_text, re.IGNORECASE)
+    comparator = re.match(r"^(<=|>=|<|>|≤|≥|~|≈|about[ \t]+)", numeric_text, re.IGNORECASE)
     if comparator:
         token = comparator.group(1).strip().casefold()
         result.operator = {
@@ -122,7 +122,7 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
             "≥": "GTE", "~": "APPROX", "≈": "APPROX", "about": "APPROX",
         }.get(token, "UNKNOWN")
         numeric_text = numeric_text[comparator.end():].strip()
-    uncertainty = re.fullmatch(rf"({NUMBER})[ \\t]*(?:±|[+]/-)[ \\t]*({NUMBER})", numeric_text)
+    uncertainty = re.fullmatch(rf"({NUMBER})[ \t]*(?:±|[+]/-)[ \t]*({NUMBER})", numeric_text)
     if uncertainty:
         result.value_kind = "QUANTITY"
         result.operator = "EQ" if result.operator == "UNKNOWN" else result.operator
@@ -130,7 +130,7 @@ def parse_condition_value(raw_text: str) -> ConditionValue:
         result.uncertainty = {"value": float(uncertainty.group(2)), "unit_raw": result.unit_raw}
         result.parse_status = "PARSED"
         return result
-    range_match = re.fullmatch(rf"({NUMBER})[ \\t]*(?:–|—|-|to)[ \\t]*({NUMBER})", numeric_text, re.IGNORECASE)
+    range_match = re.fullmatch(rf"({NUMBER})[ \t]*(?:–|—|-|to)[ \t]*({NUMBER})", numeric_text, re.IGNORECASE)
     if range_match:
         result.value_kind = "QUANTITY"
         result.operator = "RANGE" if result.operator == "UNKNOWN" else result.operator
