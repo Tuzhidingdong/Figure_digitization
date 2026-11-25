@@ -112,6 +112,24 @@ class SeriesRecord:
     conditions: list[dict[str, Any]] = field(default_factory=list)
     evidence: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    scale_type: str = "UNKNOWN"
+    baseline_comparable: bool | None = None
+    offset_value: float | None = None
+    normalization_provenance: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class ConditionValue:
+    raw_text: str
+    value_kind: str = "UNKNOWN"
+    operator: str = "UNKNOWN"
+    numeric_values: list[float] = field(default_factory=list)
+    text_values: list[str] = field(default_factory=list)
+    unit_raw: str | None = None
+    unit_canonical: str | None = None
+    uncertainty: dict[str, Any] | None = None
+    normalization_basis: str | None = None
+    parse_status: str = "UNRESOLVED"
 
 
 @dataclass(slots=True)
@@ -121,6 +139,9 @@ class Condition:
     value: Any
     unit: str | None = None
     evidence: dict[str, Any] = field(default_factory=dict)
+    condition_scope: str = "UNRESOLVED"
+    scope_entity_id: str | None = None
+    value_structured: ConditionValue | None = None
 
 
 @dataclass(slots=True)
@@ -131,6 +152,58 @@ class Measurement:
     domain: str | None
     condition_ids: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    subject_roles: list[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class SampleProcessStep:
+    sample_id: str
+    process_id: str
+    step_order: int
+    step_role: str
+    evidence_id: str
+    scope_status: str
+
+
+@dataclass(slots=True)
+class SeriesSubjectLink:
+    series_id: str
+    subject_entity_id: str | None
+    subject_role: str
+    link_status: str
+    evidence_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class SeriesMeasurementLink:
+    series_id: str
+    measurement_id: str | None
+    measurement_role: str
+    link_status: str
+    evidence_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class EvidenceItem:
+    evidence_id: str
+    source_type: str
+    source_path: str | None
+    snippet: str
+    source_sha256: str | None = None
+    page_number: int | None = None
+    figure_id: str | None = None
+    panel_id: str | None = None
+    line_number: int | None = None
+    parser_version: str | None = None
+
+
+@dataclass(slots=True)
+class CrossValidationResult:
+    series_id: str
+    status: str
+    checks: list[dict[str, Any]] = field(default_factory=list)
+    unresolved_fields: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
