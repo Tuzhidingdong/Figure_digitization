@@ -585,7 +585,8 @@ def build_semantic_package(
                             "scope_status": "AMBIGUOUS_MULTI_SUBJECT_SCOPE"
                             if ambiguous_group else "SOURCE_BACKED_CANDIDATE",
                         })
-                if scope in {"SYNTHESIS", "EXPERIMENT"}:
+                quantities = extract_quantity_expressions(snippet)
+                if quantities:
                     statement_measurements = [
                         item for item in measurements.values()
                         if item.get("technique") in techniques
@@ -594,9 +595,10 @@ def build_semantic_package(
                     scope_entity_id = (
                         process_id if scope == "SYNTHESIS"
                         else statement_measurements[0]["measurement_id"]
-                        if len(statement_measurements) == 1 else None
+                        if scope == "EXPERIMENT" and len(statement_measurements) == 1
+                        else None
                     )
-                    for quantity in extract_quantity_expressions(snippet):
+                    for quantity in quantities:
                         condition_id = stable_id(
                             "condition",
                             f"{paper_id}|{scope}|{evidence_id}|{quantity['start']}|{quantity['raw_text']}",
@@ -608,7 +610,9 @@ def build_semantic_package(
                         conditions.append({
                             "condition_id": condition_id, "paper_id": paper_id,
                             "condition_scope": scope, "scope_entity_id": scope_entity_id,
-                            "scope_status": "LINKED" if scope_entity_id else "UNRESOLVED_TARGET",
+                            "scope_status": "LINKED" if scope_entity_id else
+                            "UNRESOLVED_SCOPE" if scope == "UNRESOLVED" else
+                            "UNRESOLVED_TARGET",
                             "condition_name": condition_name,
                             "raw_text": quantity["raw_text"], "source_snippet": snippet,
                             "value": quantity["value"], "evidence_ids": [evidence_id],
