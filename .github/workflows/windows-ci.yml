@@ -10,6 +10,7 @@ on:
       - feat/p1-multicolor-dual-y-axis
       - feat/p1-pixel-geometry-color-families
       - feat/real-image-regression-diagnostics
+      - feat/p1-achromatic-multiseries-raster
   pull_request:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - feat/p1-multicolor-dual-y-axis
       - feat/p1-pixel-geometry-color-families
       - feat/real-image-regression-diagnostics
+      - feature/task-plan-v2.1
   workflow_dispatch:
 
 jobs:
