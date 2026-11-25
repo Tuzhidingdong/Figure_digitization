@@ -1019,8 +1019,10 @@ def _group_achromatic_fragment_tracks(
             "component": item,
             "x0": x0,
             "x1": x1,
-            "y0": sum(point[1] for point in start) / len(start),
-            "y1": sum(point[1] for point in end) / len(end),
+            # Use the actual boundary pixels for gap prediction; local
+            # regressions above/below estimate tangent direction only.
+            "y0": float(xy[0][1]),
+            "y1": float(xy[-1][1]),
             "slope_start": slope(start),
             "slope_end": slope(end),
             "full_span_fragment": bool(full_span_fragment),
@@ -1068,6 +1070,7 @@ def _group_achromatic_fragment_tracks(
     successor_candidates: dict[int, list[tuple[float, int]]] = {}
     predecessor_candidates: dict[int, list[tuple[float, int]]] = {}
     candidate_pair_count = 0
+    pair_diagnostics = []
     max_candidate_pairs = 50000
 
     from bisect import bisect_left, bisect_right
@@ -1101,7 +1104,20 @@ def _group_achromatic_fragment_tracks(
             residual = abs(second["y0"] - predicted_y)
             slope_delta = abs(first["slope_end"] - second["slope_start"])
             allowed_residual = residual_limit + gap * 0.18
-            if residual > allowed_residual or slope_delta > slope_limit:
+            accepted = residual <= allowed_residual and slope_delta <= slope_limit
+            if len(pair_diagnostics) < 64:
+                pair_diagnostics.append({
+                    "from_bbox": [int(value) for value in first["component"].get("bbox", [])],
+                    "to_bbox": [int(value) for value in second["component"].get("bbox", [])],
+                    "gap_pixels": round(gap, 3),
+                    "predicted_y": round(predicted_y, 3),
+                    "target_start_y": round(second["y0"], 3),
+                    "residual_pixels": round(residual, 3),
+                    "allowed_residual_pixels": round(allowed_residual, 3),
+                    "slope_delta": round(slope_delta, 4),
+                    "accepted": accepted,
+                })
+            if not accepted:
                 continue
             cost = residual + slope_delta * 2.0 + gap * 0.05
             candidates.append((float(cost), second_index))
@@ -1217,6 +1233,7 @@ def _group_achromatic_fragment_tracks(
         "described_fragment_count": len(descriptions),
         "candidate_pair_count": candidate_pair_count,
         "candidate_pair_limit": max_candidate_pairs,
+        "pair_diagnostics": pair_diagnostics,
         "track_count": len(tracks),
         "tracks": chains,
         "unassigned_fragment_count": len(unassigned),
@@ -1539,6 +1556,7 @@ def trace_monotonic_color(
                 groups, plot_width=max(1, int(x1) - int(x0)),
                 plot_height=max(1, int(y1) - int(y0)),
                 include_full_span_fragments=associate_full_span_fragments,
+                include_partial_fragments=preserve_partial_fragments,
             )
         )
     if not groups:
