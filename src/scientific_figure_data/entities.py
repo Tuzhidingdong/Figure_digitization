@@ -12,6 +12,16 @@ class SubjectEntity:
     domain: str | None = None
     aliases: list[str] = field(default_factory=list)
     evidence: list[dict[str, Any]] = field(default_factory=list)
+    entity_kind: str = "SAMPLE"
+    resolution_status: str = "UNRESOLVED"
+
+
+@dataclass
+class SubjectEntityAlias:
+    subject_entity_id: str
+    alias: str
+    alias_type: str
+    evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
 def link_series_to_subject(
