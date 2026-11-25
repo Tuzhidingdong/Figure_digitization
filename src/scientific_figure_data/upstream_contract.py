@@ -56,7 +56,9 @@ def _safe_package_file(package_dir: Path, relative_path: str) -> Path | None:
     return candidate
 
 
-def validate_evidence_index(package_dir: Path) -> tuple[dict | None, list[str], list[str]]:
+def validate_evidence_index(
+    package_dir: Path, source_root: Path | None = None,
+) -> tuple[dict | None, list[str], list[str]]:
     """Validate the pinned Chem-Literature 1.1.0 package contract without third-party deps."""
     errors: list[str] = []
     warnings: list[str] = []
@@ -104,6 +106,26 @@ def validate_evidence_index(package_dir: Path) -> tuple[dict | None, list[str], 
             errors.append("inventory.main_pdf.size_bytes must be a non-negative integer")
         if not isinstance(main_pdf.get("page_count"), int) or main_pdf.get("page_count", 0) < 1:
             errors.append("inventory.main_pdf.page_count must be a positive integer")
+        if source_root is not None and isinstance(main_pdf.get("path"), str):
+            declared_pdf = Path(main_pdf["path"]).expanduser()
+            candidates = [declared_pdf] if declared_pdf.is_absolute() else [
+                package_dir / declared_pdf, source_root / declared_pdf,
+            ]
+            source_pdf = next((path.resolve() for path in candidates if path.is_file()), None)
+            if source_pdf is None:
+                errors.append("inventory.main_pdf source file is missing from the upstream working directory")
+            else:
+                try:
+                    with source_pdf.open("rb") as stream:
+                        magic = stream.read(5)
+                    if magic != b"%PDF-":
+                        errors.append("inventory.main_pdf source file is not a PDF")
+                    if _sha256(source_pdf) != main_pdf.get("sha256"):
+                        errors.append("inventory.main_pdf source SHA256 mismatch")
+                except OSError as exc:
+                    errors.append(
+                        f"inventory.main_pdf source file is unreadable: {type(exc).__name__}"
+                    )
 
     array_keys = ("pages", "tables", "figures", "si_references", "media_assets")
     for key in array_keys:
@@ -202,7 +224,9 @@ def load_corpus_packages(
             if not package_dir.is_dir():
                 skipped.append({"row": row_number, "doi": doi, "reason": "PACKAGE_DIRECTORY_MISSING"})
                 continue
-            payload, errors, warnings = validate_evidence_index(package_dir)
+            payload, errors, warnings = validate_evidence_index(
+                package_dir, source_root=corpus_root,
+            )
             if errors:
                 skipped.append({
                     "row": row_number, "doi": doi, "reason": "INVALID_UPSTREAM_PACKAGE",
