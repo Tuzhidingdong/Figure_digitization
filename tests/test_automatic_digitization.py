@@ -1297,7 +1297,24 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
         input_root, Path("paper-mixed-multiseries"), tmp_path / "output",
         options={"ocr": True, "memory_limit_mb": 1024},
     )
-    assert result["series_count"] == 3, result
+    series_diagnostics = [
+        {
+            "series_id": item["series_id"],
+            "method": item["extraction_method"],
+            "status": item["extraction_status"],
+            "family_type": item["metadata"]["trace_specification"]["specification"].get(
+                "trace_family_type"
+            ),
+            "points": item["metadata"].get("points_count"),
+            "segments": item["metadata"].get("raster_qc", {}).get("path_segment_count"),
+            "bbox": item["metadata"].get("raster_qc", {}).get("selected_bbox"),
+            "branch_detection": item["metadata"].get("raster_qc", {}).get(
+                "branch_detection"
+            ),
+        }
+        for item in result["series"]
+    ]
+    assert result["series_count"] == 3, series_diagnostics
     family_types = [
         item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
         for item in result["series"]
