@@ -183,17 +183,22 @@ class PaperContextIndex:
 
         return cls(entries, fingerprint, db_path if storage == "sqlite" else None)
 
-    def search(self, kind: str, text: str = "") -> list[dict]:
+    def search(self, kind: str, text: str = "", limit: int = 100) -> list[dict]:
+        bounded_limit = max(1, int(limit))
         if self.db_path and self.db_path.exists():
             connection = sqlite3.connect(self.db_path)
             try:
                 rows = connection.execute(
-                    "SELECT kind,value,source_path,line_number,snippet FROM entries WHERE kind=? AND value LIKE ? LIMIT 100",
-                    (kind, f"%{text}%"),
+                    """SELECT kind,value,source_path,line_number,snippet
+                       FROM entries WHERE kind=? AND value LIKE ?
+                       ORDER BY source_path,line_number LIMIT ?""",
+                    (kind, f"%{text}%", bounded_limit),
                 ).fetchall()
             finally:
                 connection.close()
             return [dict(zip(("kind", "value", "source_path", "line_number", "snippet"), row))
                     for row in rows]
-        return [asdict(entry) for entry in self.entries
-                if entry.kind == kind and text.casefold() in entry.value.casefold()]
+        return [
+            asdict(entry) for entry in self.entries
+            if entry.kind == kind and text.casefold() in entry.value.casefold()
+        ][:bounded_limit]
