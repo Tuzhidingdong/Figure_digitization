@@ -433,16 +433,21 @@ class Catalog:
         measurement_id = namespaced_id(item.paper_id, local_measurement_id)
         self.con.execute(
             """INSERT INTO series(series_id,paper_id,figure_id,panel_id,measurement_id,technique,domain,label,
-               x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               x_unit,y_unit,y_axis_side,extraction_status,qc_status,review_state,metadata_json,
+               scale_type,baseline_comparable,offset_value,normalization_provenance_json)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (item.series_id, item.paper_id, item.figure_id, item.panel_id,
              measurement_id, item.technique,
              item.domain, item.label, item.x_unit, item.y_unit, item.y_axis_side,
              item.extraction_status, item.qc_status, item.review_state,
-             json.dumps(item.metadata, ensure_ascii=False)),
+             json.dumps(item.metadata, ensure_ascii=False), item.scale_type,
+             None if item.baseline_comparable is None else int(item.baseline_comparable),
+             item.offset_value,
+             json.dumps(item.normalization_provenance, ensure_ascii=False)
+             if item.normalization_provenance is not None else None),
         )
         self.con.execute(
-            "INSERT OR REPLACE INTO measurements VALUES(?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO measurements(measurement_id,paper_id,figure_id,technique,domain,metadata_json) VALUES(?,?,?,?,?,?)",
             (measurement_id, item.paper_id, item.figure_id, item.technique, item.domain,
              json.dumps({"series_id": item.series_id}, ensure_ascii=False)),
         )
@@ -490,11 +495,12 @@ class Catalog:
             )
             self.con.execute(
                 """INSERT OR REPLACE INTO series_subject_links
-                   (series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope)
-                   VALUES(?,?,?,?,?,?)""",
+                   (series_id,entity_id,role_in_series,evidence_json,link_status,identity_scope,subject_role)
+                   VALUES(?,?,?,?,?,?,?)""",
                 (item.series_id, entity_id, link.get("role_in_series", "unknown"),
                  json.dumps(link_evidence, ensure_ascii=False),
-                 link.get("status", "UNASSIGNED"), identity_scope),
+                 link.get("status", "UNASSIGNED"), identity_scope,
+                 link.get("subject_role", link.get("role_in_series", "UNKNOWN"))),
             )
             import unicodedata
             aliases = {canonical, *(str(alias) for alias in link.get("aliases", []) if alias)}
@@ -519,12 +525,27 @@ class Catalog:
         for index, condition in enumerate(item.conditions):
             local_condition_id = str(condition.get("condition_id") or f"{item.series_id}:condition:{index}")
             condition_id = namespaced_id(item.paper_id, local_condition_id)
+            value = condition.get("value") if isinstance(condition.get("value"), dict) else {}
             self.con.execute(
-                "INSERT OR REPLACE INTO conditions VALUES(?,?,?,?,?,?)",
-                (condition_id, item.paper_id, measurement_id, str(condition.get("name", "unknown")),
-                 json.dumps({"value": condition.get("value"), "unit": condition.get("unit")},
-                            ensure_ascii=False),
-                 json.dumps(condition.get("evidence", {}), ensure_ascii=False)),
+                """INSERT OR REPLACE INTO conditions(
+                   condition_id,paper_id,measurement_id,name,value_json,evidence_json,
+                   condition_scope,scope_entity_id,value_kind,operator,numeric_values_json,
+                   text_values_json,unit_raw,unit_canonical,uncertainty_json,
+                   normalization_basis,parse_status)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (condition_id, item.paper_id,
+                 measurement_id if condition.get("condition_scope") == "EXPERIMENT" else None,
+                 str(condition.get("raw_text") or condition.get("name", "unknown")),
+                 json.dumps(value, ensure_ascii=False),
+                 json.dumps(condition.get("evidence", {}), ensure_ascii=False),
+                 condition.get("condition_scope", "UNRESOLVED"),
+                 condition.get("scope_entity_id"), value.get("value_kind", "UNKNOWN"),
+                 value.get("operator", "UNKNOWN"),
+                 json.dumps(value.get("numeric_values", []), ensure_ascii=False),
+                 json.dumps(value.get("text_values", []), ensure_ascii=False),
+                 value.get("unit_raw"), value.get("unit_canonical"),
+                 json.dumps(value.get("uncertainty"), ensure_ascii=False),
+                 value.get("normalization_basis"), value.get("parse_status", "UNRESOLVED")),
             )
 
     def _query_sql(self, filters: dict[str, str | None], limit: int | None = None) -> tuple[str, list[Any]]:
