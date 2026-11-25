@@ -144,7 +144,7 @@ def connect_catalog(path: Path) -> sqlite3.Connection:
     con = sqlite3.connect(path, timeout=10)
     con.row_factory = sqlite3.Row
     journal_mode = str(con.execute("PRAGMA journal_mode=WAL").fetchone()[0]).lower()
-    if journal_mode != "wal":
+    if str(path) != ":memory:" and journal_mode != "wal":
         con.close()
         raise RuntimeError(f"SQLite WAL mode unavailable (reported {journal_mode!r})")
     con.execute("PRAGMA synchronous=NORMAL")
