@@ -162,7 +162,22 @@ def test_v21_schema_declares_required_semantic_contracts():
     assert {
         "ConditionValue", "SubjectEntity", "SampleProcessStep", "SeriesSubjectLink",
         "SeriesMeasurementLink", "StackedAxisSemantics", "EvidenceItem",
-        "CrossValidationResult",
+        "CrossValidationResult", "DataObservation", "DataPoint", "IntegratedSeries",
     } <= set(definitions)
     stacked = definitions["StackedAxisSemantics"]
     assert stacked["allOf"][0]["then"]["properties"]["baseline_comparable"]["const"] is False
+
+
+
+def test_gold_manifest_schema_is_valid_json_and_has_coverage_floor_fields():
+    schema_path = Path(__file__).parents[1] / "schemas" / "gold_benchmark_manifest.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert schema["properties"]["papers"]["items"]["properties"]["domain"]["enum"] == [
+        "Battery", "AOP", "PFAS",
+    ]
+    required = set(schema["properties"]["coverage_counts"]["required"])
+    assert {
+        "paired_papers", "figure_caption_pairs", "panels", "distinct_samples",
+        "explicit_legend_opportunities", "synthesis_condition_assertions",
+        "experiment_condition_assertions",
+    } <= required
