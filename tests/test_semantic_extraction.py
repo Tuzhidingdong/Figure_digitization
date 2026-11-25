@@ -63,13 +63,13 @@ class _Context:
             },
         ]
 
-    def search(self, kind: str, text: str = ""):
+    def search(self, kind: str, text: str = "", limit: int = 100):
         source = self.samples if kind == "sample_alias" else self.statements
         return [
             item for item in source
             if text.casefold() in item.get("value", item.get("snippet", "")).casefold()
             or text.casefold() in item.get("snippet", "").casefold()
-        ]
+        ][:limit]
 
 
 def test_two_pass_registry_exact_links_and_unresolved_visual_only_candidate():
