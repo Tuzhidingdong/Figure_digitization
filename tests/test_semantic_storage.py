@@ -123,6 +123,20 @@ def test_catalog_indexes_semantic_subject_process_condition_and_measurement(tmp_
                 "checks": [], "unresolved_fields": ["image_calibration"],
             }],
         },
+        "unresolved_conditions.json": {
+            "conditions": [{
+                "condition_id": "condition-u", "condition_scope": "UNRESOLVED",
+                "scope_entity_id": None, "raw_text": "200 °C",
+                "condition_name": "temperature",
+                "value": {
+                    "raw_text": "200 °C", "value_kind": "QUANTITY", "operator": "EQ",
+                    "numeric_values": [200.0], "text_values": [], "unit_raw": "°C",
+                    "unit_canonical": "degC", "uncertainty": None,
+                    "normalization_basis": None, "parse_status": "PARSED",
+                },
+                "evidence_ids": ["evidence-a"], "parse_status": "PARSED",
+            }],
+        },
     }
     for name, value in documents.items():
         (paper_root / name).write_text(json.dumps(value), encoding="utf-8")
@@ -143,8 +157,11 @@ def test_catalog_indexes_semantic_subject_process_condition_and_measurement(tmp_
             "SELECT step_role FROM sample_process_steps"
         ).fetchone()[0] == "CALCINATION"
         assert catalog.con.execute(
-            "SELECT condition_scope,scope_entity_id FROM conditions"
+            "SELECT condition_scope,scope_entity_id FROM conditions WHERE condition_scope='SYNTHESIS'"
         ).fetchone()[0] == "SYNTHESIS"
+        assert catalog.con.execute(
+            "SELECT condition_scope,scope_entity_id FROM conditions WHERE condition_scope='UNRESOLVED'"
+        ).fetchone()[0] == "UNRESOLVED"
         assert catalog.con.execute(
             "SELECT technique FROM measurements WHERE measurement_id LIKE '%measurement-a'"
         ).fetchone()[0] == "CV"
