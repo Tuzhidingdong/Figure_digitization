@@ -1375,3 +1375,51 @@ def test_achromatic_fragment_tracker_fails_closed_at_fragment_limit():
     assert diagnostics["status"] == "FRAGMENT_COUNT_LIMIT_REACHED_NEEDS_REVIEW"
     assert diagnostics["track_count"] == 0
     assert diagnostics["inter_fragment_pixels_inserted"] == 0
+
+
+def test_crossing_occlusion_groups_same_color_full_span_fragments_without_bridge(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    image_path = tmp_path / "red_trace_occluded_by_gray_crossing.png"
+    image = Image.new("RGB", (420, 280), "white")
+    draw = ImageDraw.Draw(image)
+    red = [
+        (x, int(220 - 100 * (x - 45) / 330))
+        for x in range(45, 376)
+    ]
+    gray = [
+        (x, int(180 - 30 * (x - 45) / 330))
+        for x in range(45, 376)
+    ]
+    draw.line(red, fill=(225, 20, 30), width=3)
+    # Draw the gray curve second so it overwrites the red pixels at their
+    # crossing, creating a real source-image occlusion gap in the red mask.
+    draw.line(gray, fill=(112, 112, 112), width=3)
+    image.save(image_path)
+    plot_box = (30, 20, 390, 250)
+
+    branch = detect_monotonic_color_branches(
+        str(image_path), (225, 20, 30), 8,
+        plot_box=plot_box, associate_full_span_fragments=True,
+    )
+    assert branch["status"] == "SINGLE_MONOTONIC_COLOR_BAND", branch
+    assert branch["branch_count"] == 1, branch
+    assert branch["branches"][0]["path_count"] == 2, branch
+    assert branch["partial_fragment_tracking"]["track_count"] == 1
+    assert branch["partial_fragment_tracking"]["full_span_fragment_count"] == 2
+    assert branch["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+
+    points, qc = trace_monotonic_color(
+        str(image_path), (225, 20, 30), 8, None, None,
+        plot_box=plot_box, associate_full_span_fragments=True,
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", qc
+    assert qc["path_segment_count"] == 2, qc
+    assert qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+    assert len(points) == sum(segment["point_count"] for segment in qc["path_segments"])
+    assert all(segment["point_count"] > 0 for segment in qc["path_segments"])
