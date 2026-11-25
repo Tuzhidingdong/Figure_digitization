@@ -1340,6 +1340,18 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
     assert family_types.count("CHROMATIC") == 1, family_types
     assert family_types.count("ACHROMATIC") == 2, family_types
     assert all(item["metadata"]["points_count"] >= 50 for item in result["series"])
+    red_series = [
+        item for item in result["series"]
+        if item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        == "CHROMATIC"
+    ]
+    assert len(red_series) == 1, result
+    assert red_series[0]["extraction_status"] == (
+        "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+    )
+    red_qc = red_series[0]["metadata"]["raster_qc"]
+    assert red_qc["path_segment_count"] == 2, red_qc
+    assert red_qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
     dashed = [
         item for item in result["series"]
         if item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
