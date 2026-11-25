@@ -1350,3 +1350,28 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
     assert dashed[0]["extraction_status"] == (
         "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
     )
+
+
+def test_achromatic_fragment_tracker_fails_closed_at_fragment_limit():
+    from scientific_figure_data.raster import _group_achromatic_fragment_tracks
+
+    fragments = []
+    for index in range(513):
+        x0 = index * 2
+        path = [(20 + offset % 2, x0 + offset) for offset in range(10)]
+        fragments.append({
+            "path": path,
+            "bbox": [x0, 20, x0 + 10, 22],
+            "pixel_count": len(path),
+            "path_kind": "LOCAL_SHORT_2D_FRAGMENT_NEEDS_REVIEW",
+            "path_qc": {"status": "PARTIAL_PATHS_NEEDS_REVIEW"},
+        })
+
+    groups, unassigned, diagnostics = _group_achromatic_fragment_tracks(
+        [[item] for item in fragments], plot_width=2000, plot_height=100,
+    )
+    assert groups == []
+    assert len(unassigned) == 513
+    assert diagnostics["status"] == "FRAGMENT_COUNT_LIMIT_REACHED_NEEDS_REVIEW"
+    assert diagnostics["track_count"] == 0
+    assert diagnostics["inter_fragment_pixels_inserted"] == 0
