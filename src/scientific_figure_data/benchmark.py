@@ -216,44 +216,70 @@ def evaluate_gold_benchmark(
             "metrics": {},
         }
 
-    metrics = predictions.get("metrics", {})
+    development_metrics = predictions.get("development_metrics", {})
+    metrics = predictions.get("blind_held_out_metrics") or predictions.get("metrics", {})
+    if not metrics:
+        return {
+            "status": "NOT_EVALUATED",
+            "reason": "BLIND_HELD_OUT_METRICS_NOT_SUPPLIED",
+            "paper_split": split,
+            "thresholds": dict(THRESHOLDS),
+            "development_metrics": development_metrics,
+            "metrics": {},
+        }
+
+    def metric(section: str, field: str, default: float = 0.0) -> float:
+        value = metrics.get(section, {}).get(field, default)
+        return float(value) if isinstance(value, (int, float)) else default
+
     gates = {}
     gates["figure_caption_precision"] = (
-        metrics.get("figure_caption", {}).get("precision", 0) >= THRESHOLDS["figure_caption_precision"]
+        metric("figure_caption", "precision") >= THRESHOLDS["figure_caption_precision"]
     )
     gates["figure_caption_recall"] = (
-        metrics.get("figure_caption", {}).get("recall", 0) >= THRESHOLDS["figure_caption_recall"]
+        metric("figure_caption", "recall") >= THRESHOLDS["figure_caption_recall"]
     )
     gates["panel_split_precision"] = (
-        metrics.get("panel_split", {}).get("precision", 0) >= THRESHOLDS["panel_split_precision"]
+        metric("panel_split", "precision") >= THRESHOLDS["panel_split_precision"]
     )
     gates["panel_split_recall"] = (
-        metrics.get("panel_split", {}).get("recall", 0) >= THRESHOLDS["panel_split_recall"]
+        metric("panel_split", "recall") >= THRESHOLDS["panel_split_recall"]
     )
     gates["sample_merge_precision"] = (
-        metrics.get("sample_merge", {}).get("precision", 0) >= THRESHOLDS["sample_merge_precision"]
+        metric("sample_merge", "precision") >= THRESHOLDS["sample_merge_precision"]
     )
     gates["sample_merge_recall"] = (
-        metrics.get("sample_merge", {}).get("recall", 0) >= THRESHOLDS["sample_merge_recall"]
+        metric("sample_merge", "recall") >= THRESHOLDS["sample_merge_recall"]
     )
     gates["sample_false_merges_zero"] = (
-        metrics.get("sample_merge", {}).get("false_merge_groups", 0) == 0
+        metric("sample_merge", "false_merge_groups") == 0
     )
     gates["series_subject_precision"] = (
-        metrics.get("series_subject", {}).get("precision", 0) >= THRESHOLDS["series_subject_precision"]
+        metric("series_subject", "precision") >= THRESHOLDS["series_subject_precision"]
     )
     gates["series_subject_recall"] = (
-        metrics.get("series_subject", {}).get("recall", 0) >= THRESHOLDS["series_subject_recall"]
+        metric("series_subject", "recall") >= THRESHOLDS["series_subject_recall"]
     )
     gates["condition_scope_precision"] = (
-        metrics.get("condition_scope", {}).get("precision", 0) >= THRESHOLDS["condition_scope_precision"]
+        metric("condition_scope", "precision") >= THRESHOLDS["condition_scope_precision"]
     )
     gates["condition_scope_recall"] = (
-        metrics.get("condition_scope", {}).get("recall", 0) >= THRESHOLDS["condition_scope_recall"]
+        metric("condition_scope", "recall") >= THRESHOLDS["condition_scope_recall"]
     )
     gates["condition_false_scope_attachment"] = (
-        metrics.get("condition_scope", {}).get("false_scope_attachment_rate", 1)
+        metric("condition_scope", "false_scope_attachment_rate", 1.0)
         <= THRESHOLDS["condition_false_scope_attachments_max"]
+    )
+    gates["figure_caption_false_cross_associations_zero"] = (
+        metric("figure_caption", "false_cross_associations") == 0
+    )
+    gates["panel_wrong_assignment_rate"] = (
+        metric("panel_split", "wrong_assignment_rate", 1.0)
+        <= THRESHOLDS["panel_wrong_assignment_rate_max"]
+    )
+    gates["series_wrong_link_rate"] = (
+        metric("series_subject", "wrong_link_rate", 1.0)
+        <= THRESHOLDS["series_wrong_link_rate_max"]
     )
     curve = metrics.get("curve_nrmse", {})
     gates["curve_nrmse"] = (
@@ -268,6 +294,8 @@ def evaluate_gold_benchmark(
         "status": status,
         "paper_split": split,
         "thresholds": dict(THRESHOLDS),
+        "development_metrics": development_metrics,
+        "blind_held_out_metrics": metrics,
         "metrics": metrics,
         "gates": gates,
         "held_out_tuning_policy": "BLIND_HELD_OUT_NOT_USED_FOR_TUNING",
