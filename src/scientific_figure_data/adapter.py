@@ -49,11 +49,16 @@ def discover_papers(input_root: Path) -> Iterator[Path]:
             dirnames[:] = []
 
 
-def snapshot_paper(paper_dir: Path, input_root: Path) -> PaperSnapshot:
-    relative_id = paper_dir.resolve().relative_to(input_root.resolve()).as_posix()
+def snapshot_paper(
+    paper_dir: Path, input_root: Path, paper_id: str | None = None,
+    external_path_root: Path | None = None,
+) -> PaperSnapshot:
+    relative_id = paper_id or paper_dir.resolve().relative_to(input_root.resolve()).as_posix()
     if relative_id == ".":
         relative_id = "root-paper"
-    return create_snapshot(paper_dir, input_root, relative_id)
+    return create_snapshot(
+        paper_dir, input_root, relative_id, external_path_root=external_path_root,
+    )
 
 
 def load_json_artifact(paper_dir: Path, relative_to_paper: str) -> dict | list | None:
