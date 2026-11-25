@@ -13,6 +13,7 @@ on:
   pull_request:
     branches:
       - main
+      - baseline/v2.1-phase1
       - fix/p0-classification-qc-contract
       - fix/qc-evidence-object-contract
       - feat/p1-automatic-monotonic-digitization
