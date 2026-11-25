@@ -969,12 +969,15 @@ def _group_achromatic_fragment_tracks(
         if len(group) == 1
         and group[0].get("path_kind", "FULL_X_SPAN_PATH") == "FULL_X_SPAN_PATH"
     ]
+    full_component_ids = {id(group[0]) for group in full_groups}
     partial_items = [
         item for group in groups
-        if group not in full_groups
         for item in group
-        if str(item.get("path_kind", "")).startswith("LOCAL_")
-        or (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+        if id(item) not in full_component_ids
+        and (
+            str(item.get("path_kind", "")).startswith("LOCAL_")
+            or (item.get("path_qc") or {}).get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
+        )
     ]
 
     def describe(item: dict) -> dict | None:
@@ -1539,11 +1542,30 @@ def trace_monotonic_color(
         1 for item in selected_group
         if str(item.get("path_kind", "")).startswith("LOCAL_")
     )
+    is_achromatic = (
+        isinstance(color_match, dict)
+        and color_match.get("space") == "ACHROMATIC_LUMINANCE_RANGE"
+    )
+    selected_path_bbox = [
+        min(int(item["bbox"][0]) for item in selected_group),
+        min(int(item["bbox"][1]) for item in selected_group),
+        max(int(item["bbox"][2]) for item in selected_group),
+        max(int(item["bbox"][3]) for item in selected_group),
+    ]
+    plot_box_values = result.get("plot_box") or [0, 0, 0, 0]
+    plot_width = max(1, int(plot_box_values[2]) - int(plot_box_values[0]))
+    plot_height = max(1, int(plot_box_values[3]) - int(plot_box_values[1]))
+    horizontal_gridline_like = bool(
+        is_achromatic
+        and (selected_path_bbox[2] - selected_path_bbox[0]) >= plot_width * 0.60
+        and (selected_path_bbox[3] - selected_path_bbox[1]) <= max(2, plot_height * 0.004)
+    )
     partial_review_required = bool(
         len(selected_group) > 1
         or path_qc.get("partial_path_review_required")
         or path_qc.get("status") == "PARTIAL_PATHS_NEEDS_REVIEW"
         or local_fragment_count
+        or horizontal_gridline_like
     )
     path_qc.update({
         "selected_branch_index": int(selected_index),
@@ -1621,6 +1643,14 @@ def trace_monotonic_color(
         "branch_count": branch_count or len(groups),
         "partial_fragment_review": partial_fragment_review,
         "partial_fragment_tracking": partial_fragment_tracking,
+        "achromatic_geometry_review": {
+            "horizontal_gridline_like": horizontal_gridline_like,
+            "rule": (
+                "ACHROMATIC_PATH_WITH_X_SPAN_GE_60_PERCENT_AND_Y_SPAN_LE_0_4_PERCENT"
+                if is_achromatic else None
+            ),
+            "status": "NEEDS_REVIEW" if horizontal_gridline_like else "NO_RULE_TRIGGERED",
+        },
     }
 
 def map_explicit_polyline(
