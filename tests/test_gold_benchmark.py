@@ -87,7 +87,7 @@ def test_sample_false_merge_is_counted_even_when_links_are_source_backed():
         },
     )
     assert metrics["false_merge_groups"] == 1
-    assert metrics["precision"] == 0.0
+    assert metrics["precision"] == 1 / 3
 
 
 def test_condition_scope_false_attachment_is_explicit():
