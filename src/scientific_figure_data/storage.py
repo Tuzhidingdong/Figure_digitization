@@ -574,6 +574,29 @@ class Catalog:
                      json.dumps(item.get("confidence", {}), ensure_ascii=False)),
                 )
 
+        for document_records in (processes, measurements, conditions):
+            for record in document_records:
+                for item in record.get("evidence", []):
+                    evidence_id = str(item.get("evidence_id") or "")
+                    if not evidence_id:
+                        continue
+                    self.con.execute(
+                        """INSERT OR REPLACE INTO evidence_items(
+                           evidence_id,paper_id,source_type,source_path,source_sha256,
+                           location_json,snippet,parser_version,confidence_json)
+                           VALUES(?,?,?,?,?,?,?,?,?)""",
+                        (evidence_id, paper_id, item.get("source_type", "UNKNOWN"),
+                         item.get("source_path"), item.get("source_sha256"),
+                         json.dumps({
+                             key: item.get(key) for key in (
+                                 "page_number", "figure_id", "panel_id", "line_number",
+                                 "bbox", "polygon", "clause_index",
+                             ) if item.get(key) is not None
+                         }, ensure_ascii=False),
+                         str(item.get("snippet") or ""), item.get("parser_version"),
+                         json.dumps(item.get("confidence", {}), ensure_ascii=False)),
+                    )
+
         for process in processes:
             raw_id = str(process.get("process_id") or "")
             if not raw_id:
