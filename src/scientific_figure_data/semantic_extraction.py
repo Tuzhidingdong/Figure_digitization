@@ -32,7 +32,7 @@ UNIT_PATTERN = (
 )
 NUMBER = r"[+-]?(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)(?:[eE][+-]?[0-9]+)?"
 LIST_QUANTITY_RE = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<expr>{NUMBER}(?:[ \t]*,[ \t]*{NUMBER}){{2,}}[ \t]*(?:{UNIT_PATTERN}))",
+    rf"(?<![A-Za-z0-9])(?P<expr>{NUMBER}(?:[ \t]*,[ \t]*{NUMBER}){{1,}}[ \t]*(?:{UNIT_PATTERN}))",
     re.IGNORECASE,
 )
 QUANTITY_RE = re.compile(
