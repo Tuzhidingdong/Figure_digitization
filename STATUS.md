@@ -243,3 +243,23 @@ GitHub regression success establishes software behavior for the tested fixtures 
 - This is GitHub-hosted Windows CI evidence only. It does not replace the user's/local-Agent acceptance against the actual Chem-Literature corpus and Windows working environment.
 - Gold Benchmark accuracy remains `NOT_EVALUATED` because no human-labeled gold corpus or independent curve ground truth has been supplied. The evaluator refuses to lower coverage floors or pass empty outputs.
 - PR #23 remains Draft and unmerged. No changes were made to `main`, PR #22, `TASK_PLAN_v1.4.1.md`, or the upstream Chem-Literature repository.
+
+
+## 2026-11-25 — F04-P01 achromatic multi-series development
+
+- Local Skill acceptance evidence was synchronized from the user's Windows Agent run: F04-P01 red S01 335 pixels/1 segment provisional; red S02 152 pixels/2 segments provisional-needs-review; achromatic S03/S04 0 points because no achromatic tracer existed. Only one curve was reasonably complete; this is a real-image failure, not a passing multi-series acceptance.
+- The user-confirmed run used the local `scientific-figure-data-skill` via programmatic CV only; no Agent multimodal image interpretation was used.
+- Opened isolated development branch `feat/p1-achromatic-multiseries-raster` from the exact PR #23 head `7e8f98928461d27d6db681ff98acbfea8a395f51`. PR #23 remains Draft/unmerged; main, PR #22, the older P1/P2 stacks, the frozen Task Plan, and upstream Chem-Literature are unchanged.
+- Added a neutral chroma/luminance candidate-pool detector, a separate achromatic mask path, conservative multi-path inventory, and reciprocal-unique geometric grouping of dashed fragments. Original dashes remain separate segments; the tracker inserts zero bridge pixels.
+- Added a review gate for long near-horizontal achromatic paths that may be interior grid lines. This flag is not proof of a gridline and does not automatically discard the pixels.
+- Added synthetic tests for neutral solid + dashed curves, gridline-like review routing, and no-neutral-pixel refusal. Windows CI and real F04-P01 rerun are pending; no scientific accuracy or production-support claim is made.
+
+
+## 2026-11-25 — crossing-occlusion diagnosis and conservative fragment association
+
+- Windows CI's mixed-panel integration test produced four records rather than the expected three. Per-series geometry diagnostics identified the extra record: one red curve was split into two disjoint full-span raster components where a gray curve overwrote its pixels at the intersection. The Pipeline had incorrectly promoted the two red fragments to two independent series.
+- Added optional geometry-based association for full-span components when X-ranges are sequential with a short gap and reciprocal endpoint/tangent continuity is unique. The two source paths remain separate segments; no bridge pixels or interpolated samples are inserted.
+- A combined multi-segment trace is always review-required. Ambiguous crossings and overlapping same-colour paths remain unresolved.
+- The fragment matcher now uses a sorted X-window index instead of comparing every pair, and fails closed with explicit NEEDS_REVIEW diagnostics when fragment or pair limits are exceeded.
+- Added focused crossing-occlusion tests and strengthened the mixed red/gray solid/dashed Pipeline integration test to require 3 series, with the red crossing curve stored as 2 review-required source segments and the gray dashed curve preserved as 12 separate source segments.
+- Synthetic validation and latest Windows CI rerun are pending; real F04-P01 local Skill acceptance remains pending and no production-support claim is made.

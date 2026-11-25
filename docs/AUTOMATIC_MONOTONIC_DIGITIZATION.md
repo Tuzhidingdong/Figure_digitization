@@ -57,11 +57,26 @@ For each series with at least two calibrated numeric points and pixel provenance
 
 The independent reconstruction is a diagnostic visualization, not an accuracy benchmark.
 
+
+## Experimental achromatic multi-series candidate path (P1 development)
+
+The isolated `feat/p1-achromatic-multiseries-raster` development branch adds a conservative neutral-pixel candidate pass for grayscale/black traces. It is not a production-accepted capability.
+
+- Achromatic candidates are identified by a bounded luminance/chroma mask inside an already resolved plot box. The initial detector proposes a neutral pixel pool; it does **not** claim that the pool represents one curve.
+- Connected 2-D path decomposition inventories spatially separate paths. A full-span solid path remains independent from other paths.
+- Disconnected local fragments may be associated into one dashed-trace candidate only when their left-to-right endpoint position, local tangent, predicted vertical offset and reciprocal best match are unique. Source fragments remain separate CSV path segments. No pixels are inserted or interpolated across gaps.
+- **Occlusion across a crossing:** when two full-span pieces from the same raster family are separated by a short source-image occlusion, they may be associated only under a unique reciprocal endpoint/tangent match. Both original paths remain distinct segments; inserted bridge pixels are always zero and the combined series remains `EXTRACTED_PROVISIONAL_NEEDS_REVIEW`. Ambiguous crossings and same-colour intersections are not resolved automatically.
+- Unassigned fragments, multiple plausible continuations, same-colour intersections and unsupported junctions remain `NEEDS_REVIEW`.
+- Long, nearly horizontal achromatic paths are flagged as gridline-like and remain review-required; the detector does not silently classify them as data or delete them.
+- Plot-boundary exclusion is geometric and narrow. Interior grid lines, gray text, marker glyphs and other neutral annotations may still enter the candidate inventory and must be rejected or reviewed through path/QC evidence.
+
+Synthetic tests cover a gray solid path, gray dashed fragments, a neutral gridline and the no-achromatic-pixels case. These tests establish software behavior only. Real-image acceptance is still pending, including rerunning F04-P01 locally with the Skill and reviewing its overlay/diagnostics. The F04-P01 local result on 2026-11-25 found one complete red path (335 points/1 segment), one provisional red fragment collection (152 points/2 segments), and no achromatic extraction; this is the motivating failure evidence, not a passing benchmark.
+
 ## Explicit limitations
 
 This path does not digitize:
 - CV/EIS loops or other non-monotonic X paths.
-- Same-colour multi-branch curves, or multi-colour candidates that fail the independent path checks.
+- Same-colour multi-branch curves, or multi-colour candidates that fail the independent path checks, in the accepted P0 path. The achromatic fragment-tracking route described above remains experimental P1 development and is not yet accepted for real-paper extraction.
 - Scatter plots, bar charts, error bars, or image/structure schematics.
 - Axes without two defensible numeric anchors per axis. When both left and right Y axes are calibrated, a series is mapped only when a side is unambiguous or explicitly supplied; both calibrations are retained and the software refuses to guess a series-to-axis association.
 - X axes whose labels do not establish an ordered variable.

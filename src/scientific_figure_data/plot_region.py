@@ -818,6 +818,120 @@ def detect_chromatic_color_families(
 
 
 
+def detect_achromatic_trace_family(
+    image_path: Path,
+    plot_box: tuple[int, int, int, int],
+    *,
+    maximum_chroma: int = 24,
+    minimum_luminance: int = 28,
+    maximum_luminance: int = 210,
+    boundary_exclusion_fraction: float = 0.015,
+    minimum_pixels: int = 48,
+    minimum_pixel_fraction: float = 0.0008,
+) -> dict:
+    """Propose a neutral-pixel pool for geometric path separation.
+
+    This is deliberately one achromatic candidate pool, not a claim that all
+    neutral pixels belong to one scientific series. Connected-path and
+    fragment-track validation must separate candidate traces downstream.
+    """
+    if maximum_chroma < 0 or not 0 <= minimum_luminance < maximum_luminance <= 255:
+        raise ValueError("Invalid achromatic luminance/chroma bounds")
+    if not 0 <= boundary_exclusion_fraction < 0.1:
+        raise ValueError("boundary_exclusion_fraction must be in [0, 0.1)")
+    if minimum_pixels < 1 or not 0 < minimum_pixel_fraction <= 1:
+        raise ValueError("Invalid achromatic minimum-pixel thresholds")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError as exc:
+        from .errors import OptionalDependencyError
+        raise OptionalDependencyError(
+            "Achromatic trace detection requires Pillow and NumPy: pip install '.[images]'"
+        ) from exc
+
+    with Image.open(image_path) as source:
+        rgb = np.asarray(source.convert("RGB"), dtype=np.uint8)
+    height, width = rgb.shape[:2]
+    x0, y0, x1, y1 = [int(value) for value in plot_box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(width, x1), min(height, y1)
+    if x1 <= x0 or y1 <= y0:
+        return {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_REGION", "families": []}
+
+    region = rgb[y0:y1, x0:x1].astype(np.int16)
+    region_height, region_width = region.shape[:2]
+    luminance = (
+        0.2126 * region[:, :, 0]
+        + 0.7152 * region[:, :, 1]
+        + 0.0722 * region[:, :, 2]
+    )
+    chroma = region.max(axis=2) - region.min(axis=2)
+    mask = (
+        (chroma <= int(maximum_chroma))
+        & (luminance >= int(minimum_luminance))
+        & (luminance <= int(maximum_luminance))
+    )
+
+    # Plot-frame strokes are geometrically tied to the crop boundary. Excluding
+    # a narrow edge band avoids proposing the axes as data paths; the source
+    # pixels remain untouched and the exclusion is recorded as provenance.
+    edge = max(
+        1,
+        int(round(min(region_width, region_height) * boundary_exclusion_fraction)),
+    )
+    if edge * 2 >= min(region_width, region_height):
+        return {"status": "NEEDS_REVIEW", "reason": "PLOT_REGION_TOO_SMALL", "families": []}
+    mask[:edge, :] = False
+    mask[-edge:, :] = False
+    mask[:, :edge] = False
+    mask[:, -edge:] = False
+
+    active = int(mask.sum())
+    fraction = active / max(1, region_width * region_height)
+    if active < minimum_pixels or fraction < minimum_pixel_fraction:
+        return {
+            "status": "NEEDS_REVIEW",
+            "reason": "INSUFFICIENT_ACHROMATIC_TRACE_PIXELS",
+            "achromatic_pixel_count": active,
+            "achromatic_pixel_fraction": fraction,
+            "families": [],
+        }
+
+    center = int(round(float(np.median(luminance[mask]))))
+    color = [center, center, center]
+    candidate = {
+        "family_type": "ACHROMATIC",
+        "color_rgb": color,
+        "color_tolerance": 0,
+        "color_match": {
+            "space": "ACHROMATIC_LUMINANCE_RANGE",
+            "minimum_chroma": 0,
+            "maximum_chroma": int(maximum_chroma),
+            "minimum_luminance": int(minimum_luminance),
+            "maximum_luminance": int(maximum_luminance),
+            "boundary_exclusion_fraction": float(boundary_exclusion_fraction),
+        },
+        "pixel_count": active,
+        "pixel_fraction": fraction,
+        "median_luminance": center,
+        "provisional": True,
+    }
+    return {
+        "status": "UNIQUE_ACHROMATIC_FAMILY",
+        "reason": "NEUTRAL_PIXEL_POOL_REQUIRES_GEOMETRIC_SERIES_SEPARATION",
+        "family_count": 1,
+        "families": [candidate],
+        "achromatic_pixel_count": active,
+        "achromatic_pixel_fraction": fraction,
+        "plot_box": [x0, y0, x1, y1],
+        "boundary_exclusion_pixels": edge,
+        "luminance_bounds": [int(minimum_luminance), int(maximum_luminance)],
+        "maximum_chroma": int(maximum_chroma),
+        "provisional": True,
+    }
+
+
 def detect_colored_y_axis_spines(
     image_path: Path,
     plot_box: tuple[int, int, int, int],

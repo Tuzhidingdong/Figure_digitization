@@ -63,10 +63,13 @@ def generate_trace_specification(
             "reason": "X_AXIS_SEMANTICS_DO_NOT_ESTABLISH_MONOTONIC_ORDER",
             "x_axis_label": x_axis_label,
         }
-    if not isinstance(color_detection, dict) or color_detection.get("status") != "UNIQUE_CHROMATIC_FAMILY":
+    allowed_color_statuses = {
+        "UNIQUE_CHROMATIC_FAMILY", "UNIQUE_ACHROMATIC_FAMILY",
+    }
+    if not isinstance(color_detection, dict) or color_detection.get("status") not in allowed_color_statuses:
         return {
             "status": "NEEDS_REVIEW",
-            "reason": "UNIQUE_SINGLE_TRACE_COLOR_NOT_ESTABLISHED",
+            "reason": "UNIQUE_SINGLE_TRACE_FAMILY_NOT_ESTABLISHED",
             "color_detection_status": (
                 color_detection.get("status") if isinstance(color_detection, dict) else None
             ),
@@ -104,7 +107,11 @@ def generate_trace_specification(
         "status": "READY",
         "specification": {
             "schema_version": "1.0",
-            "specification_type": "SINGLE_COLOR_CONNECTED_2D_RASTER_PATH",
+            "specification_type": (
+                "ACHROMATIC_CONNECTED_2D_RASTER_PATH"
+                if color_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                else "CHROMATIC_CONNECTED_2D_RASTER_PATH"
+            ),
             "numeric_mapping_status": (
                 "CALIBRATED_NUMERIC" if x_is_calibrated and y_is_calibrated
                 else "PARTIALLY_CALIBRATED" if x_is_calibrated or y_is_calibrated
@@ -116,6 +123,10 @@ def generate_trace_specification(
             "color_rgb": rgb,
             "color_tolerance": int(color_detection.get("color_tolerance", 24)),
             "color_match": color_detection.get("color_match"),
+            "trace_family_type": (
+                "ACHROMATIC" if color_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                else "CHROMATIC"
+            ),
             "x_calibration": calibration_to_dict(x_calibration) if x_calibration else None,
             "y_calibration": calibration_to_dict(y_calibration) if y_calibration else None,
             "chart_family": family,

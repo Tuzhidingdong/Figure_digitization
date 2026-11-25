@@ -1094,3 +1094,352 @@ def test_color_coded_axis_titles_can_resolve_dual_y_axis_mapping(tmp_path: Path)
         }
         for item in records
     ]
+
+
+
+def test_achromatic_family_traces_gray_solid_and_dashed_as_separate_series(tmp_path: Path):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_achromatic_trace_family
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    image_path = tmp_path / "gray_solid_dashed_and_grid.png"
+    image = Image.new("RGB", (420, 280), "white")
+    draw = ImageDraw.Draw(image)
+    # The crop contains the true plot boundaries. They must not be proposed
+    # as trace paths after the narrow boundary exclusion.
+    draw.rectangle((30, 25, 390, 245), outline=(25, 25, 25), width=3)
+    plot_box = (30, 25, 390, 245)
+
+    solid = [
+        (x, int(177 - 25 * (x - 48) / 310))
+        for x in range(48, 360)
+    ]
+    draw.line(solid, fill=(112, 112, 112), width=3)
+
+    # Same neutral hue, but a separate dashed trace. Gaps are source gaps:
+    # the extractor may group the fragments, but may not paint/interpolate them.
+    def dash_y(x):
+        return int(119 - 13 * (x - 54) / 292)
+    for start in range(54, 348, 25):
+        end = min(start + 17, 348)
+        draw.line(
+            [(x, dash_y(x)) for x in range(start, end)],
+            fill=(142, 142, 142), width=3,
+        )
+
+    # A genuine neutral horizontal grid line is intentionally included.
+    # It can be inventoried, but the extracted result must remain review-only.
+    draw.line((35, 76, 385, 76), fill=(194, 194, 194), width=2)
+    image.save(image_path)
+
+    family = detect_achromatic_trace_family(image_path, plot_box)
+    assert family["status"] == "UNIQUE_ACHROMATIC_FAMILY", family
+    assert family["families"][0]["family_type"] == "ACHROMATIC"
+    match = family["families"][0]
+    detected = detect_monotonic_color_branches(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        plot_box=plot_box, color_match=match["color_match"],
+        preserve_partial_fragments=True,
+    )
+    assert detected["status"] == "MULTIPLE_MONOTONIC_COLOR_BRANCHES", detected
+    assert detected["branch_count"] == 3, detected
+    assert detected["partial_fragment_tracking"]["track_count"] >= 1
+    assert detected["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+
+    branch_rows = detected["branches"]
+    dashed_index = next(
+        index for index, row in enumerate(branch_rows)
+        if len(row.get("path_segments", [])) >= 3
+    )
+    dash_points, dash_qc = trace_monotonic_color(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        None, None, plot_box=plot_box, color_match=match["color_match"],
+        branch_index=dashed_index, branch_count=len(branch_rows),
+        preserve_partial_fragments=True,
+    )
+    assert dash_qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", dash_qc
+    assert dash_qc["path_segment_count"] >= 3, dash_qc
+    assert dash_qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+    assert len(dash_points) == sum(
+        segment["point_count"] for segment in dash_qc["path_segments"]
+    )
+
+    grid_index = next(
+        index for index, row in enumerate(branch_rows)
+        if row["x_span"] >= 0.60 * (plot_box[2] - plot_box[0])
+        and row["y_span"] <= 2
+    )
+    _, grid_qc = trace_monotonic_color(
+        str(image_path), tuple(match["color_rgb"]), match["color_tolerance"],
+        None, None, plot_box=plot_box, color_match=match["color_match"],
+        branch_index=grid_index, branch_count=len(branch_rows),
+        preserve_partial_fragments=True,
+    )
+    assert grid_qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", grid_qc
+    assert grid_qc["achromatic_geometry_review"]["horizontal_gridline_like"] is True
+    assert grid_qc["review_required"] is True
+
+
+def test_achromatic_candidate_does_not_claim_a_curve_when_neutral_pixels_are_absent(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.plot_region import detect_achromatic_trace_family
+
+    image_path = tmp_path / "chromatic_only.png"
+    image = Image.new("RGB", (220, 160), "white")
+    draw = ImageDraw.Draw(image)
+    draw.line((20, 120, 200, 35), fill=(225, 25, 35), width=3)
+    image.save(image_path)
+
+    result = detect_achromatic_trace_family(image_path, (10, 10, 210, 150))
+    assert result["status"] == "NEEDS_REVIEW"
+    assert result["reason"] == "INSUFFICIENT_ACHROMATIC_TRACE_PIXELS"
+    assert result["families"] == []
+
+
+def test_trace_specification_accepts_achromatic_candidate_family(tmp_path: Path):
+    from scientific_figure_data.calibration import fit_linear_axis
+    from scientific_figure_data.trace_spec import generate_trace_specification
+
+    image = tmp_path / "achromatic-chart.png"
+    image.write_bytes(b"image fixture")
+    x_cal = fit_linear_axis(
+        "x", [{"pixel": 10, "value": 0}, {"pixel": 90, "value": 10}], "s"
+    )
+    y_cal = fit_linear_axis(
+        "y", [{"pixel": 90, "value": 0}, {"pixel": 10, "value": 5}], "mA"
+    )
+    achromatic = {
+        "status": "UNIQUE_ACHROMATIC_FAMILY",
+        "color_rgb": [128, 128, 128],
+        "color_tolerance": 0,
+        "color_match": {
+            "space": "ACHROMATIC_LUMINANCE_RANGE",
+            "maximum_chroma": 24,
+            "minimum_luminance": 28,
+            "maximum_luminance": 210,
+        },
+    }
+
+    accepted = generate_trace_specification(
+        image, (10, 10, 90, 90), achromatic, x_cal, y_cal,
+        "UNCLASSIFIED", "Time (s)", allow_geometry_only=True,
+    )
+    assert accepted["status"] == "READY", accepted
+    assert accepted["specification"]["specification_type"] == (
+        "ACHROMATIC_CONNECTED_2D_RASTER_PATH"
+    )
+    assert accepted["specification"]["trace_family_type"] == "ACHROMATIC"
+    assert accepted["specification"]["color_match"]["space"] == (
+        "ACHROMATIC_LUMINANCE_RANGE"
+    )
+
+
+def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data import ocr
+    from scientific_figure_data.pipeline import process_paper
+
+    input_root = tmp_path / "input"
+    paper_dir = input_root / "paper-mixed-multiseries"
+    paper_dir.mkdir(parents=True)
+    image_path = paper_dir / "Figure1.png"
+    image = Image.new("RGB", (420, 340), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((55, 40, 360, 270), outline=(25, 25, 25), width=3)
+
+    red = [
+        (x, int(222 - 104 * (x - 70) / 275))
+        for x in range(70, 346)
+    ]
+    gray_solid = [
+        (x, int(186 - 29 * (x - 70) / 275))
+        for x in range(70, 346)
+    ]
+    draw.line(red, fill=(230, 20, 30), width=3)
+    draw.line(gray_solid, fill=(112, 112, 112), width=3)
+
+    def gray_dash_y(x):
+        return int(136 - 18 * (x - 70) / 275)
+
+    for start in range(74, 342, 23):
+        end = min(start + 15, 346)
+        draw.line(
+            [(x, gray_dash_y(x)) for x in range(start, end)],
+            fill=(144, 144, 144), width=3,
+        )
+    draw.text((155, 294), "Time (s)", fill=(20, 20, 20))
+    draw.text((8, 148), "Signal (mA)", fill=(20, 20, 20))
+    image.save(image_path)
+
+    rows = [
+        _ocr_row("0", 70, 282), _ocr_row("5", 205, 282), _ocr_row("10", 345, 282),
+        _ocr_row("10", 42, 65), _ocr_row("5", 42, 155), _ocr_row("0", 42, 255),
+        _ocr_row("Time (s)", 205, 305, 0.96),
+        _ocr_row("Signal (mA)", 18, 155, 0.95),
+    ]
+    (paper_dir / "figure_inventory.json").write_text(
+        json.dumps({"figures": [{
+            "figure_id": "Figure1", "image_path": "Figure1.png",
+            "caption": "Mixed chromatic and achromatic monotonic curves.",
+            "panels": [],
+        }]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ocr, "run_ocr", lambda path: rows)
+
+    result = process_paper(
+        input_root, Path("paper-mixed-multiseries"), tmp_path / "output",
+        options={"ocr": True, "memory_limit_mb": 1024},
+    )
+    series_diagnostics = []
+    for item in result["series"]:
+        qc = item["metadata"].get("raster_qc", {})
+        branch = qc.get("branch_detection") or {}
+        specification = item["metadata"].get("trace_specification", {}).get(
+            "specification", {}
+        )
+        series_diagnostics.append({
+            "series_id": item["series_id"],
+            "method": item["extraction_method"],
+            "status": item["extraction_status"],
+            "family_type": specification.get("trace_family_type"),
+            "points": item["metadata"].get("points_count"),
+            "segments": qc.get("path_segment_count"),
+            "component_bbox": qc.get("component_bbox"),
+            "component_spans": [
+                qc.get("component_x_span"), qc.get("component_y_span")
+            ],
+            "branch_status": branch.get("status"),
+            "branch_count": branch.get("branch_count"),
+            "branches": [
+                {
+                    "bbox": row.get("bbox"),
+                    "x_span": row.get("x_span"),
+                    "y_span": row.get("y_span"),
+                    "path_count": row.get("path_count"),
+                    "path_segments": row.get("path_segments"),
+                }
+                for row in branch.get("branches", [])
+            ],
+            "achromatic_review": qc.get("achromatic_geometry_review"),
+        })
+    if result["series_count"] != 3:
+        for diagnostic in series_diagnostics:
+            print("SERIES_DIAGNOSTIC " + json.dumps(diagnostic, sort_keys=True))
+    assert result["series_count"] == 3
+    family_types = [
+        item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        for item in result["series"]
+    ]
+    assert family_types.count("CHROMATIC") == 1, family_types
+    assert family_types.count("ACHROMATIC") == 2, family_types
+    assert all(item["metadata"]["points_count"] >= 50 for item in result["series"])
+    red_series = [
+        item for item in result["series"]
+        if item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        == "CHROMATIC"
+    ]
+    assert len(red_series) == 1, result
+    assert red_series[0]["extraction_status"] == (
+        "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+    )
+    red_qc = red_series[0]["metadata"]["raster_qc"]
+    assert red_qc["path_segment_count"] == 2, red_qc
+    assert red_qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+    dashed = [
+        item for item in result["series"]
+        if item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
+        == "ACHROMATIC"
+        and item["metadata"].get("raster_qc", {}).get("path_segment_count", 0) >= 3
+    ]
+    assert len(dashed) == 1, result
+    assert dashed[0]["extraction_status"] == (
+        "EXTRACTED_PROVISIONAL_NEEDS_REVIEW"
+    )
+
+
+def test_achromatic_fragment_tracker_fails_closed_at_fragment_limit():
+    from scientific_figure_data.raster import _group_achromatic_fragment_tracks
+
+    fragments = []
+    for index in range(513):
+        x0 = index * 2
+        path = [(20 + offset % 2, x0 + offset) for offset in range(10)]
+        fragments.append({
+            "path": path,
+            "bbox": [x0, 20, x0 + 10, 22],
+            "pixel_count": len(path),
+            "path_kind": "LOCAL_SHORT_2D_FRAGMENT_NEEDS_REVIEW",
+            "path_qc": {"status": "PARTIAL_PATHS_NEEDS_REVIEW"},
+        })
+
+    groups, unassigned, diagnostics = _group_achromatic_fragment_tracks(
+        [[item] for item in fragments], plot_width=2000, plot_height=100,
+    )
+    assert groups == []
+    assert len(unassigned) == 513
+    assert diagnostics["status"] == "FRAGMENT_COUNT_LIMIT_REACHED_NEEDS_REVIEW"
+    assert diagnostics["track_count"] == 0
+    assert diagnostics["inter_fragment_pixels_inserted"] == 0
+
+
+def test_crossing_occlusion_groups_same_color_full_span_fragments_without_bridge(
+    tmp_path: Path,
+):
+    from PIL import Image, ImageDraw
+    from scientific_figure_data.raster import (
+        detect_monotonic_color_branches, trace_monotonic_color,
+    )
+
+    image_path = tmp_path / "red_trace_occluded_by_gray_crossing.png"
+    image = Image.new("RGB", (420, 280), "white")
+    draw = ImageDraw.Draw(image)
+    red = [
+        (x, int(220 - 100 * (x - 45) / 330))
+        for x in range(45, 376)
+    ]
+    gray = [
+        (x, int(180 - 30 * (x - 45) / 330))
+        for x in range(45, 376)
+    ]
+    draw.line(red, fill=(225, 20, 30), width=3)
+    # Draw the gray curve second so it overwrites the red pixels at their
+    # crossing, creating a real source-image occlusion gap in the red mask.
+    draw.line(gray, fill=(112, 112, 112), width=3)
+    image.save(image_path)
+    plot_box = (30, 20, 390, 250)
+
+    branch = detect_monotonic_color_branches(
+        str(image_path), (225, 20, 30), 8,
+        plot_box=plot_box, associate_full_span_fragments=True,
+    )
+    if branch.get("branch_count") != 1:
+        print(
+            "OCCLUSION_TRACKING_DIAGNOSTIC "
+            + json.dumps({
+                "branches": branch.get("branches"),
+                "tracking": branch.get("partial_fragment_tracking"),
+            }, sort_keys=True)
+        )
+    assert branch["status"] == "SINGLE_MONOTONIC_COLOR_BAND", branch
+    assert branch["branch_count"] == 1, branch
+    assert branch["branches"][0]["path_count"] == 2, branch
+    assert branch["partial_fragment_tracking"]["track_count"] == 1
+    assert branch["partial_fragment_tracking"]["full_span_fragment_count"] == 2
+    assert branch["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+
+    points, qc = trace_monotonic_color(
+        str(image_path), (225, 20, 30), 8, None, None,
+        plot_box=plot_box, associate_full_span_fragments=True,
+    )
+    assert qc["status"] == "EXTRACTED_PROVISIONAL_NEEDS_REVIEW", qc
+    assert qc["path_segment_count"] == 2, qc
+    assert qc["partial_fragment_tracking"]["inter_fragment_pixels_inserted"] == 0
+    assert len(points) == sum(segment["point_count"] for segment in qc["path_segments"])
+    assert all(segment["point_count"] > 0 for segment in qc["path_segments"])

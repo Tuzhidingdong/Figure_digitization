@@ -24,7 +24,11 @@ from .pdf_backend import PdfiumBackend
 from .raster import (map_explicit_polyline, trace_monotonic_color,
                      detect_monotonic_color_branches)
 from .profiles import profile_registry_fingerprint
-from .plot_region import (detect_plot_box, detect_single_trace_color, detect_chromatic_color_families, detect_colored_y_axis_spines, estimate_ocr_text_ink_color)
+from .plot_region import (
+    detect_plot_box, detect_single_trace_color, detect_chromatic_color_families,
+    detect_achromatic_trace_family, detect_colored_y_axis_spines,
+    estimate_ocr_text_ink_color,
+)
 from .panel_segmentation import detect_panel_regions
 from .trace_spec import generate_trace_specification
 from .reconstruction import render_series_artifacts, build_panel_comparison_sheet
@@ -767,30 +771,74 @@ def _extract_panel(
             pre_plot_box_pixels and ordered_x_supported
             and pre_family not in {"CV", "EIS", "NON_MONOTONIC", "NON_MONOTONIC_CURVE"}
         ):
-            family_detection = detect_chromatic_color_families(
+            chromatic_detection = detect_chromatic_color_families(
                 image_path, tuple(pre_plot_box_pixels)
             )
-            candidates = family_detection.get("families", [])
+            achromatic_detection = detect_achromatic_trace_family(
+                image_path, tuple(pre_plot_box_pixels)
+            )
+            candidates = []
             if (
-                family_detection.get("status") in {
+                chromatic_detection.get("status") in {
                     "UNIQUE_CHROMATIC_FAMILY", "MULTIPLE_CHROMATIC_FAMILIES",
                 }
-                and candidates
-                and not family_detection.get("truncated", False)
+                and not chromatic_detection.get("truncated", False)
             ):
+                candidates.extend({
+                    **candidate, "family_type": "CHROMATIC",
+                } for candidate in chromatic_detection.get("families", []))
+            chromatic_family_count = int(
+                chromatic_detection.get("family_count", len(chromatic_detection.get("families", [])))
+            )
+            achromatic_routing_allowed = chromatic_family_count <= 1
+            if (
+                achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                and achromatic_routing_allowed
+            ):
+                candidates.extend({
+                    **candidate, "family_type": "ACHROMATIC",
+                } for candidate in achromatic_detection.get("families", []))
+            candidate_inventory = {
+                "status": (
+                    "NO_TRACE_FAMILY_CANDIDATES" if not candidates else
+                    "UNIQUE_TRACE_FAMILY_CANDIDATE" if len(candidates) == 1 else
+                    "MULTIPLE_TRACE_FAMILY_CANDIDATES"
+                ),
+                "candidate_count": len(candidates),
+                "families": candidates,
+                "chromatic_detection": chromatic_detection,
+                "achromatic_detection": achromatic_detection,
+                "achromatic_routing": {
+                    "status": (
+                        "ROUTED" if achromatic_routing_allowed
+                        else "NOT_ROUTED_MULTIPLE_CHROMATIC_FAMILIES_NEEDS_REVIEW"
+                    ),
+                    "chromatic_family_count": chromatic_family_count,
+                },
+                "acceptance_note": (
+                    "Candidates require independent connected-path and review validation"
+                ),
+            }
+            if candidates:
                 expanded = []
-                base_id = str(base_definition.get("series_id") or f"{figure_id}_{panel_id}_unassigned")
-                multiple_families = (
-                    family_detection.get("status") == "MULTIPLE_CHROMATIC_FAMILIES"
-                    and len(candidates) >= 2
+                base_id = str(
+                    base_definition.get("series_id")
+                    or f"{figure_id}_{panel_id}_unassigned"
                 )
+                multiple_families = len(candidates) >= 2
                 for color_index, candidate in enumerate(candidates, 1):
+                    is_achromatic = candidate.get("family_type") == "ACHROMATIC"
                     branch_detection = detect_monotonic_color_branches(
                         str(image_path),
                         tuple(int(value) for value in candidate["color_rgb"]),
                         int(candidate.get("color_tolerance", 24)),
                         plot_box=tuple(pre_plot_box_pixels),
                         color_match=candidate.get("color_match"),
+                        preserve_partial_fragments=is_achromatic,
+                        associate_full_span_fragments=(
+                            achromatic_routing_allowed
+                            and achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                        ),
                     )
                     branch_count = (
                         int(branch_detection.get("branch_count", 1))
@@ -799,18 +847,27 @@ def _extract_panel(
                     )
                     for branch_index in range(branch_count):
                         definition = dict(base_definition)
-                        color_id = (
-                            f"{base_id}_auto_color_{color_index:02d}"
+                        family_id = (
+                            f"{base_id}_auto_{candidate['family_type'].lower()}_{color_index:02d}"
                             if multiple_families else base_id
                         )
                         if multiple_families or branch_count > 1:
                             definition["series_id"] = (
-                                f"{color_id}_branch_{branch_index + 1:02d}"
-                                if branch_count > 1 else color_id
+                                f"{family_id}_branch_{branch_index + 1:02d}"
+                                if branch_count > 1 else family_id
                             )
                         definition["color_rgb"] = list(candidate["color_rgb"])
                         definition["_auto_color_candidate"] = dict(candidate)
-                        definition["_auto_color_detection"] = family_detection
+                        definition["_auto_color_detection"] = (
+                            chromatic_detection if not is_achromatic
+                            else achromatic_detection
+                        )
+                        definition["_auto_candidate_inventory"] = candidate_inventory
+                        definition["_auto_preserve_partial_fragments"] = is_achromatic
+                        definition["_auto_associate_full_span_fragments"] = (
+                            achromatic_routing_allowed
+                            and achromatic_detection.get("status") == "UNIQUE_ACHROMATIC_FAMILY"
+                        )
                         definition["_auto_plot_box_pixels"] = list(pre_plot_box_pixels)
                         definition["_auto_plot_detection"] = pre_plot_detection
                         definition["_auto_trace_branch_detection"] = branch_detection
@@ -1195,14 +1252,23 @@ def _extract_panel(
         color_detection = None
         if definition.get("_auto_color_candidate"):
             candidate = definition["_auto_color_candidate"]
+            is_achromatic_candidate = candidate.get("family_type") == "ACHROMATIC"
             color_detection = {
-                "status": "UNIQUE_CHROMATIC_FAMILY",
+                "status": (
+                    "UNIQUE_ACHROMATIC_FAMILY"
+                    if is_achromatic_candidate else "UNIQUE_CHROMATIC_FAMILY"
+                ),
+                "family_type": "ACHROMATIC" if is_achromatic_candidate else "CHROMATIC",
                 "color_rgb": list(candidate["color_rgb"]),
                 "color_tolerance": int(candidate.get("color_tolerance", 24)),
                 "color_match": candidate.get("color_match"),
-                "source": "AUTOMATIC_HUE_COLOR_FAMILY_CANDIDATE",
+                "source": (
+                    "AUTOMATIC_ACHROMATIC_PIXEL_FAMILY_CANDIDATE"
+                    if is_achromatic_candidate else "AUTOMATIC_HUE_COLOR_FAMILY_CANDIDATE"
+                ),
                 "candidate_evidence": candidate,
                 "family_detection": definition.get("_auto_color_detection"),
+                "candidate_inventory": definition.get("_auto_candidate_inventory"),
             }
         if (not color_rgb and image_path and plot_box_pixels
                 and family not in {"NON_MONOTONIC", "NON_MONOTONIC_CURVE", "CV", "EIS"}):
@@ -1678,6 +1744,12 @@ def _extract_panel(
                 color_match=specification.get("color_match"),
                 branch_index=int(branch_index) if branch_index is not None else None,
                 branch_count=int(branch_count) if branch_count is not None else None,
+                preserve_partial_fragments=bool(
+                    definition.get("_auto_preserve_partial_fragments", False)
+                ),
+                associate_full_span_fragments=bool(
+                    definition.get("_auto_associate_full_span_fragments", False)
+                ),
             )
             if definition.get("_auto_trace_branch_detection"):
                 qc["branch_detection"] = definition["_auto_trace_branch_detection"]
