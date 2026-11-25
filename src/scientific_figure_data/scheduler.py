@@ -388,7 +388,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
             max_workers=workers, mp_context=context,
             initializer=_worker_initializer,
             initargs=(str(run_temp_directory), str(worker_log_directory)),
-            max_tasks_per_child=5,
+            max_tasks_per_child=1,
         )
 
     executor_generation = 1
