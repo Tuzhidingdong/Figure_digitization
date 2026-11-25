@@ -821,6 +821,7 @@ def _extract_panel(
                         plot_box=tuple(pre_plot_box_pixels),
                         color_match=candidate.get("color_match"),
                         preserve_partial_fragments=is_achromatic,
+                        associate_full_span_fragments=True,
                     )
                     branch_count = (
                         int(branch_detection.get("branch_count", 1))
@@ -1725,6 +1726,7 @@ def _extract_panel(
                 preserve_partial_fragments=bool(
                     definition.get("_auto_preserve_partial_fragments", False)
                 ),
+                associate_full_span_fragments=True,
             )
             if definition.get("_auto_trace_branch_detection"):
                 qc["branch_detection"] = definition["_auto_trace_branch_detection"]
