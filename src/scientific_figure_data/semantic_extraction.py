@@ -5,7 +5,9 @@ import json
 import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable
+from typing import Any
+
+from .models import namespaced_id
 
 UNIT_CANONICAL = {
     "°c": "degC", "℃": "degC", "k": "K",
@@ -527,6 +529,7 @@ def build_semantic_package(
                     if item["subject_entity_id"] == subject.get("subject_entity_id")
                 ), None),
                 "entity_type": "SAMPLE", "role_in_series": subject["subject_role"],
+                "subject_role": subject["subject_role"],
                 "status": subject["link_status"], "evidence": {"evidence_ids": subject["evidence_ids"]},
             }]
         measurement_link = next(
@@ -535,7 +538,9 @@ def build_semantic_package(
             None,
         )
         if measurement_link:
-            record.measurement_id = measurement_link["measurement_id"]
+            record.measurement_id = namespaced_id(
+                record.paper_id, measurement_link["measurement_id"],
+            )
         related_ids = {
             subject.get("subject_entity_id") if subject else None,
             measurement_link.get("measurement_id") if measurement_link else None,
