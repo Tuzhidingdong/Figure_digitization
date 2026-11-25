@@ -1782,28 +1782,41 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     # QC stores the full rejected connected component, not only the rectangle
     # primitive: the upper dashed marks are part of this component's bbox.
     assert excluded["bbox"] == [82, 4, 127, 19], excluded
-    assert any(
-        item.get("rejection_reason")
-        == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
-        for item in detected.get("rejected_components", [])
-    ), detected
-    excluded_record = next(
+    # The full exclusion evidence lives in excluded_partial_branches.
+    # rejected_components also contains a deliberately compact review summary;
+    # do not require that summary to duplicate the full path_qc payload.
+    assert excluded.get("source_qc_rejection_reason") == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), excluded
+    assert excluded.get("source_path_qc_reason") == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), excluded
+    assert excluded["path_qc"]["reason"] == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), excluded
+    junction = excluded["path_qc"]["ambiguous_junction_clusters"][0]
+    assert junction["reason"] == "UNSUPPORTED_JUNCTION_PORT_COUNT", excluded
+    assert junction["junction_pixels"] == 33, excluded
+    assert junction["port_count"] == 7, excluded
+    assert len(junction["ports"]) == 7, excluded
+
+    # rejected_components exposes a compact summary of the same exclusion.
+    # Validate its public summary fields independently from the full evidence.
+    excluded_summary = next(
         item for item in detected["rejected_components"]
         if item.get("rejection_reason")
         == "PARTIAL_BRANCH_EXCLUDED_WHEN_UNIQUE_COMPLETE_PATH_EXISTS"
     )
-    assert excluded_record.get("source_qc_rejection_reason") == (
+    assert excluded_summary["bbox"] == excluded["bbox"], excluded_summary
+    assert excluded_summary.get("source_qc_rejection_reason") == (
         "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
-    ), excluded_record
-    # source_path_qc_reason mirrors the enclosing path_qc.reason. The
-    # specific port-count diagnosis is nested one level deeper in the
-    # ambiguous junction cluster record.
-    assert excluded_record.get("source_path_qc_reason") == (
+    ), excluded_summary
+    assert excluded_summary.get("source_path_qc_reason") == (
         "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
-    ), excluded_record
-    assert excluded_record["path_qc"]["ambiguous_junction_clusters"][0]["reason"] == (
-        "UNSUPPORTED_JUNCTION_PORT_COUNT"
-    ), excluded_record
+    ), excluded_summary
+    assert excluded_summary.get("classification") == (
+        "UNRESOLVED_COMPACT_COMPONENT_RETAINED_IN_REVIEW_QC"
+    ), excluded_summary
     points, qc = trace_monotonic_color(
         str(image_path), color, 6, None, None, plot_box=(4, 2, 186, 84)
     )
@@ -1820,8 +1833,15 @@ def test_2d_path_tracer_preserves_vertical_time_series_segments_and_rejects_anno
     )
     assert not any(8 <= point.pixel_y <= 18 for point in points)
     assert len(qc.get("excluded_partial_branches", [])) == 1, qc
-    # The trace QC carries the same full connected-component bbox.
-    assert qc["excluded_partial_branches"][0]["bbox"] == [82, 4, 127, 19], qc
+    # Trace QC carries the same full evidence object and component extent.
+    trace_excluded = qc["excluded_partial_branches"][0]
+    assert trace_excluded["bbox"] == [82, 4, 127, 19], qc
+    assert trace_excluded["path_qc"]["reason"] == (
+        "UNSUPPORTED_JUNCTION_REQUIRES_COMPONENT_REVIEW"
+    ), qc
+    trace_junction = trace_excluded["path_qc"]["ambiguous_junction_clusters"][0]
+    assert trace_junction["reason"] == "UNSUPPORTED_JUNCTION_PORT_COUNT", qc
+    assert trace_junction["port_count"] == 7, qc
 
 
 
