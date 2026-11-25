@@ -1297,23 +1297,38 @@ def test_process_paper_expands_chromatic_and_achromatic_series_in_one_panel(
         input_root, Path("paper-mixed-multiseries"), tmp_path / "output",
         options={"ocr": True, "memory_limit_mb": 1024},
     )
-    series_diagnostics = [
-        {
+    series_diagnostics = []
+    for item in result["series"]:
+        qc = item["metadata"].get("raster_qc", {})
+        branch = qc.get("branch_detection") or {}
+        specification = item["metadata"].get("trace_specification", {}).get(
+            "specification", {}
+        )
+        series_diagnostics.append({
             "series_id": item["series_id"],
             "method": item["extraction_method"],
             "status": item["extraction_status"],
-            "family_type": item["metadata"]["trace_specification"]["specification"].get(
-                "trace_family_type"
-            ),
+            "family_type": specification.get("trace_family_type"),
             "points": item["metadata"].get("points_count"),
-            "segments": item["metadata"].get("raster_qc", {}).get("path_segment_count"),
-            "bbox": item["metadata"].get("raster_qc", {}).get("selected_bbox"),
-            "branch_detection": item["metadata"].get("raster_qc", {}).get(
-                "branch_detection"
-            ),
-        }
-        for item in result["series"]
-    ]
+            "segments": qc.get("path_segment_count"),
+            "component_bbox": qc.get("component_bbox"),
+            "component_spans": [
+                qc.get("component_x_span"), qc.get("component_y_span")
+            ],
+            "branch_status": branch.get("status"),
+            "branch_count": branch.get("branch_count"),
+            "branches": [
+                {
+                    "bbox": row.get("bbox"),
+                    "x_span": row.get("x_span"),
+                    "y_span": row.get("y_span"),
+                    "path_count": row.get("path_count"),
+                    "path_segments": row.get("path_segments"),
+                }
+                for row in branch.get("branches", [])
+            ],
+            "achromatic_review": qc.get("achromatic_geometry_review"),
+        })
     assert result["series_count"] == 3, series_diagnostics
     family_types = [
         item["metadata"]["trace_specification"]["specification"]["trace_family_type"]
