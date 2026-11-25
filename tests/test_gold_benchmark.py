@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from scientific_figure_data.benchmark import (
     evaluate_condition_scope,
+    evaluate_condition_kind_scope,
     evaluate_gold_benchmark,
     evaluate_relation,
     evaluate_sample_merges,
@@ -135,3 +136,20 @@ def test_benchmark_requires_blind_held_out_metrics():
     )
     assert report["status"] == "NOT_EVALUATED"
     assert report["reason"] == "BLIND_HELD_OUT_METRICS_NOT_SUPPLIED"
+
+
+
+def test_condition_kind_and_scope_are_evaluated_jointly():
+    metrics = evaluate_condition_kind_scope(
+        {
+            "condition-a": ("TEMPERATURE", "SYNTHESIS"),
+            "condition-b": ("SCAN_RATE", "EXPERIMENT"),
+        },
+        {
+            "condition-a": ("TEMPERATURE", "SYNTHESIS"),
+            "condition-b": ("CURRENT_DENSITY", "EXPERIMENT"),
+        },
+    )
+    assert metrics["precision"] == 0.5
+    assert metrics["recall"] == 0.5
+    assert metrics["false_scope_attachments"] == 1
