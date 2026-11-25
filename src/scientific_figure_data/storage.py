@@ -968,9 +968,55 @@ class Catalog:
                WHERE s.series_id=? ORDER BY c.name""",
             (series_id,),
         ).fetchall()
+        process_rows = self.con.execute(
+            """SELECT l.entity_id AS sample_id,l.subject_role,sps.step_order,sps.step_role,
+                      sps.scope_status,sp.process_id,sp.method_text,sp.process_type,
+                      sp.condition_ids_json,sp.evidence_json
+               FROM series_subject_links l
+               JOIN sample_process_steps sps ON sps.sample_id=l.entity_id
+               JOIN synthesis_processes sp ON sp.process_id=sps.process_id
+               WHERE l.series_id=? ORDER BY sps.step_order""",
+            (series_id,),
+        ).fetchall()
+        synthesis_processes = []
+        for row in process_rows:
+            process = dict(row)
+            condition_ids = json.loads(process.pop("condition_ids_json") or "[]")
+            process["conditions"] = []
+            if condition_ids:
+                placeholders = ",".join("?" for _ in condition_ids)
+                rows = self.con.execute(
+                    f"""SELECT condition_id,name,value_json,evidence_json,condition_scope,
+                               scope_entity_id,parse_status
+                        FROM conditions WHERE condition_id IN ({placeholders})
+                        ORDER BY name""",
+                    condition_ids,
+                ).fetchall()
+                process["conditions"] = [dict(item) for item in rows]
+            synthesis_processes.append(process)
+        measurement_rows = self.con.execute(
+            """SELECT measurement_id,measurement_role,link_status,evidence_json
+               FROM series_measurement_links WHERE series_id=?""",
+            (series_id,),
+        ).fetchall()
+        validation_row = self.con.execute(
+            """SELECT status,checks_json,unresolved_fields_json
+               FROM cross_validation_results WHERE series_id=?""",
+            (series_id,),
+        ).fetchone()
+        cross_validation = None
+        if validation_row:
+            cross_validation = dict(validation_row)
+            cross_validation["checks"] = json.loads(cross_validation.pop("checks_json") or "[]")
+            cross_validation["unresolved_fields"] = json.loads(
+                cross_validation.pop("unresolved_fields_json") or "[]"
+            )
         return {
             "subject_links": [dict(row) for row in entity_rows],
             "conditions": [dict(row) for row in condition_rows],
+            "synthesis_processes": synthesis_processes,
+            "measurement_links": [dict(row) for row in measurement_rows],
+            "cross_validation": cross_validation,
         }
 
     def list_reviews(self, limit: int = 1000) -> list[dict]:
