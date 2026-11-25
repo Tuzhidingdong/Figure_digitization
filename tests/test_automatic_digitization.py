@@ -1419,6 +1419,14 @@ def test_crossing_occlusion_groups_same_color_full_span_fragments_without_bridge
         str(image_path), (225, 20, 30), 8,
         plot_box=plot_box, associate_full_span_fragments=True,
     )
+    if branch.get("branch_count") != 1:
+        print(
+            "OCCLUSION_TRACKING_DIAGNOSTIC "
+            + json.dumps({
+                "branches": branch.get("branches"),
+                "tracking": branch.get("partial_fragment_tracking"),
+            }, sort_keys=True)
+        )
     assert branch["status"] == "SINGLE_MONOTONIC_COLOR_BAND", branch
     assert branch["branch_count"] == 1, branch
     assert branch["branches"][0]["path_count"] == 2, branch
