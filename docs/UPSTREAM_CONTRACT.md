@@ -20,6 +20,12 @@ sfd scan \
   --corpus-root "E:\\Chem-Literature" \
   --input-root "E:\\Chem-Literature\\runs\\preprocessed" \
   --output-root "E:\\SFD_Output"
+
+sfd run --all \
+  --corpus-csv "research_corpus_paired.csv" \
+  --corpus-root "E:\\Chem-Literature" \
+  --input-root "E:\\Chem-Literature\\runs\\preprocessed" \
+  --output-root "E:\\SFD_Output"
 ```
 
 `preprocessing_path` is resolved relative to `--corpus-root`, matching the upstream `run_workflow.py` working-directory contract. The package directory must remain inside `--input-root`. The CSV must contain `doi`, `local_pdf_path`, `local_si_info`, and `preprocessing_path`. Rows marked `FAILED` and rows without a preprocessing package are reported as skipped; a malformed or unsupported package is not silently accepted.
