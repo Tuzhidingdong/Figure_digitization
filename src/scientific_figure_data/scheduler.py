@@ -444,6 +444,7 @@ def run_corpus(input_root: Path, output_root: Path, paper_paths: Iterable[Path],
                     try:
                         input_snapshot = snapshot_paper(
                             paper, input_root,
+                            paper_id=(options.get("upstream_paper_ids") or {}).get(str(paper.resolve())),
                             external_path_root=Path(options["corpus_root"])
                             if options.get("corpus_root") else None,
                         )
