@@ -1,0 +1,648 @@
+{
+  "task": "blind_curve_discovery_v3_generic_classification_global_association",
+  "no_multimodal_vision_used": true,
+  "vision_statement": "No multimodal/visual model or LLM used; PIL/NumPy/scipy pixel analysis only.",
+  "prior_outputs_read": [
+    "blind_curve_discovery_v2/source_pixel_audit.csv (historical audit only)",
+    "blind_curve_discovery_v2/morphology_bridge_pixels.csv (historical audit only)"
+  ],
+  "input_image": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\blind_curve_discovery_v1\\01_original.png",
+  "image_size": [
+    460,
+    365
+  ],
+  "derived_plot_box": [
+    85,
+    51,
+    457,
+    327
+  ],
+  "git_HEAD": "a296ca29205215b1bf71380a966bc6d814776f01",
+  "module_path_imported": "E:\\Zinc_batters_datas\\_worktrees\\Figure_digitization_pr24_a296ca2\\src\\scientific_figure_data",
+  "skill_path": "E:\\Zinc_batters_datas\\_worktrees\\Figure_digitization_pr24_a296ca2\\SKILL.md",
+  "source_modified": false,
+  "algorithm_parameters": {
+    "max_gap_px": 19,
+    "residual_limit_px": 22.08,
+    "slope_difference_limit": 1.2,
+    "continuity_link_bonus": 30.0,
+    "global_method": "deterministic successive-shortest-path min-cost flow path cover on fragment DAG"
+  },
+  "classification_counts": {
+    "DATA_PATH_CANDIDATE": 2,
+    "NON_DATA_GRAPHIC_CANDIDATE": 41,
+    "AMBIGUOUS_REVIEW": 24
+  },
+  "candidate_component_count": 67,
+  "non_data_graphic_count": 41,
+  "ambiguous_count": 24,
+  "data_path_candidate_ids": [
+    "F001",
+    "F020"
+  ],
+  "fragment_count": 17,
+  "association_edge_count": 2,
+  "global_solution": {
+    "base_cost": 1.539,
+    "base_flow_objective": -28.461,
+    "link_bonus": 30.0,
+    "flow": 16,
+    "chain_count": 16,
+    "chains": [
+      [
+        "F001.P1"
+      ],
+      [
+        "F007.P1"
+      ],
+      [
+        "F010.P1"
+      ],
+      [
+        "F017.P1"
+      ],
+      [
+        "F018.P1"
+      ],
+      [
+        "F020.P1"
+      ],
+      [
+        "F020.P2"
+      ],
+      [
+        "F039.P1"
+      ],
+      [
+        "F043.P1"
+      ],
+      [
+        "F043.P2"
+      ],
+      [
+        "F048.P1"
+      ],
+      [
+        "F050.P1"
+      ],
+      [
+        "F051.P1"
+      ],
+      [
+        "F053.P1"
+      ],
+      [
+        "F062.P1",
+        "F062.P3"
+      ],
+      [
+        "F062.P2"
+      ]
+    ]
+  },
+  "competing_solutions": [
+    {
+      "solution_id": "ALT_E1",
+      "constraint": "forbid edge F062.P1 -> F062.P3",
+      "total_cost": 2.084,
+      "flow_objective": -27.916,
+      "margin_vs_base": 0.545,
+      "chain_count": 16,
+      "chains": [
+        [
+          "F001.P1"
+        ],
+        [
+          "F007.P1"
+        ],
+        [
+          "F010.P1"
+        ],
+        [
+          "F017.P1"
+        ],
+        [
+          "F018.P1"
+        ],
+        [
+          "F020.P1"
+        ],
+        [
+          "F020.P2"
+        ],
+        [
+          "F039.P1"
+        ],
+        [
+          "F043.P1"
+        ],
+        [
+          "F043.P2"
+        ],
+        [
+          "F048.P1"
+        ],
+        [
+          "F050.P1"
+        ],
+        [
+          "F051.P1"
+        ],
+        [
+          "F053.P1"
+        ],
+        [
+          "F062.P1"
+        ],
+        [
+          "F062.P2",
+          "F062.P3"
+        ]
+      ],
+      "confidence": "LOW_NEAR_TIE"
+    },
+    {
+      "solution_id": "ALT_C15",
+      "constraint": "forbid all edges of base chain 15",
+      "total_cost": 2.084,
+      "flow_objective": -27.916,
+      "margin_vs_base": 0.545,
+      "chain_count": 16,
+      "chains": [
+        [
+          "F001.P1"
+        ],
+        [
+          "F007.P1"
+        ],
+        [
+          "F010.P1"
+        ],
+        [
+          "F017.P1"
+        ],
+        [
+          "F018.P1"
+        ],
+        [
+          "F020.P1"
+        ],
+        [
+          "F020.P2"
+        ],
+        [
+          "F039.P1"
+        ],
+        [
+          "F043.P1"
+        ],
+        [
+          "F043.P2"
+        ],
+        [
+          "F048.P1"
+        ],
+        [
+          "F050.P1"
+        ],
+        [
+          "F051.P1"
+        ],
+        [
+          "F053.P1"
+        ],
+        [
+          "F062.P1"
+        ],
+        [
+          "F062.P2",
+          "F062.P3"
+        ]
+      ],
+      "confidence": "LOW_NEAR_TIE"
+    }
+  ],
+  "junction_hypotheses": [
+    {
+      "hypothesis_id": "JH_AMB_F005_0",
+      "component_id": "F005",
+      "family": "CHROMATIC_HSV_HUE",
+      "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+      "port_count": 9,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F005_1",
+      "component_id": "F005",
+      "family": "CHROMATIC_HSV_HUE",
+      "reason": "AMBIGUOUS_FOUR_WAY_JUNCTION",
+      "port_count": 4,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_F008_0",
+      "component_id": "F008",
+      "family": "CHROMATIC_HSV_HUE",
+      "junction_pixels": 7,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              268,
+              254
+            ],
+            [
+              275,
+              253
+            ]
+          ],
+          "straightness_cost": 0.202
+        },
+        {
+          "ports": [
+            [
+              269,
+              253
+            ],
+            [
+              276,
+              255
+            ]
+          ],
+          "straightness_cost": 0.4245
+        }
+      ],
+      "best_pairing_cost": 0.202,
+      "competing_margin": 0.2225,
+      "confidence": "HIGH",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_F008_1",
+      "component_id": "F008",
+      "family": "CHROMATIC_HSV_HUE",
+      "junction_pixels": 5,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              284,
+              253
+            ],
+            [
+              289,
+              255
+            ]
+          ],
+          "straightness_cost": 0.0101
+        },
+        {
+          "ports": [
+            [
+              284,
+              255
+            ],
+            [
+              288,
+              253
+            ]
+          ],
+          "straightness_cost": 0.0279
+        }
+      ],
+      "best_pairing_cost": 0.0101,
+      "competing_margin": 0.0178,
+      "confidence": "LOW_NEAR_TIE",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_F008_2",
+      "component_id": "F008",
+      "family": "CHROMATIC_HSV_HUE",
+      "junction_pixels": 10,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              298,
+              249
+            ],
+            [
+              307,
+              251
+            ]
+          ],
+          "straightness_cost": 0.4592
+        },
+        {
+          "ports": [
+            [
+              298,
+              251
+            ],
+            [
+              307,
+              249
+            ]
+          ],
+          "straightness_cost": 0.2689
+        }
+      ],
+      "best_pairing_cost": 0.2689,
+      "competing_margin": 0.1903,
+      "confidence": "HIGH",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F008_3",
+      "component_id": "F008",
+      "family": "CHROMATIC_HSV_HUE",
+      "reason": "AMBIGUOUS_FOUR_WAY_JUNCTION",
+      "port_count": 4,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F010_0",
+      "component_id": "F010",
+      "family": "CHROMATIC_HSV_HUE",
+      "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+      "port_count": 7,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_F020_0",
+      "component_id": "F020",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "junction_pixels": 11,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              197,
+              101
+            ],
+            [
+              208,
+              98
+            ]
+          ],
+          "straightness_cost": 0.0298
+        },
+        {
+          "ports": [
+            [
+              198,
+              103
+            ],
+            [
+              206,
+              97
+            ]
+          ],
+          "straightness_cost": 0.0927
+        }
+      ],
+      "best_pairing_cost": 0.0298,
+      "competing_margin": 0.0629,
+      "confidence": "LOW_NEAR_TIE",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F029_0",
+      "component_id": "F029",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+      "port_count": 7,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_F039_0",
+      "component_id": "F039",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "junction_pixels": 10,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              302,
+              248
+            ],
+            [
+              305,
+              258
+            ]
+          ],
+          "straightness_cost": 0.0048
+        },
+        {
+          "ports": [
+            [
+              303,
+              247
+            ],
+            [
+              303,
+              257
+            ]
+          ],
+          "straightness_cost": 0.0128
+        }
+      ],
+      "best_pairing_cost": 0.0048,
+      "competing_margin": 0.008,
+      "confidence": "LOW_NEAR_TIE",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_F040_0",
+      "component_id": "F040",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "junction_pixels": 10,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              396,
+              248
+            ],
+            [
+              399,
+              258
+            ]
+          ],
+          "straightness_cost": 0.0098
+        },
+        {
+          "ports": [
+            [
+              397,
+              247
+            ],
+            [
+              397,
+              257
+            ]
+          ],
+          "straightness_cost": 0.153
+        }
+      ],
+      "best_pairing_cost": 0.0098,
+      "competing_margin": 0.1432,
+      "confidence": "LOW_NEAR_TIE",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_F043_0",
+      "component_id": "F043",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "junction_pixels": 7,
+      "port_count": 4,
+      "pairings": [
+        {
+          "ports": [
+            [
+              318,
+              257
+            ],
+            [
+              325,
+              256
+            ]
+          ],
+          "straightness_cost": 0.011
+        },
+        {
+          "ports": [
+            [
+              319,
+              258
+            ],
+            [
+              326,
+              255
+            ]
+          ],
+          "straightness_cost": 0.0702
+        }
+      ],
+      "best_pairing_cost": 0.011,
+      "competing_margin": 0.0592,
+      "confidence": "LOW_NEAR_TIE",
+      "status": "NO_PIXELS_SYNTHESIZED;ALL_CONTINUATIONS_RETAINED_AS_HYPOTHESES"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F059_0",
+      "component_id": "F059",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "reason": "UNSUPPORTED_JUNCTION_PORT_COUNT",
+      "port_count": 5,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    },
+    {
+      "hypothesis_id": "JH_AMB_F062_1",
+      "component_id": "F062",
+      "family": "ACHROMATIC_LUMINANCE_RANGE",
+      "reason": "AMBIGUOUS_THREE_WAY_JUNCTION",
+      "port_count": 3,
+      "pairings": [],
+      "best_pairing_cost": null,
+      "competing_margin": null,
+      "confidence": "UNRESOLVED",
+      "status": "AMBIGUOUS_JUNCTION_KEPT_FOR_REVIEW"
+    }
+  ],
+  "global_hypothesis_count": 16,
+  "hypothesis_count": 30,
+  "assignment_summary": {
+    "fragments_assigned": 17,
+    "fragments_unassigned": 0,
+    "official_data_components": [
+      "F001",
+      "F020"
+    ],
+    "review_only": true
+  },
+  "source_pixel_audit": {
+    "points_audited": 552,
+    "valid_original_foreground": 542,
+    "excluded_not_original_foreground": 10,
+    "excluded_coordinates": [
+      [
+        192,
+        96
+      ],
+      [
+        193,
+        96
+      ],
+      [
+        194,
+        96
+      ],
+      [
+        195,
+        95
+      ],
+      [
+        196,
+        95
+      ],
+      [
+        197,
+        95
+      ],
+      [
+        198,
+        103
+      ],
+      [
+        207,
+        98
+      ],
+      [
+        206,
+        96
+      ],
+      [
+        206,
+        95
+      ]
+    ],
+    "morphology_bridge_points_among_audited": 10,
+    "historical_v2_inputs_used_for_audit_only": true
+  },
+  "calibration": {
+    "data_coordinates_status": "BLOCKED_CALIBRATION",
+    "reason": "no machine-readable numeric axis anchors; OCR not run"
+  }
+}
