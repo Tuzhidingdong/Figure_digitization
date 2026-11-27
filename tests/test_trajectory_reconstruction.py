@@ -142,3 +142,51 @@ def test_cli_accepts_trace_image_command():
     ])
     assert args.command == "trace-image"
     assert args.plot_box == [1.0, 2.0, 300.0, 220.0]
+
+def test_short_regular_dash_pattern_is_reviewable_below_solid_point_threshold(tmp_path: Path):
+    image, draw = _canvas()
+    for left in (80, 106, 132, 158):
+        draw.line((left, 250, left + 15, 247), fill=(110, 110, 110), width=3)
+    path = tmp_path / "short_regular_dash.png"
+    image.save(path)
+    result = _run(path)
+    candidates = [track for track in result["tracks"] if track["eligible_for_review"]]
+    assert len(candidates) == 1, result
+    assert candidates[0]["line_style_candidate"] == "DASHED_CANDIDATE"
+    assert candidates[0]["point_count"] < max(50, round(530 * 0.18))
+    assert candidates[0]["review_reason"] == "PERIODIC_DASH_PATTERN"
+
+
+def test_irregular_fragment_path_is_not_promoted_by_coverage_alone():
+    from scientific_figure_data.trajectory import _stats
+
+    spans = [(20, 8), (33, 3), (66, 15), (82, 1), (121, 6)]
+    nodes = []
+    for left, length in spans:
+        for x in range(left, left + length):
+            nodes.append({
+                "x": x, "y": 180 - (x // 20), "width": 3,
+                "rgb": [130, 130, 130], "reward": 1.5,
+            })
+    stats = _stats(nodes, 160)
+    assert stats["line_style_candidate"] == "DISCONTINUOUS_UNRESOLVED"
+    assert stats["dash_periodicity_score"] < 0.30
+
+
+def test_global_path_selection_is_node_disjoint(tmp_path: Path):
+    image, draw = _canvas()
+    draw.line([(x, int(260 - 150 * (x - 60) / 470)) for x in range(60, 531)],
+              fill=(220, 30, 40), width=3)
+    draw.line([(x, int(300 - 100 * (x - 60) / 470)) for x in range(60, 531)],
+              fill=(110, 110, 110), width=3)
+    path = tmp_path / "global_node_disjoint.png"
+    image.save(path)
+    result = _run(path)
+    assert result["flow_diagnostics"]["status"] == "PASS"
+    assert result["flow_diagnostics"]["node_disjoint"] is True
+    coordinates = [
+        (point["pixel_x"], point["pixel_y"])
+        for track in result["tracks"] for point in track["point_records"]
+    ]
+    assert len(coordinates) == len(set(coordinates))
+
