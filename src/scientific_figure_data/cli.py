@@ -143,6 +143,21 @@ def build_parser() -> argparse.ArgumentParser:
     probe.add_argument("pdfs", nargs="*", type=Path)
     probe.add_argument("--out", type=Path, default=Path("backend_probe_report.json"))
     probe.add_argument("--render-scale", type=float, default=1.0)
+
+    trace = sub.add_parser(
+        "trace-image", help="experimental source-pixel raster trajectory discovery"
+    )
+    trace.add_argument("image", type=Path)
+    trace.add_argument("--plot-box", type=float, nargs=4, required=True,
+                       metavar=("X0", "Y0", "X1", "Y1"))
+    trace.add_argument("--out", type=Path, required=True)
+    trace.add_argument("--max-tracks", type=int, default=12)
+    trace.add_argument("--max-gap-columns", type=int, default=12)
+    trace.add_argument("--max-abs-slope", type=float, default=6.0)
+    trace.add_argument("--max-slope-change", type=float, default=1.5)
+    trace.add_argument("--min-contrast", type=float, default=12.0)
+    trace.add_argument("--min-x-coverage", type=float, default=0.25)
+    trace.add_argument("--min-active-columns", type=int, default=48)
     return parser
 
 
@@ -649,6 +664,23 @@ def _validate(args) -> int:
     return 0 if not errors else 1
 
 
+def _trace_image(args) -> int:
+    from .trajectory import write_trajectory_artifacts
+
+    result = write_trajectory_artifacts(
+        args.image, tuple(args.plot_box), args.out,
+        max_tracks=args.max_tracks,
+        max_gap_columns=args.max_gap_columns,
+        max_abs_slope=args.max_abs_slope,
+        max_slope_change=args.max_slope_change,
+        min_contrast=args.min_contrast,
+        min_x_coverage=args.min_x_coverage,
+        min_active_columns=args.min_active_columns,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _benchmark(args) -> int:
     from .benchmark import evaluate_gold_benchmark
 
@@ -679,6 +711,8 @@ def main(argv=None) -> int:
             return _rebuild(args)
         if args.command == "validate":
             return _validate(args)
+        if args.command == "trace-image":
+            return _trace_image(args)
         if args.command == "benchmark":
             return _benchmark(args)
         if args.command == "backend-probe":
