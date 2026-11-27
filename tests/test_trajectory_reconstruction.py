@@ -173,13 +173,13 @@ def test_irregular_fragment_path_is_not_promoted_by_coverage_alone():
     assert stats["dash_periodicity_score"] < 0.30
 
 
-def test_global_path_selection_is_node_disjoint():
+def test_global_path_selection_is_node_disjoint(tmp_path: Path):
     image, draw = _canvas()
     draw.line([(x, int(260 - 150 * (x - 60) / 470)) for x in range(60, 531)],
               fill=(220, 30, 40), width=3)
     draw.line([(x, int(300 - 100 * (x - 60) / 470)) for x in range(60, 531)],
               fill=(110, 110, 110), width=3)
-    path = Path("global_node_disjoint.png")
+    path = tmp_path / "global_node_disjoint.png"
     image.save(path)
     result = _run(path)
     assert result["flow_diagnostics"]["status"] == "PASS"
