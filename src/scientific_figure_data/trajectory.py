@@ -342,13 +342,23 @@ def _global_node_disjoint_paths(
         )
         paths.append({"nodes": [ordered[index] for index in indices],
                       "objective": float(score)})
+    node_disjoint = len(visited) == len(selected)
+    if not node_disjoint or len(paths) != flow:
+        return [], {
+            "status": "PATH_DECOMPOSITION_FAILED",
+            "flow_count": flow, "path_count": len(paths),
+            "selected_node_count": len(selected), "visited_node_count": len(visited),
+            "transition_edges": len(transitions), "objective": round(objective, 6),
+            "node_disjoint": node_disjoint, "max_tracks": max_tracks,
+        }
     paths.sort(key=lambda item: (
         -len(item["nodes"]), item["nodes"][0]["x"], item["nodes"][0]["y"]
     ))
     return paths, {
-        "status": "PASS", "flow_count": flow, "selected_node_count": len(selected),
+        "status": "PASS", "flow_count": flow, "path_count": len(paths),
+        "selected_node_count": len(selected),
         "transition_edges": len(transitions), "objective": round(objective, 6),
-        "node_disjoint": len(visited) == len(selected), "max_tracks": max_tracks,
+        "node_disjoint": True, "max_tracks": max_tracks,
     }
 
 
@@ -568,6 +578,7 @@ def detect_monotonic_raster_trajectories(
             "status": status, "eligible_for_review": bool(eligible),
             "review_reason": reason,
             "path_objective": round(float(solution["objective"]), 6),
+            "path_score": round(float(solution["objective"]), 6),
             "median_source_rgb": [
                 int(round(float(np.median([node["rgb"][k] for node in path_nodes]))))
                 for k in range(3)
