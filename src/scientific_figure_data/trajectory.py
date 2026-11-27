@@ -129,13 +129,238 @@ def _best_path(nodes: list[dict], *, max_gap: int, max_slope: float,
     return [nodes[i] for i in indices], best_score
 
 
+def _angle_difference_pi(a: float, b: float) -> float:
+    """Smallest undirected angle difference in radians (line direction is modulo pi)."""
+    import math
+    return abs((a - b + math.pi / 2) % math.pi - math.pi / 2)
+
+
+def _attach_local_tangents(nodes: list[dict], contrast, x0: int, y0: int,
+                           radius: int = 2) -> None:
+    """Estimate a local line tangent from the contrast structure tensor."""
+    import math
+    import numpy as np
+
+    gy, gx = np.gradient(contrast.astype(np.float32))
+    height, width = contrast.shape
+    for node in nodes:
+        x = int(node["x"]) - x0
+        y = int(node["y"]) - y0
+        xa, xb = max(0, x - radius), min(width, x + radius + 1)
+        ya, yb = max(0, y - radius), min(height, y + radius + 1)
+        patch_x, patch_y = gx[ya:yb, xa:xb], gy[ya:yb, xa:xb]
+        jxx = float(np.sum(patch_x * patch_x))
+        jyy = float(np.sum(patch_y * patch_y))
+        jxy = float(np.sum(patch_x * patch_y))
+        matrix = np.asarray([[jxx, jxy], [jxy, jyy]], dtype=np.float64)
+        values, vectors = np.linalg.eigh(matrix)
+        tangent = vectors[:, 0]
+        if tangent[0] < 0:
+            tangent = -tangent
+        energy = float(values[0] + values[1])
+        confidence = float(values[1] - values[0]) / energy if energy > 1e-8 else 0.0
+        node["_tangent_angle"] = math.atan2(float(tangent[1]), float(tangent[0]))
+        node["_tangent_confidence"] = max(0.0, min(1.0, confidence))
+
+
+def _global_node_disjoint_paths(
+    nodes: list[dict], contrast, x0: int, y0: int, *,
+    max_tracks: int, max_gap: int, max_slope: float,
+    start_cost: float, gap_cost: float, angle_cost: float,
+    color_cost: float, width_cost: float, max_graph_edges: int = 300_000,
+) -> tuple[list[dict], dict]:
+    """Select globally node-disjoint paths with successive-shortest-path min-cost flow.
+
+    Every run-node has unit capacity. Residual edges allow later augmentations to
+    reroute earlier choices, unlike sequential greedy path peeling.
+    """
+    import heapq
+    import math
+
+    if not nodes:
+        return [], {"flow_count": 0, "transition_edges": 0, "objective": 0.0}
+    ordered = sorted(nodes, key=lambda node: (int(node["x"]), int(node["y"])))
+    count = len(ordered)
+    if count > 6000:
+        return [], {
+            "flow_count": 0, "transition_edges": 0, "objective": 0.0,
+            "status": "NODE_BUDGET_EXCEEDED", "node_count": count,
+        }
+
+    _attach_local_tangents(ordered, contrast, x0, y0)
+    by_x: dict[int, list[int]] = {}
+    for index, node in enumerate(ordered):
+        by_x.setdefault(int(node["x"]), []).append(index)
+
+    source, sink = 2 * count, 2 * count + 1
+    graph: list[list[list[Any]]] = [[] for _ in range(2 * count + 2)]
+
+    def add_edge(u: int, v: int, capacity: int, cost: float):
+        forward = [v, len(graph[v]), capacity, float(cost)]
+        reverse = [u, len(graph[u]), 0, -float(cost)]
+        graph[u].append(forward)
+        graph[v].append(reverse)
+        return forward
+
+    node_edges = []
+    transitions: list[tuple[int, int, list[Any], float]] = []
+    transitions_by_node: list[list[tuple[int, list[Any]]]] = [[] for _ in range(count)]
+    for index, node in enumerate(ordered):
+        incoming, outgoing = 2 * index, 2 * index + 1
+        add_edge(source, incoming, 1, start_cost)
+        node_edges.append(add_edge(incoming, outgoing, 1, -float(node["reward"])))
+        add_edge(outgoing, sink, 1, 0.0)
+
+    for index, current in enumerate(ordered):
+        current_x = int(current["x"])
+        for dx in range(1, max_gap + 2):
+            for next_index in by_x.get(current_x + dx, []):
+                following = ordered[next_index]
+                dy = int(following["y"]) - int(current["y"])
+                if abs(dy / dx) > max_slope:
+                    continue
+                rgb_delta = math.sqrt(sum(
+                    (int(current["rgb"][k]) - int(following["rgb"][k])) ** 2
+                    for k in range(3)
+                ) / 3.0) / 255.0
+                width_delta = abs(
+                    int(current["width"]) - int(following["width"])
+                ) / max(1, int(current["width"]), int(following["width"]))
+                edge_angle = math.atan2(float(dy), float(dx))
+                conf_a = float(current.get("_tangent_confidence", 0.0))
+                conf_b = float(following.get("_tangent_confidence", 0.0))
+                angle_a = _angle_difference_pi(
+                    edge_angle, float(current.get("_tangent_angle", edge_angle))
+                )
+                angle_b = _angle_difference_pi(
+                    edge_angle, float(following.get("_tangent_angle", edge_angle))
+                )
+                tangent_error = (
+                    conf_a * angle_a + conf_b * angle_b
+                ) / max(1e-8, conf_a + conf_b)
+                tangent_error /= math.pi / 2.0
+                cost = (
+                    gap_cost * (dx - 1) + angle_cost * tangent_error
+                    + color_cost * rgb_delta + width_cost * width_delta
+                )
+                edge = add_edge(2 * index + 1, 2 * next_index, 1, cost)
+                transitions.append((index, next_index, edge, cost))
+                transitions_by_node[index].append((next_index, edge))
+                if len(transitions) > max_graph_edges:
+                    return [], {
+                        "flow_count": 0, "transition_edges": len(transitions),
+                        "objective": 0.0, "status": "EDGE_BUDGET_EXCEEDED",
+                        "node_count": count,
+                    }
+
+    infinity = float("inf")
+    potentials = [infinity] * len(graph)
+    potentials[source] = 0.0
+    for index, node in enumerate(ordered):
+        incoming, outgoing = 2 * index, 2 * index + 1
+        potentials[incoming] = min(potentials[incoming], start_cost)
+        potentials[outgoing] = min(
+            potentials[outgoing], potentials[incoming] - float(node["reward"])
+        )
+        potentials[sink] = min(potentials[sink], potentials[outgoing])
+        for next_index, edge in transitions_by_node[index]:
+            next_incoming = 2 * next_index
+            potentials[next_incoming] = min(
+                potentials[next_incoming], potentials[outgoing] + float(edge[3])
+            )
+    potentials = [value if math.isfinite(value) else 0.0 for value in potentials]
+
+    flow, objective = 0, 0.0
+    while flow < max_tracks:
+        distances = [infinity] * len(graph)
+        previous_node, previous_edge = [-1] * len(graph), [-1] * len(graph)
+        distances[source] = 0.0
+        queue = [(0.0, source)]
+        while queue:
+            distance, u = heapq.heappop(queue)
+            if distance > distances[u] + 1e-12:
+                continue
+            for edge_index, edge in enumerate(graph[u]):
+                if edge[2] <= 0:
+                    continue
+                v = int(edge[0])
+                reduced = float(edge[3]) + potentials[u] - potentials[v]
+                if reduced < 0.0 and reduced > -1e-8:
+                    reduced = 0.0
+                candidate = distance + reduced
+                if candidate + 1e-12 < distances[v]:
+                    distances[v] = candidate
+                    previous_node[v], previous_edge[v] = u, edge_index
+                    heapq.heappush(queue, (candidate, v))
+        if not math.isfinite(distances[sink]):
+            break
+        actual_cost = distances[sink] - potentials[source] + potentials[sink]
+        if actual_cost >= -1e-8:
+            break
+        for vertex, distance in enumerate(distances):
+            if math.isfinite(distance):
+                potentials[vertex] += distance
+        vertex = sink
+        while vertex != source:
+            parent, edge_index = previous_node[vertex], previous_edge[vertex]
+            if parent < 0 or edge_index < 0:
+                raise RuntimeError("Incomplete augmenting path in trajectory flow graph")
+            edge = graph[parent][edge_index]
+            edge[2] -= 1
+            graph[vertex][edge[1]][2] += 1
+            vertex = parent
+        flow += 1
+        objective += -actual_cost
+
+    selected = {index for index, edge in enumerate(node_edges) if edge[2] == 0}
+    successor: dict[int, int] = {}
+    predecessor: dict[int, int] = {}
+    edge_costs: dict[tuple[int, int], float] = {}
+    for left, right, edge, cost in transitions:
+        if edge[2] == 0:
+            successor[left], predecessor[right] = right, left
+            edge_costs[(left, right)] = cost
+
+    paths, visited = [], set()
+    starts = sorted(
+        (index for index in selected if index not in predecessor),
+        key=lambda index: (ordered[index]["x"], ordered[index]["y"]),
+    )
+    for start in starts:
+        indices, current = [], start
+        while current in selected and current not in visited:
+            indices.append(current)
+            visited.add(current)
+            if current not in successor:
+                break
+            current = successor[current]
+        if not indices:
+            continue
+        score = (
+            sum(float(ordered[index]["reward"]) for index in indices) - start_cost
+            - sum(edge_costs[(a, b)] for a, b in zip(indices, indices[1:]))
+        )
+        paths.append({"nodes": [ordered[index] for index in indices],
+                      "objective": float(score)})
+    paths.sort(key=lambda item: (
+        -len(item["nodes"]), item["nodes"][0]["x"], item["nodes"][0]["y"]
+    ))
+    return paths, {
+        "status": "PASS", "flow_count": flow, "selected_node_count": len(selected),
+        "transition_edges": len(transitions), "objective": round(objective, 6),
+        "node_disjoint": len(visited) == len(selected), "max_tracks": max_tracks,
+    }
+
+
 def _stats(path: list[dict], plot_width: int):
     import math
     import statistics
-    path = sorted(path, key=lambda n: n["x"])
-    xs, ys = [n["x"] for n in path], [n["y"] for n in path]
-    widths = [n["width"] for n in path]
-    gaps = [max(0, xs[i] - xs[i - 1] - 1) for i in range(1, len(xs))]
+
+    path = sorted(path, key=lambda node: node["x"])
+    xs, ys = [node["x"] for node in path], [node["y"] for node in path]
+    widths = [node["width"] for node in path]
+    gaps = [max(0, xs[index] - xs[index - 1] - 1)
+            for index in range(1, len(xs))]
     lengths, current = [], 1
     for gap in gaps:
         if gap:
@@ -144,51 +369,88 @@ def _stats(path: list[dict], plot_width: int):
         else:
             current += 1
     lengths.append(current)
-    positive_gaps = [g for g in gaps if g]
-    gap_cv = (statistics.pstdev(positive_gaps) / statistics.mean(positive_gaps)
-              if len(positive_gaps) > 1 else None)
-    length_cv = (statistics.pstdev(lengths) / statistics.mean(lengths)
-                 if len(lengths) > 1 else None)
-    slopes = [(ys[i] - ys[i - 1]) / max(1, xs[i] - xs[i - 1])
-              for i in range(1, len(xs))]
-    curv = [abs(slopes[i] - slopes[i - 1]) for i in range(1, len(slopes))]
-    median_curv = statistics.median(curv) if curv else 0.0
+    positive_gaps = [gap for gap in gaps if gap]
+    gap_cv = (
+        statistics.pstdev(positive_gaps) / statistics.mean(positive_gaps)
+        if len(positive_gaps) > 1 else None
+    )
+    length_cv = (
+        statistics.pstdev(lengths) / statistics.mean(lengths)
+        if len(lengths) > 1 else None
+    )
+    slopes = [(ys[index] - ys[index - 1]) / max(1, xs[index] - xs[index - 1])
+              for index in range(1, len(xs))]
+    curvature = [abs(slopes[index] - slopes[index - 1])
+                 for index in range(1, len(slopes))]
+    median_curvature = statistics.median(curvature) if curvature else 0.0
     mean_width = statistics.mean(widths)
     width_cv = statistics.pstdev(widths) / mean_width if mean_width else 0.0
+    median_gap = statistics.median(positive_gaps) if positive_gaps else 0.0
+    median_segment_length = statistics.median(lengths)
     segments = len(lengths)
-    dashed = (segments >= 3 and gap_cv is not None and length_cv is not None
-              and gap_cv <= 0.75 and length_cv <= 0.75)
-    small_gaps = (segments <= 3 and len(positive_gaps) <= 2
-                  and (not positive_gaps or max(positive_gaps) <= max(2, round(plot_width * .02))))
-    style = ("DASHED_CANDIDATE" if dashed else
-             "SOLID_CANDIDATE" if segments == 1 else
-             "SOLID_WITH_OCCLUSION_CANDIDATE" if small_gaps else
-             "DISCONTINUOUS_UNRESOLVED")
+    dash_pattern = (
+        segments >= 3 and gap_cv is not None and length_cv is not None
+        and gap_cv <= 0.55 and length_cv <= 0.60 and median_gap >= 2.0
+        and median_segment_length >= 3.0
+        and 0.20 <= median_gap / max(1.0, median_segment_length) <= 1.8
+    )
+    small_gaps = (
+        segments <= 3 and len(positive_gaps) <= 2
+        and (not positive_gaps
+             or max(positive_gaps) <= max(2, round(plot_width * 0.02)))
+    )
+    if dash_pattern:
+        style = "DASHED_CANDIDATE"
+    elif segments == 1:
+        style = "SOLID_CANDIDATE"
+    elif small_gaps:
+        style = "SOLID_WITH_OCCLUSION_CANDIDATE"
+    else:
+        style = "DISCONTINUOUS_UNRESOLVED"
+
+    dash_periodicity = 0.0
+    if dash_pattern:
+        dash_periodicity = math.exp(-float(gap_cv)) * math.exp(-float(length_cv))
+    elif positive_gaps and length_cv is not None and gap_cv is not None:
+        dash_periodicity = (
+            0.25 * math.exp(-float(gap_cv)) * math.exp(-float(length_cv))
+        )
     x_span = max(1, xs[-1] - xs[0] + 1)
     active = len(set(xs)) / x_span
     coverage = x_span / max(1, plot_width)
-    rgb_median = [statistics.median(n["rgb"][k] for n in path) for k in range(3)]
+    rgb_median = [statistics.median(node["rgb"][k] for node in path)
+                  for k in range(3)]
     color_spread = statistics.median(
-        math.sqrt(sum((n["rgb"][k] - rgb_median[k]) ** 2 for k in range(3)) / 3) / 255
-        for n in path
+        math.sqrt(sum((node["rgb"][k] - rgb_median[k]) ** 2 for k in range(3)) / 3)
+        / 255.0 for node in path
     )
-    confidence = (0.28 * min(1, coverage / .65)
-                  + 0.24 * min(1, active / (.58 if dashed else .90))
-                  + 0.24 * math.exp(-median_curv / 1.25)
-                  + 0.14 * math.exp(-color_spread / .12)
-                  + 0.10 * math.exp(-max(0, width_cv - .20)))
+    raw_confidence = (
+        0.28 * min(1.0, coverage / 0.65)
+        + 0.24 * min(1.0, active / (0.58 if dash_pattern else 0.90))
+        + 0.24 * math.exp(-median_curvature / 1.25)
+        + 0.14 * math.exp(-color_spread / 0.12)
+        + 0.10 * math.exp(-max(0.0, width_cv - 0.20))
+    )
+    structure_factor = (
+        1.0 if style in {"SOLID_CANDIDATE", "SOLID_WITH_OCCLUSION_CANDIDATE"}
+        else dash_periodicity if dash_pattern else 0.25
+    )
     return {
         "point_count": len(path), "segment_count": segments,
         "segment_lengths_columns": lengths, "gap_lengths_columns": positive_gaps,
         "gap_cv": round(gap_cv, 4) if gap_cv is not None else None,
         "segment_length_cv": round(length_cv, 4) if length_cv is not None else None,
+        "median_gap_columns": round(float(median_gap), 3),
+        "median_segment_length_columns": round(float(median_segment_length), 3),
+        "dash_periodicity_score": round(float(dash_periodicity), 4),
         "x_range": [xs[0], xs[-1]], "y_range": [min(ys), max(ys)],
         "x_coverage_fraction": round(coverage, 4),
         "active_column_fraction": round(active, 4),
-        "median_abs_curvature": round(median_curv, 4),
+        "median_abs_curvature": round(median_curvature, 4),
         "median_run_width": round(statistics.median(widths), 3),
         "run_width_cv": round(width_cv, 4),
-        "line_style_candidate": style, "confidence": round(confidence, 4),
+        "line_style_candidate": style,
+        "confidence": round(raw_confidence * structure_factor, 4),
     }
 
 
@@ -198,134 +460,177 @@ def detect_monotonic_raster_trajectories(
     slope_step: float = 0.5, min_contrast: float = 12.0, max_run_height: int = 12,
     max_nodes_per_column: int = 16, min_x_coverage: float = 0.25,
     min_active_columns: int = 48, min_active_fraction: float = 0.20,
-    start_penalty: float = 4.0, max_slope_change: float = 1.5,
-    curvature_penalty: float = 0.32, gap_penalty: float = 0.10,
+    start_penalty: float = 6.0, max_slope_change: float = 1.5,
+    curvature_penalty: float = 1.20, gap_penalty: float = 0.35,
     color_penalty: float = 2.4, width_penalty: float = 0.30,
+    min_dashed_points: int = 24, min_dashed_x_coverage: float = 0.10,
+    min_dashed_active_fraction: float = 0.30,
     boundary_exclusion_fraction: float = 0.012,
     max_candidate_pixels: int = 250_000,
 ) -> dict:
-    """Discover review-only trajectories from original pixels, not components."""
+    """Discover globally competing review-only paths from original image pixels."""
     try:
         import numpy as np
         from PIL import Image
     except ImportError as exc:
         from .errors import OptionalDependencyError
         raise OptionalDependencyError("Install Pillow and NumPy with the images extra.") from exc
+
     path = Path(image_path)
     if not path.is_file():
         return {"status": "NEEDS_REVIEW", "reason": "SOURCE_IMAGE_UNAVAILABLE", "tracks": []}
-    with Image.open(path) as source:
-        image_width, image_height = source.size
+    with Image.open(path) as source_image:
+        image_width, image_height = source_image.size
         x0, y0, x1, y1 = _box(image_width, image_height, plot_box)
         if x1 <= x0 or y1 <= y0:
             return {"status": "NEEDS_REVIEW", "reason": "INVALID_PLOT_BOX", "tracks": []}
-        pixels = np.asarray(source.convert("RGB").crop((x0, y0, x1, y1)), dtype=np.uint8)
+        pixels = np.asarray(
+            source_image.convert("RGB").crop((x0, y0, x1, y1)), dtype=np.uint8
+        )
     region_height, region_width = pixels.shape[:2]
     if region_width < 32 or region_height < 16:
         return {"status": "NEEDS_REVIEW", "reason": "PLOT_BOX_TOO_SMALL", "tracks": []}
     background, contrast, mask = _mask(pixels, min_contrast, boundary_exclusion_fraction)
     candidate_count = int(mask.sum())
     if candidate_count > max_candidate_pixels:
-        return {"status": "NEEDS_REVIEW", "reason": "CANDIDATE_PIXEL_BUDGET_EXCEEDED",
-                "candidate_pixel_count": candidate_count, "tracks": []}
+        return {
+            "status": "NEEDS_REVIEW", "reason": "CANDIDATE_PIXEL_BUDGET_EXCEEDED",
+            "candidate_pixel_count": candidate_count, "tracks": [],
+        }
     if candidate_count < min_active_columns:
-        return {"status": "NO_TRAJECTORY_CANDIDATES",
-                "reason": "INSUFFICIENT_CONTRAST_PIXELS", "tracks": []}
-    nodes = _column_nodes(pixels, contrast, mask, x0, y0,
-                          max_nodes_per_column, max_run_height)
-    remaining = list(nodes)
+        return {
+            "status": "NO_TRAJECTORY_CANDIDATES",
+            "reason": "INSUFFICIENT_CONTRAST_PIXELS", "tracks": [],
+        }
+    nodes = _column_nodes(
+        pixels, contrast, mask, x0, y0, max_nodes_per_column, max_run_height
+    )
+    if not nodes:
+        return {"status": "NO_TRAJECTORY_CANDIDATES", "reason": "NO_COLUMN_RUNS", "tracks": []}
+
+    path_solutions, flow_diagnostics = _global_node_disjoint_paths(
+        nodes, contrast, x0, y0,
+        max_tracks=max_tracks, max_gap=max_gap_columns,
+        max_slope=max_abs_slope, start_cost=start_penalty,
+        gap_cost=gap_penalty, angle_cost=curvature_penalty,
+        color_cost=color_penalty, width_cost=width_penalty,
+    )
+    if flow_diagnostics.get("status") in {"NODE_BUDGET_EXCEEDED", "EDGE_BUDGET_EXCEEDED"}:
+        return {
+            "status": "NEEDS_REVIEW", "reason": flow_diagnostics["status"],
+            "candidate_pixel_count": candidate_count,
+            "candidate_run_count": len(nodes), "flow_diagnostics": flow_diagnostics,
+            "tracks": [],
+        }
+
     tracks, rejected = [], []
-    minimum_nodes = max(min_active_columns, round(region_width * .18))
-    for track_index in range(max_tracks):
-        if not remaining:
-            break
-        path, score = _best_path(
-            remaining, max_gap=max_gap_columns, max_slope=max_abs_slope,
-            slope_step=slope_step, max_slope_change=max_slope_change,
-            curve_cost=curvature_penalty, gap_cost=gap_penalty,
-            color_cost=color_penalty, width_cost=width_penalty,
-            start_cost=start_penalty,
-        )
-        if not path:
-            break
-        stats = _stats(path, region_width)
-        eligible = (
-            len(path) >= minimum_nodes
+    minimum_solid_nodes = max(min_active_columns, round(region_width * 0.18))
+    for track_index, solution in enumerate(path_solutions):
+        path_nodes = solution["nodes"]
+        stats = _stats(path_nodes, region_width)
+        style = stats["line_style_candidate"]
+        solid_style = style in {
+            "SOLID_CANDIDATE", "SOLID_WITH_OCCLUSION_CANDIDATE"
+        }
+        solid_eligible = (
+            solid_style and len(path_nodes) >= minimum_solid_nodes
             and stats["x_coverage_fraction"] >= min_x_coverage
-            and stats["active_column_fraction"] >= min_active_fraction
-            and stats["median_run_width"] <= max(8.0, max_run_height * .70)
-            and stats["median_abs_curvature"] <= 1.6
-            and score >= max(8.0, len(path) * .08)
+            and stats["active_column_fraction"] >= max(0.65, min_active_fraction)
         )
+        dashed_eligible = (
+            style == "DASHED_CANDIDATE" and len(path_nodes) >= min_dashed_points
+            and stats["x_coverage_fraction"] >= min_dashed_x_coverage
+            and stats["active_column_fraction"] >= min_dashed_active_fraction
+            and stats["dash_periodicity_score"] >= 0.30
+        )
+        eligible = solid_eligible or dashed_eligible
+        if eligible:
+            status = "CANDIDATE_REVIEW"
+            reason = "COHERENT_SOLID_PATH" if solid_eligible else "PERIODIC_DASH_PATTERN"
+        elif style == "DISCONTINUOUS_UNRESOLVED":
+            status = "UNRESOLVED_FRAGMENT_PATH"
+            reason = "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR"
+        else:
+            status = "REJECTED_WEAK_PATH"
+            reason = "INSUFFICIENT_COVERAGE_OR_SUPPORT"
+
         segments, segment, previous_x = [], [], None
-        for node in path:
-            point = [int(node["x"]), int(node["y"])]
-            if previous_x is not None and node["x"] > previous_x + 1:
-                if segment:
-                    segments.append(segment)
+        for node in path_nodes:
+            if previous_x is not None and node["x"] > previous_x + 1 and segment:
+                segments.append(segment)
                 segment = []
-            segment.append(point)
+            segment.append([int(node["x"]), int(node["y"])])
             previous_x = node["x"]
         if segment:
             segments.append(segment)
         record = {
             "track_id": f"TR{track_index + 1:02d}",
-            "status": "CANDIDATE_REVIEW" if eligible else "REJECTED_WEAK_PATH",
-            "eligible_for_review": bool(eligible), "path_score": round(float(score), 4),
+            "status": status, "eligible_for_review": bool(eligible),
+            "review_reason": reason,
+            "path_objective": round(float(solution["objective"]), 6),
             "median_source_rgb": [
-                int(round(float(np.median([n["rgb"][k] for n in path]))))
+                int(round(float(np.median([node["rgb"][k] for node in path_nodes]))))
                 for k in range(3)
             ],
-            **stats,
-            "segments": segments,
+            **stats, "segments": segments,
             "point_records": [
-                {"pixel_x": int(n["x"]), "pixel_y": int(n["y"]),
-                 "source_rgb": n["rgb"], "source_run_width": n["width"],
-                 "mean_contrast": float(n["contrast"]),
-                 "peak_contrast": float(n["peak_contrast"])}
-                for n in path
+                {
+                    "pixel_x": int(node["x"]), "pixel_y": int(node["y"]),
+                    "source_rgb": node["rgb"], "source_run_width": node["width"],
+                    "mean_contrast": float(node["contrast"]),
+                    "peak_contrast": float(node["peak_contrast"]),
+                }
+                for node in path_nodes
             ],
             "source_points_are_mask_members": all(
-                mask[int(n["y"] - y0), int(n["x"] - x0)] for n in path
+                mask[int(node["y"] - y0), int(node["x"] - x0)] for node in path_nodes
             ),
             "source_pixel_policy": "ONE_REAL_SOURCE_PIXEL_PER_ACTIVE_COLUMN",
         }
         record["segment_count"] = len(segments)
-        record["point_count"] = sum(len(s) for s in segments)
+        record["point_count"] = sum(len(points) for points in segments)
         tracks.append(record)
         if not eligible:
             rejected.append(record["track_id"])
-        used = {id(node) for node in path}
-        remaining = [node for node in remaining if id(node) not in used]
-        if score < max(8.0, minimum_nodes * .08):
-            break
-    review_count = sum(bool(t["eligible_for_review"]) for t in tracks)
+
+    review_count = sum(bool(track["eligible_for_review"]) for track in tracks)
     return {
         "status": "CANDIDATE_TRACKS_FOUND" if review_count else "NO_CONFIDENT_TRAJECTORY_CANDIDATES",
-        "method": "COLUMN_RUN_SECOND_ORDER_DYNAMIC_PROGRAMMING",
+        "method": "GLOBAL_NODE_DISJOINT_MIN_COST_FLOW_WITH_LOCAL_TANGENTS",
         "experimental": True, "plot_box": [x0, y0, x1, y1],
         "image_size": [image_width, image_height],
-        "estimated_background_rgb": [round(float(v), 2) for v in background],
-        "candidate_pixel_count": candidate_count, "candidate_run_count": len(nodes),
-        "review_candidate_count": review_count, "rejected_candidate_track_ids": rejected,
-        "tracks": tracks,
+        "estimated_background_rgb": [round(float(value), 2) for value in background],
+        "candidate_pixel_count": candidate_count,
+        "candidate_run_count": len(nodes),
+        "review_candidate_count": review_count,
+        "rejected_candidate_track_ids": rejected,
+        "tracks": tracks, "flow_diagnostics": flow_diagnostics,
         "parameters": {
             "max_tracks": max_tracks, "max_gap_columns": max_gap_columns,
             "max_abs_slope": max_abs_slope, "slope_step": slope_step,
             "min_contrast": min_contrast, "max_run_height": max_run_height,
             "max_nodes_per_column": max_nodes_per_column,
-            "min_x_coverage": min_x_coverage, "min_active_columns": minimum_nodes,
-            "min_active_fraction": min_active_fraction, "start_penalty": start_penalty,
-            "max_slope_change": max_slope_change, "curvature_penalty": curvature_penalty,
-            "gap_penalty": gap_penalty, "color_penalty": color_penalty,
-            "width_penalty": width_penalty,
+            "min_x_coverage": min_x_coverage,
+            "min_active_columns": minimum_solid_nodes,
+            "min_active_fraction": min_active_fraction,
+            "start_penalty": start_penalty, "max_slope_change": max_slope_change,
+            "curvature_penalty": curvature_penalty, "gap_penalty": gap_penalty,
+            "color_penalty": color_penalty, "width_penalty": width_penalty,
+            "min_dashed_points": min_dashed_points,
+            "min_dashed_x_coverage": min_dashed_x_coverage,
+            "min_dashed_active_fraction": min_dashed_active_fraction,
             "boundary_exclusion_fraction": boundary_exclusion_fraction,
         },
         "source_pixel_integrity": {
-            "status": "PASS" if all(t["source_points_are_mask_members"] for t in tracks) else "FAIL",
+            "status": "PASS" if all(
+                track["source_points_are_mask_members"] for track in tracks
+            ) else "FAIL",
             "generated_pixels": 0, "interpolated_pixels": 0,
         },
-        "note": "Review hypotheses only; not accepted scientific measurements.",
+        "note": (
+            "Global node-disjoint path hypotheses only; candidate-review status is not "
+            "acceptance as scientific measurements."
+        ),
     }
 
 
@@ -370,7 +675,10 @@ def write_trajectory_artifacts(image_path: str | Path,
                         "x_coverage_fraction", "active_column_fraction",
                         "line_style_candidate", "confidence", "path_score",
                         "median_source_rgb", "median_run_width", "run_width_cv",
-                        "gap_lengths_columns", "segment_lengths_columns"]
+                        "gap_lengths_columns", "segment_lengths_columns", "gap_cv",
+                        "segment_length_cv", "median_gap_columns",
+                        "median_segment_length_columns", "dash_periodicity_score",
+                        "review_reason", "path_objective"]
     rows = []
     with (output / "all_series_digitized.csv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=point_fields)
@@ -415,6 +723,13 @@ def write_trajectory_artifacts(image_path: str | Path,
                 "run_width_cv": track["run_width_cv"],
                 "gap_lengths_columns": json.dumps(track["gap_lengths_columns"]),
                 "segment_lengths_columns": json.dumps(track["segment_lengths_columns"]),
+                "gap_cv": track.get("gap_cv"),
+                "segment_length_cv": track.get("segment_length_cv"),
+                "median_gap_columns": track.get("median_gap_columns"),
+                "median_segment_length_columns": track.get("median_segment_length_columns"),
+                "dash_periodicity_score": track.get("dash_periodicity_score"),
+                "review_reason": track.get("review_reason"),
+                "path_objective": track.get("path_objective"),
             })
     combined.save(output / "03_reconstructed_trajectories.png")
     combined.save(output / "04_all_series_overlay.png")
