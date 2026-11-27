@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "trace-image",
+    "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\curve_extraction_pilot_v1\\panels\\F04-P01\\01_original.png",
+    "--plot-box",
+    "85",
+    "51",
+    "457",
+    "327",
+    "--out",
+    "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\trajectory_reconstruction_v5_local_test"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 2.239,
+  "cli_module": "E:\\Zinc_batters_datas\\_worktrees\\Figure_digitization_test_v5_438cfefa\\src\\scientific_figure_data\\cli.py",
+  "trajectory_module": "E:\\Zinc_batters_datas\\_worktrees\\Figure_digitization_test_v5_438cfefa\\src\\scientific_figure_data\\trajectory.py",
+  "python": "D:\\Software\\Anacoda\\python.exe",
+  "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:09:58) [MSC v.1929 64 bit (AMD64)]"
+}

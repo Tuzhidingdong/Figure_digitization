@@ -1,0 +1,756 @@
+{
+  "status": "CANDIDATE_TRACKS_FOUND",
+  "method": "GLOBAL_NODE_DISJOINT_MIN_COST_FLOW_WITH_LOCAL_TANGENTS",
+  "flow_diagnostics": {
+    "status": "PASS",
+    "flow_count": 12,
+    "path_count": 12,
+    "selected_node_count": 996,
+    "transition_edges": 25804,
+    "objective": 1125.92466,
+    "node_disjoint": true,
+    "max_tracks": 12
+  },
+  "source_pixel_integrity": {
+    "status": "PASS",
+    "generated_pixels": 0,
+    "interpolated_pixels": 0
+  },
+  "plot_box": [
+    85,
+    51,
+    457,
+    327
+  ],
+  "image_size": [
+    460,
+    365
+  ],
+  "candidate_pixel_count": 7600,
+  "candidate_run_count": 1107,
+  "review_candidate_count": 2,
+  "track_count": 12,
+  "status_distribution": {
+    "CANDIDATE_REVIEW": 2,
+    "UNRESOLVED_FRAGMENT_PATH": 7,
+    "REJECTED_WEAK_PATH": 3
+  },
+  "review_reasons": {
+    "TR01": null,
+    "TR02": null,
+    "TR03": null,
+    "TR04": null,
+    "TR05": null,
+    "TR06": null,
+    "TR07": null,
+    "TR08": null,
+    "TR09": null,
+    "TR10": null,
+    "TR11": null,
+    "TR12": null
+  },
+  "tracks": [
+    {
+      "track_id": "TR01",
+      "status": "CANDIDATE_REVIEW",
+      "points": 297,
+      "segments": 3,
+      "x_range": [
+        134,
+        433
+      ],
+      "y_range": [
+        91,
+        142
+      ],
+      "style": "SOLID_WITH_OCCLUSION_CANDIDATE",
+      "confidence": 0.97,
+      "periodicity": 0.0721,
+      "gap_cv": 0.3333,
+      "seg_length_cv": 0.9094,
+      "gap_lengths": [
+        1,
+        2
+      ],
+      "seg_lengths": [
+        66,
+        9,
+        222
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR02",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 141,
+      "segments": 26,
+      "x_range": [
+        217,
+        431
+      ],
+      "y_range": [
+        253,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1991,
+      "periodicity": 0.0298,
+      "gap_cv": 0.7492,
+      "seg_length_cv": 1.3772,
+      "gap_lengths": [
+        9,
+        6,
+        1,
+        3,
+        1,
+        1,
+        1,
+        1,
+        3,
+        4,
+        5,
+        1,
+        4,
+        3,
+        3,
+        1,
+        1,
+        6,
+        1,
+        1,
+        4,
+        4,
+        1,
+        7,
+        2
+      ],
+      "seg_lengths": [
+        37,
+        4,
+        7,
+        2,
+        6,
+        5,
+        1,
+        5,
+        1,
+        5,
+        1,
+        1,
+        1,
+        1,
+        8,
+        1,
+        6,
+        1,
+        18,
+        1,
+        1,
+        2,
+        5,
+        1,
+        11,
+        9
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR03",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 140,
+      "segments": 24,
+      "x_range": [
+        217,
+        443
+      ],
+      "y_range": [
+        220,
+        258
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.173,
+      "periodicity": 0.0493,
+      "gap_cv": 0.8137,
+      "seg_length_cv": 0.8096,
+      "gap_lengths": [
+        8,
+        8,
+        3,
+        1,
+        5,
+        1,
+        1,
+        7,
+        7,
+        2,
+        1,
+        2,
+        12,
+        2,
+        1,
+        7,
+        1,
+        1,
+        2,
+        3,
+        5,
+        6,
+        1
+      ],
+      "seg_lengths": [
+        12,
+        13,
+        1,
+        2,
+        5,
+        11,
+        3,
+        3,
+        1,
+        4,
+        1,
+        12,
+        4,
+        1,
+        9,
+        11,
+        15,
+        1,
+        1,
+        1,
+        2,
+        7,
+        12,
+        8
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR04",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 83,
+      "segments": 17,
+      "x_range": [
+        217,
+        357
+      ],
+      "y_range": [
+        221,
+        283
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1648,
+      "periodicity": 0.0211,
+      "gap_cv": 0.7025,
+      "seg_length_cv": 1.7687,
+      "gap_lengths": [
+        3,
+        4,
+        1,
+        2,
+        6,
+        5,
+        6,
+        1,
+        1,
+        4,
+        2,
+        5,
+        3,
+        1,
+        11,
+        3
+      ],
+      "seg_lengths": [
+        38,
+        1,
+        1,
+        2,
+        1,
+        9,
+        4,
+        1,
+        2,
+        1,
+        2,
+        6,
+        1,
+        2,
+        3,
+        1,
+        8
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR05",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 76,
+      "segments": 17,
+      "x_range": [
+        217,
+        356
+      ],
+      "y_range": [
+        254,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1425,
+      "periodicity": 0.054,
+      "gap_cv": 0.6614,
+      "seg_length_cv": 0.8718,
+      "gap_lengths": [
+        9,
+        4,
+        8,
+        6,
+        1,
+        4,
+        1,
+        4,
+        1,
+        5,
+        4,
+        1,
+        5,
+        8,
+        2,
+        1
+      ],
+      "seg_lengths": [
+        12,
+        12,
+        1,
+        4,
+        2,
+        8,
+        2,
+        3,
+        1,
+        1,
+        1,
+        2,
+        2,
+        4,
+        2,
+        9,
+        10
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR06",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 57,
+      "segments": 14,
+      "x_range": [
+        279,
+        369
+      ],
+      "y_range": [
+        228,
+        283
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1371,
+      "periodicity": 0.0695,
+      "gap_cv": 0.5518,
+      "seg_length_cv": 0.7278,
+      "gap_lengths": [
+        2,
+        1,
+        2,
+        6,
+        3,
+        2,
+        1,
+        3,
+        5,
+        3,
+        1,
+        2,
+        3
+      ],
+      "seg_lengths": [
+        4,
+        1,
+        1,
+        4,
+        6,
+        4,
+        1,
+        6,
+        1,
+        2,
+        9,
+        1,
+        8,
+        9
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR07",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 56,
+      "segments": 10,
+      "x_range": [
+        277,
+        357
+      ],
+      "y_range": [
+        246,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1331,
+      "periodicity": 0.0492,
+      "gap_cv": 0.9104,
+      "seg_length_cv": 0.7152,
+      "gap_lengths": [
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        9,
+        3,
+        5
+      ],
+      "seg_lengths": [
+        4,
+        1,
+        1,
+        5,
+        15,
+        2,
+        7,
+        5,
+        8,
+        8
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR08",
+      "status": "REJECTED_WEAK_PATH",
+      "points": 52,
+      "segments": 3,
+      "x_range": [
+        158,
+        211
+      ],
+      "y_range": [
+        99,
+        182
+      ],
+      "style": "SOLID_WITH_OCCLUSION_CANDIDATE",
+      "confidence": 0.6189,
+      "periodicity": 0.1054,
+      "gap_cv": 0.0,
+      "seg_length_cv": 0.8639,
+      "gap_lengths": [
+        1,
+        1
+      ],
+      "seg_lengths": [
+        3,
+        38,
+        11
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR09",
+      "status": "UNRESOLVED_FRAGMENT_PATH",
+      "points": 38,
+      "segments": 8,
+      "x_range": [
+        134,
+        198
+      ],
+      "y_range": [
+        94,
+        177
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.1398,
+      "periodicity": 0.101,
+      "gap_cv": 0.5617,
+      "seg_length_cv": 0.3451,
+      "gap_lengths": [
+        3,
+        4,
+        5,
+        7,
+        1,
+        6,
+        1
+      ],
+      "seg_lengths": [
+        3,
+        5,
+        6,
+        8,
+        5,
+        3,
+        5,
+        3
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR10",
+      "status": "CANDIDATE_REVIEW",
+      "points": 31,
+      "segments": 3,
+      "x_range": [
+        134,
+        181
+      ],
+      "y_range": [
+        95,
+        99
+      ],
+      "style": "DASHED_CANDIDATE",
+      "confidence": 0.5631,
+      "periodicity": 0.7506,
+      "gap_cv": 0.0588,
+      "seg_length_cv": 0.2281,
+      "gap_lengths": [
+        8,
+        9
+      ],
+      "seg_lengths": [
+        7,
+        12,
+        12
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR11",
+      "status": "REJECTED_WEAK_PATH",
+      "points": 13,
+      "segments": 1,
+      "x_range": [
+        409,
+        421
+      ],
+      "y_range": [
+        304,
+        308
+      ],
+      "style": "SOLID_CANDIDATE",
+      "confidence": 0.6943,
+      "periodicity": 0.0,
+      "gap_cv": null,
+      "seg_length_cv": null,
+      "gap_lengths": [],
+      "seg_lengths": [
+        13
+      ],
+      "mask_ok": true
+    },
+    {
+      "track_id": "TR12",
+      "status": "REJECTED_WEAK_PATH",
+      "points": 12,
+      "segments": 1,
+      "x_range": [
+        423,
+        434
+      ],
+      "y_range": [
+        253,
+        258
+      ],
+      "style": "SOLID_CANDIDATE",
+      "confidence": 0.6011,
+      "periodicity": 0.0,
+      "gap_cv": null,
+      "seg_length_cv": null,
+      "gap_lengths": [],
+      "seg_lengths": [
+        12
+      ],
+      "mask_ok": true
+    }
+  ],
+  "recomputed_mask_pixels": 7600,
+  "csv_point_rows": 996,
+  "csv_verified_flags": {
+    "True": 996
+  },
+  "points_outside_recomputed_mask": 0,
+  "mask_fail_examples": [],
+  "csv_rgb_mismatch": 0,
+  "duplicate_source_nodes": 0,
+  "duplicate_examples": [],
+  "one_point_per_column_all_tracks": true,
+  "track_column_counts": {
+    "TR01": 297,
+    "TR02": 141,
+    "TR03": 140,
+    "TR04": 83,
+    "TR05": 76,
+    "TR06": 57,
+    "TR07": 56,
+    "TR08": 52,
+    "TR09": 38,
+    "TR10": 31,
+    "TR11": 13,
+    "TR12": 12
+  },
+  "inventory_rows": 12,
+  "inventory_ids": [
+    "TR01",
+    "TR02",
+    "TR03",
+    "TR04",
+    "TR05",
+    "TR06",
+    "TR07",
+    "TR08",
+    "TR09",
+    "TR10",
+    "TR11",
+    "TR12"
+  ],
+  "inventory_review_reasons": {
+    "TR01": "COHERENT_SOLID_PATH",
+    "TR02": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR03": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR04": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR05": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR06": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR07": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR08": "INSUFFICIENT_COVERAGE_OR_SUPPORT",
+    "TR09": "GAP_PATTERN_NOT_SUFFICIENTLY_REGULAR",
+    "TR10": "PERIODIC_DASH_PATTERN",
+    "TR11": "INSUFFICIENT_COVERAGE_OR_SUPPORT",
+    "TR12": "INSUFFICIENT_COVERAGE_OR_SUPPORT"
+  },
+  "overlay_check": {
+    "TR01": {
+      "size_ok": true,
+      "csv_points": 297,
+      "drawn": 297
+    },
+    "TR02": {
+      "size_ok": true,
+      "csv_points": 141,
+      "drawn": 141
+    },
+    "TR03": {
+      "size_ok": true,
+      "csv_points": 140,
+      "drawn": 140
+    },
+    "TR04": {
+      "size_ok": true,
+      "csv_points": 83,
+      "drawn": 83
+    },
+    "TR05": {
+      "size_ok": true,
+      "csv_points": 76,
+      "drawn": 76
+    },
+    "TR06": {
+      "size_ok": true,
+      "csv_points": 57,
+      "drawn": 57
+    },
+    "TR07": {
+      "size_ok": true,
+      "csv_points": 56,
+      "drawn": 56
+    },
+    "TR08": {
+      "size_ok": true,
+      "csv_points": 52,
+      "drawn": 52
+    },
+    "TR09": {
+      "size_ok": true,
+      "csv_points": 38,
+      "drawn": 38
+    },
+    "TR10": {
+      "size_ok": true,
+      "csv_points": 31,
+      "drawn": 31
+    },
+    "TR11": {
+      "size_ok": true,
+      "csv_points": 13,
+      "drawn": 13
+    },
+    "TR12": {
+      "size_ok": true,
+      "csv_points": 12,
+      "drawn": 12
+    }
+  },
+  "combined_equal_all_series": true,
+  "png_sizes": {
+    "01_original.png": [
+      460,
+      365
+    ],
+    "02_candidate_mask.png": [
+      460,
+      365
+    ],
+    "03_reconstructed_trajectories.png": [
+      460,
+      365
+    ],
+    "04_all_series_overlay.png": [
+      460,
+      365
+    ]
+  },
+  "html_bytes": 4578,
+  "html_external_urls": [],
+  "html_script_tags": 0,
+  "html_img_refs": [
+    "01_original.png",
+    "02_candidate_mask.png",
+    "03_reconstructed_trajectories.png",
+    "04_all_series_overlay.png",
+    "track_TR01_overlay.png",
+    "track_TR02_overlay.png",
+    "track_TR03_overlay.png",
+    "track_TR04_overlay.png",
+    "track_TR05_overlay.png",
+    "track_TR06_overlay.png",
+    "track_TR07_overlay.png",
+    "track_TR08_overlay.png",
+    "track_TR09_overlay.png",
+    "track_TR10_overlay.png",
+    "track_TR11_overlay.png",
+    "track_TR12_overlay.png"
+  ],
+  "html_missing_imgs": [],
+  "html_links": [
+    "trajectory_inventory.csv",
+    "all_series_digitized.csv",
+    "trajectory_diagnostics.json"
+  ],
+  "html_missing_links": [],
+  "strong_lines": {
+    "rows": [
+      51,
+      52
+    ],
+    "cols": [
+      85,
+      86
+    ]
+  },
+  "points_on_frame": 0
+}

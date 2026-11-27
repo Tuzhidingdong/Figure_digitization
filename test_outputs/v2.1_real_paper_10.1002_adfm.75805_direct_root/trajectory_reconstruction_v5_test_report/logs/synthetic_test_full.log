@@ -1,0 +1,28 @@
+..F........                                                              [100%]
+================================== FAILURES ===================================
+_______________ test_four_mixed_paths_are_independently_traced ________________
+
+tmp_path = WindowsPath('C:/Users/Administrator/AppData/Local/Temp/pytest-of-Administrator/pytest-70/test_four_mixed_paths_are_inde0')
+
+    def test_four_mixed_paths_are_independently_traced(tmp_path: Path):
+        image, draw = _canvas()
+        draw.line([(x, int(260 - 150 * (x - 60) / 470)) for x in range(60, 531)],
+                  fill=(220, 30, 40), width=3)
+        draw.line([(x, int(300 - 100 * (x - 60) / 470)) for x in range(60, 531)],
+                  fill=(110, 110, 110), width=3)
+        _dash(draw, lambda x: 150 - 50 * (x - 60) / 470, (135, 135, 135))
+        _dash(draw, lambda x: 180 + 40 * (x - 60) / 470, (160, 160, 160),
+              period=30, length=18)
+        path = tmp_path / "four_paths.png"
+        image.save(path)
+        result = _run(path)
+        candidates = [t for t in result["tracks"] if t["eligible_for_review"]]
+>       assert len(candidates) == 4, result
+E       AssertionError: {'candidate_pixel_count': 5129, 'candidate_run_count': 1500, 'estimated_background_rgb': [255.0, 255.0, 255.0], 'experimental': True, ...}
+E       assert 5 == 4
+E        +  where 5 = len([{'active_column_fraction': 1.0, 'confidence': 0.8678, 'dash_periodicity_score': 0.0, 'eligible_for_review': True, ......ive_column_fraction': 0.6488, 'confidence': 0.8112, 'dash_periodicity_score': 0.947, 'eligible_for_review': True, ...}])
+
+tests\test_trajectory_reconstruction.py:77: AssertionError
+- generated xml file: C:\Users\Administrator\AppData\Local\Temp\opencode\pr26_test_logs\synthetic_junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/test_trajectory_reconstruction.py::test_four_mixed_paths_are_independently_traced
