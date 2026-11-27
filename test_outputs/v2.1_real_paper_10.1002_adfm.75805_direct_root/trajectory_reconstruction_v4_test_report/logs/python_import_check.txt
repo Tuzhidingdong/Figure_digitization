@@ -1,0 +1,18 @@
+Purpose: confirm scientific_figure_data (and trajectory) import from the isolated PR #25 test worktree.
+PYTHONPATH set in the shell before launching Python:
+  E:\Zinc_batters_datas\_worktrees\Figure_digitization_test_v4_9e540500\src
+
+Command:
+  python -c "import scientific_figure_data as s, scientific_figure_data.trajectory as t; print('pkg:',s.__file__); print('traj:',t.__file__)"
+
+Observed output:
+  pkg: E:\Zinc_batters_datas\_worktrees\Figure_digitization_test_v4_9e540500\src\scientific_figure_data\__init__.py
+  traj: E:\Zinc_batters_datas\_worktrees\Figure_digitization_test_v4_9e540500\src\scientific_figure_data\trajectory.py
+  exit=0
+
+Note: the environment has an editable install of scientific_figure_data pointing at the
+ORIGINAL checkout (E:\Zinc_batters_datas\Figure_digitization\src), which does NOT contain
+trajectory.py. Without the PYTHONPATH override, importing
+scientific_figure_data.trajectory fails with ModuleNotFoundError. All tests and the real
+image run below were executed with PYTHONPATH pointing at the test worktree src, and the
+trace run meta log independently records the loaded trajectory.py path.

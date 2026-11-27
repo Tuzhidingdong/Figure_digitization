@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "trace-image",
+    "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\curve_extraction_pilot_v1\\panels\\F04-P01\\01_original.png",
+    "--plot-box",
+    "85",
+    "51",
+    "457",
+    "327",
+    "--out",
+    "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\trajectory_reconstruction_v4_local_test"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 3.668,
+  "module": "E:\\Zinc_batters_datas\\_worktrees\\Figure_digitization_test_v4_9e540500\\src\\scientific_figure_data\\trajectory.py"
+}

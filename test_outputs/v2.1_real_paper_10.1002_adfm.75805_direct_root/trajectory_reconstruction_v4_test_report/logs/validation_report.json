@@ -1,0 +1,888 @@
+{
+  "status": "CANDIDATE_TRACKS_FOUND",
+  "method": "COLUMN_RUN_SECOND_ORDER_DYNAMIC_PROGRAMMING",
+  "plot_box": [
+    85,
+    51,
+    457,
+    327
+  ],
+  "image_size": [
+    460,
+    365
+  ],
+  "candidate_pixel_count": 7600,
+  "candidate_run_count": 1107,
+  "review_candidate_count": 5,
+  "rejected_candidate_track_ids": [
+    "TR05",
+    "TR07",
+    "TR08",
+    "TR09",
+    "TR10",
+    "TR11",
+    "TR12"
+  ],
+  "source_pixel_integrity": {
+    "status": "PASS",
+    "generated_pixels": 0,
+    "interpolated_pixels": 0
+  },
+  "parameters": {
+    "max_tracks": 12,
+    "max_gap_columns": 12,
+    "max_abs_slope": 6.0,
+    "slope_step": 0.5,
+    "min_contrast": 12.0,
+    "max_run_height": 12,
+    "max_nodes_per_column": 16,
+    "min_x_coverage": 0.25,
+    "min_active_columns": 67,
+    "min_active_fraction": 0.2,
+    "start_penalty": 4.0,
+    "max_slope_change": 1.5,
+    "curvature_penalty": 0.32,
+    "gap_penalty": 0.1,
+    "color_penalty": 2.4,
+    "width_penalty": 0.3,
+    "boundary_exclusion_fraction": 0.012
+  },
+  "track_count": 12,
+  "tracks": [
+    {
+      "track_id": "TR01",
+      "status": "CANDIDATE_REVIEW",
+      "eligible": true,
+      "points": 298,
+      "segments": 3,
+      "x_range": [
+        134,
+        434
+      ],
+      "y_range": [
+        91,
+        142
+      ],
+      "style": "SOLID_WITH_OCCLUSION_CANDIDATE",
+      "confidence": 0.9695,
+      "score": 537.0287,
+      "seg_lengths": [
+        66,
+        9,
+        223
+      ],
+      "gap_lengths": [
+        1,
+        2
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR02",
+      "status": "CANDIDATE_REVIEW",
+      "eligible": true,
+      "points": 116,
+      "segments": 22,
+      "x_range": [
+        217,
+        430
+      ],
+      "y_range": [
+        279,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.8286,
+      "score": 153.63,
+      "seg_lengths": [
+        35,
+        3,
+        4,
+        1,
+        5,
+        1,
+        6,
+        4,
+        5,
+        2,
+        2,
+        8,
+        7,
+        1,
+        2,
+        3,
+        1,
+        1,
+        2,
+        5,
+        11,
+        7
+      ],
+      "gap_lengths": [
+        12,
+        10,
+        1,
+        4,
+        1,
+        1,
+        2,
+        4,
+        3,
+        11,
+        3,
+        4,
+        9,
+        5,
+        4,
+        1,
+        1,
+        6,
+        4,
+        9,
+        3
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR03",
+      "status": "CANDIDATE_REVIEW",
+      "eligible": true,
+      "points": 123,
+      "segments": 34,
+      "x_range": [
+        217,
+        445
+      ],
+      "y_range": [
+        228,
+        283
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.8036,
+      "score": 140.8453,
+      "seg_lengths": [
+        36,
+        1,
+        1,
+        2,
+        1,
+        1,
+        3,
+        1,
+        5,
+        1,
+        4,
+        1,
+        3,
+        1,
+        2,
+        2,
+        2,
+        2,
+        7,
+        7,
+        7,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        2,
+        4,
+        3,
+        7,
+        1,
+        6,
+        1
+      ],
+      "gap_lengths": [
+        1,
+        7,
+        2,
+        6,
+        1,
+        1,
+        2,
+        4,
+        1,
+        1,
+        1,
+        1,
+        1,
+        4,
+        1,
+        3,
+        12,
+        2,
+        8,
+        3,
+        12,
+        4,
+        1,
+        2,
+        1,
+        2,
+        3,
+        5,
+        9,
+        2,
+        1,
+        1,
+        1
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR04",
+      "status": "CANDIDATE_REVIEW",
+      "eligible": true,
+      "points": 92,
+      "segments": 31,
+      "x_range": [
+        217,
+        444
+      ],
+      "y_range": [
+        220,
+        258
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.6662,
+      "score": 81.2401,
+      "seg_lengths": [
+        12,
+        4,
+        1,
+        1,
+        1,
+        1,
+        9,
+        2,
+        4,
+        1,
+        1,
+        4,
+        1,
+        6,
+        1,
+        4,
+        2,
+        9,
+        1,
+        5,
+        2,
+        3,
+        1,
+        1,
+        3,
+        1,
+        1,
+        6,
+        2,
+        1,
+        1
+      ],
+      "gap_lengths": [
+        8,
+        1,
+        10,
+        9,
+        5,
+        7,
+        1,
+        1,
+        5,
+        3,
+        5,
+        4,
+        1,
+        4,
+        1,
+        11,
+        2,
+        1,
+        1,
+        11,
+        4,
+        2,
+        4,
+        8,
+        6,
+        3,
+        6,
+        3,
+        3,
+        6
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR05",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 51,
+      "segments": 4,
+      "x_range": [
+        158,
+        211
+      ],
+      "y_range": [
+        99,
+        182
+      ],
+      "style": "DASHED_CANDIDATE",
+      "confidence": 0.6179,
+      "score": 71.6442,
+      "seg_lengths": [
+        3,
+        11,
+        26,
+        11
+      ],
+      "gap_lengths": [
+        1,
+        1,
+        1
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR06",
+      "status": "CANDIDATE_REVIEW",
+      "eligible": true,
+      "points": 73,
+      "segments": 27,
+      "x_range": [
+        252,
+        431
+      ],
+      "y_range": [
+        246,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.5864,
+      "score": 62.2922,
+      "seg_lengths": [
+        3,
+        1,
+        1,
+        2,
+        4,
+        2,
+        2,
+        3,
+        4,
+        4,
+        2,
+        2,
+        1,
+        8,
+        5,
+        1,
+        1,
+        1,
+        3,
+        1,
+        1,
+        3,
+        1,
+        2,
+        4,
+        10,
+        1
+      ],
+      "gap_lengths": [
+        8,
+        9,
+        1,
+        2,
+        1,
+        1,
+        2,
+        6,
+        5,
+        5,
+        1,
+        1,
+        12,
+        4,
+        10,
+        1,
+        2,
+        3,
+        5,
+        1,
+        6,
+        3,
+        4,
+        6,
+        1,
+        7
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR07",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 37,
+      "segments": 4,
+      "x_range": [
+        133,
+        194
+      ],
+      "y_range": [
+        94,
+        99
+      ],
+      "style": "DASHED_CANDIDATE",
+      "confidence": 0.7515,
+      "score": 36.9234,
+      "seg_lengths": [
+        8,
+        12,
+        12,
+        5
+      ],
+      "gap_lengths": [
+        8,
+        9,
+        8
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR08",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 40,
+      "segments": 21,
+      "x_range": [
+        263,
+        383
+      ],
+      "y_range": [
+        246,
+        258
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.5404,
+      "score": 27.3881,
+      "seg_lengths": [
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        3,
+        1,
+        1,
+        2,
+        2,
+        3,
+        1,
+        2,
+        3,
+        1,
+        9,
+        2,
+        1,
+        1,
+        1
+      ],
+      "gap_lengths": [
+        5,
+        7,
+        1,
+        1,
+        6,
+        1,
+        8,
+        2,
+        4,
+        4,
+        2,
+        3,
+        1,
+        2,
+        11,
+        3,
+        1,
+        7,
+        10,
+        2
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR09",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 32,
+      "segments": 7,
+      "x_range": [
+        134,
+        198
+      ],
+      "y_range": [
+        101,
+        177
+      ],
+      "style": "DASHED_CANDIDATE",
+      "confidence": 0.6218,
+      "score": 25.8749,
+      "seg_lengths": [
+        3,
+        4,
+        6,
+        8,
+        5,
+        3,
+        3
+      ],
+      "gap_lengths": [
+        4,
+        4,
+        5,
+        7,
+        1,
+        12
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR10",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 24,
+      "segments": 2,
+      "x_range": [
+        217,
+        249
+      ],
+      "y_range": [
+        304,
+        304
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.7033,
+      "score": 22.3124,
+      "seg_lengths": [
+        12,
+        12
+      ],
+      "gap_lengths": [
+        9
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR11",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 25,
+      "segments": 15,
+      "x_range": [
+        265,
+        351
+      ],
+      "y_range": [
+        224,
+        258
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.4923,
+      "score": 16.9279,
+      "seg_lengths": [
+        2,
+        3,
+        1,
+        3,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        1,
+        3,
+        1,
+        2
+      ],
+      "gap_lengths": [
+        12,
+        7,
+        1,
+        9,
+        5,
+        2,
+        5,
+        2,
+        2,
+        1,
+        1,
+        1,
+        12,
+        2
+      ],
+      "all_mask_members": true
+    },
+    {
+      "track_id": "TR12",
+      "status": "REJECTED_WEAK_PATH",
+      "eligible": false,
+      "points": 18,
+      "segments": 10,
+      "x_range": [
+        273,
+        317
+      ],
+      "y_range": [
+        300,
+        308
+      ],
+      "style": "DISCONTINUOUS_UNRESOLVED",
+      "confidence": 0.5089,
+      "score": 14.1106,
+      "seg_lengths": [
+        1,
+        5,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        5
+      ],
+      "gap_lengths": [
+        1,
+        1,
+        1,
+        2,
+        7,
+        6,
+        5,
+        3,
+        1
+      ],
+      "all_mask_members": true
+    }
+  ],
+  "recomputed_mask_pixels": 7600,
+  "recomputed_effective_box": [
+    88,
+    54,
+    454,
+    324
+  ],
+  "csv_point_rows": 929,
+  "csv_verified_flags": {
+    "0": 0,
+    "1": 0
+  },
+  "points_outside_recomputed_mask": 0,
+  "points_outside_mask_examples": [],
+  "csv_rgb_vs_image_mismatch": 0,
+  "csv_rgb_mismatch_examples": [],
+  "duplicate_source_nodes": 0,
+  "duplicate_node_examples": [],
+  "track_column_counts": {
+    "TR01": 298,
+    "TR02": 116,
+    "TR03": 123,
+    "TR04": 92,
+    "TR05": 51,
+    "TR06": 73,
+    "TR07": 37,
+    "TR08": 40,
+    "TR09": 32,
+    "TR10": 24,
+    "TR11": 25,
+    "TR12": 18
+  },
+  "inventory_rows": 12,
+  "inventory_ids": [
+    "TR01",
+    "TR02",
+    "TR03",
+    "TR04",
+    "TR05",
+    "TR06",
+    "TR07",
+    "TR08",
+    "TR09",
+    "TR10",
+    "TR11",
+    "TR12"
+  ],
+  "image_size_from_file": [
+    460,
+    365
+  ],
+  "overlay_check": {
+    "TR01": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 298,
+      "overlay_points_drawn": 298
+    },
+    "TR02": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 116,
+      "overlay_points_drawn": 116
+    },
+    "TR03": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 123,
+      "overlay_points_drawn": 123
+    },
+    "TR04": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 92,
+      "overlay_points_drawn": 92
+    },
+    "TR05": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 51,
+      "overlay_points_drawn": 51
+    },
+    "TR06": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 73,
+      "overlay_points_drawn": 73
+    },
+    "TR07": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 37,
+      "overlay_points_drawn": 37
+    },
+    "TR08": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 40,
+      "overlay_points_drawn": 40
+    },
+    "TR09": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 32,
+      "overlay_points_drawn": 32
+    },
+    "TR10": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 24,
+      "overlay_points_drawn": 24
+    },
+    "TR11": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 25,
+      "overlay_points_drawn": 25
+    },
+    "TR12": {
+      "size_ok": true,
+      "size": [
+        460,
+        365
+      ],
+      "csv_points": 18,
+      "overlay_points_drawn": 18
+    }
+  },
+  "png_03_reconstructed_trajectories.png": {
+    "size": [
+      460,
+      365
+    ],
+    "bytes": 55764
+  },
+  "png_04_all_series_overlay.png": {
+    "size": [
+      460,
+      365
+    ],
+    "bytes": 55764
+  },
+  "png_02_candidate_mask.png": {
+    "size": [
+      460,
+      365
+    ],
+    "bytes": 2612
+  },
+  "combined_equal_all_series": true,
+  "html_bytes": 4529,
+  "html_external_urls": [],
+  "html_script_tags": 0,
+  "html_img_refs": [
+    "01_original.png",
+    "02_candidate_mask.png",
+    "03_reconstructed_trajectories.png",
+    "04_all_series_overlay.png",
+    "track_TR01_overlay.png",
+    "track_TR02_overlay.png",
+    "track_TR03_overlay.png",
+    "track_TR04_overlay.png",
+    "track_TR05_overlay.png",
+    "track_TR06_overlay.png",
+    "track_TR07_overlay.png",
+    "track_TR08_overlay.png",
+    "track_TR09_overlay.png",
+    "track_TR10_overlay.png",
+    "track_TR11_overlay.png",
+    "track_TR12_overlay.png"
+  ],
+  "html_missing_imgs": [],
+  "html_links": [
+    "trajectory_inventory.csv",
+    "all_series_digitized.csv",
+    "trajectory_diagnostics.json"
+  ],
+  "html_missing_links": []
+}

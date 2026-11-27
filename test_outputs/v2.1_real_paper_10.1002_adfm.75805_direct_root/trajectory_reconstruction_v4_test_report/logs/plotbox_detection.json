@@ -1,0 +1,67 @@
+{
+  "image": "E:\\Zinc_batters_datas\\Figure_digitization\\test_outputs\\v2.1_real_paper_10.1002_adfm.75805_direct_root\\curve_extraction_pilot_v1\\panels\\F04-P01\\01_original.png",
+  "image_size": [
+    460,
+    365
+  ],
+  "detect_plot_box": {
+    "status": "NEEDS_REVIEW",
+    "reason": "NO_UNAMBIGUOUS_RECTANGULAR_FRAME",
+    "horizontal_candidates": 2,
+    "vertical_candidates": 1
+  },
+  "detect_plot_box_candidates": {
+    "status": "PLOT_FRAME_CANDIDATES_FOUND",
+    "reason": "ONE_SUPPORTED_PLOT_FRAME",
+    "image_size": [
+      460,
+      365
+    ],
+    "analysis_image_size": [
+      460,
+      365
+    ],
+    "analysis_scale": 1.0,
+    "horizontal_candidate_count": 8,
+    "vertical_candidate_count": 13,
+    "candidate_count": 1,
+    "candidates": [
+      {
+        "pixel_bbox": [
+          85,
+          51,
+          268,
+          275
+        ],
+        "normalized_bbox": [
+          0.18478260869565216,
+          0.13972602739726028,
+          0.5826086956521739,
+          0.7534246575342466
+        ],
+        "image_size": [
+          460,
+          365
+        ],
+        "side_coverage": {
+          "top": 1.0,
+          "bottom": 0.0546448087431694,
+          "left": 1.0,
+          "right": 0.09077380952380952
+        },
+        "adjacent_side_coverage": 1.0,
+        "area_fraction": 0.24414532459797497,
+        "chromatic_pixel_fraction": 0.021191553544494722,
+        "score": 1.0,
+        "provisional": true,
+        "analysis_pixel_bbox": [
+          85,
+          51,
+          268,
+          275
+        ]
+      }
+    ],
+    "provisional": true
+  }
+}
